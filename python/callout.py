@@ -17,15 +17,19 @@ class OutgoingCallController:
 class RepeatedOutgoingCallController:
 
     def ev_idle(self, call, model):
-        call.openout(call.destination_address)
+        call.user_data = model
+        call.openout(model, 1, model)
 
 def usage():
-    print 'callout.py [-p <port>] [-r] number'
+    print 'callout.py [-n <number of calls>] [-p <port>] [-r] number'
     sys.exit(-2)
 
 if __name__ == '__main__':
     port = 0
     timeslot = None
+
+    log = aculab.defaultLogging(logging.DEBUG)
+
     controller = OutgoingCallController()
 
     options, args = getopt.getopt(sys.argv[1:], 'p:rt:')
@@ -44,6 +48,7 @@ if __name__ == '__main__':
         usage()
     
     c = Call(controller,  port=port, timeslot=timeslot)
-    c.openout(args[0], 1, '41')
+    c.user_data = '41'
+    c.openout(args[0], 1, c.user_data)
 
     CallDispatcher.run()
