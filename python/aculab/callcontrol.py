@@ -160,7 +160,8 @@ class CallHandle:
 
         self.dispatcher.add(self)
 
-    def openout(self, destination_address, originating_address = '',
+    def openout(self, destination_address, sending_complete = 1,
+                originating_address = '',
                 feature = None, feature_data = None):
 
         if feature and feature_data:
@@ -171,7 +172,7 @@ class CallHandle:
             if self.timeslot != -1:
                 outparms.cnf |= lowlevel.CNF_TSPREFER
                 
-            outparms.sending_complete = 1
+            outparms.sending_complete = sending_complete
             outparms.originating_addr = originating_address
             outparms.destination_addr = destination_address
             outparms.feature_information = feature

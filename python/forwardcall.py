@@ -88,7 +88,7 @@ class Forward:
                     self.incall.disconnect(lowlevel.LC_NUMBER_BUSY)
                 else:
                     self.outcall.user_data = self
-                    self.outcall.openout(number, originating_address)
+                    self.outcall.openout(number, 1, originating_address)
             elif cause:
                 self.incall.disconnect(cause)
             else:
