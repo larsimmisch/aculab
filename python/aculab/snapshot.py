@@ -1,6 +1,18 @@
 import lowlevel
 from error import AculabError
 
+_singletons = {}
+
+class SingletonMixin:
+    "from Jeremy Bowers - http://c2.com/cgi/wiki?PythonSingleton"
+    def __new__(cls, *args, **kwargs):
+        if cls in _singletons:
+            return _singletons[cls]
+        self = object.__new__(cls)
+        cls.__init__(self, *args, **kwargs)
+        _singletons[cls] = self
+        return self
+
 class Card:
     def __init__(self, card, info):
         self.card = card
@@ -86,8 +98,8 @@ class ProsodyCard(Card):
 
         self.modules = [Module(card, i) for i in range(sm_infop.module_count)]
 
-class Snapshot:    
-    def __init__(self):
+class Snapshot(SingletonMixin): 
+    def __init__(self, notification_queue = None, user_data = None):
         self.switch = []
         self.call = []
         self.prosody = []
@@ -101,6 +113,8 @@ class Snapshot:
         for i in range(snapshotp.count):
             openp = lowlevel.ACU_OPEN_CARD_PARMS()
             openp.serial_no = snapshotp.get_serial(i)
+            openp.app_context_token = user_data
+            openp.notification_queue = notification_queue
             rc = lowlevel.acu_open_card(openp)
             if rc:
                 raise AculabError(rc, 'acu_open_card()')

@@ -18,6 +18,8 @@
 			 tSM_INT, tSM_UT32 };
 %apply char[ANY] { ACU_CHAR[ANY] };
 
+%apply void * { ACU_EVENT_QUEUE, ACU_ACT };
+
 #ifdef TiNG_USE_V6
 #define cc_version 6
 #else
