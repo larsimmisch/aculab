@@ -163,10 +163,10 @@ class CallHandle:
 
         self.dispatcher.add(self)
 
-    def openout(self, destination_address, sending_complete = 1,
-                originating_address = '',
-                feature = None, feature_data = None, cnf = None):
-
+    def _outparms(self, destination_address, sending_complete = 1,
+                  originating_address = '',
+                  feature = None, feature_data = None, cnf = None):
+        
         if feature and feature_data:
             outparms = lowlevel.FEATURE_OUT_XPARMS()
             outparms.net = self.port
@@ -179,16 +179,11 @@ class CallHandle:
                 if self.timeslot != -1:
                     outparms.cnf |= lowlevel.CNF_TSPREFER
                 
-                
             outparms.sending_complete = sending_complete
             outparms.originating_addr = originating_address
             outparms.destination_addr = destination_address
             outparms.feature_information = feature
             outparms.feature = feature_data
-
-            rc = lowlevel.call_feature_openout(outparms)
-            if rc:
-                raise AculabError(rc, 'call_feature_openout')
         else:
             outparms = lowlevel.OUT_XPARMS()
             outparms.net = self.port
@@ -201,6 +196,21 @@ class CallHandle:
             outparms.originating_addr = originating_address
             outparms.destination_addr = destination_address
 
+        return outparms
+
+    def openout(self, destination_address, sending_complete = 1,
+                originating_address = '',
+                feature = None, feature_data = None, cnf = None):
+
+        outparms = self._outparms(destination_address, sending_complete,
+                                  originating_address, feature, feature_data,
+                                  cnf)
+        
+        if feature and feature_data:
+            rc = lowlevel.call_feature_openout(outparms)
+            if rc:
+                raise AculabError(rc, 'call_feature_openout')
+        else:
             rc = lowlevel.call_openout(outparms)
             if rc:
                 raise AculabError(rc, 'call_openout')
@@ -213,6 +223,42 @@ class CallHandle:
         self.handle = outparms.handle
 
         self.dispatcher.add(self)
+
+    def enquiry(self, destination_address, sending_complete = 1,
+                originating_address = '',
+                feature = None, feature_data = None, cnf = None):
+
+        outparms = self._outparms(destination_address, sending_complete,
+                                  originating_address, feature, feature_data,
+                                  cnf)
+
+        if feature and feature_data:
+            rc = lowlevel.call_feature_enquiry(outparms)
+            if rc:
+                raise AculabError(rc, 'call_feature_enquiry')
+        else:
+            rc = lowlevel.call_enquiry(outparms)
+            if rc:
+                raise AculabError(rc, 'call_enquiry')
+
+        # it is permissible to do an openout after an openin
+        # we save the handle from openin in this case
+        if self.handle and (self.handle & lowlevel.INCH):
+            self.in_handle = self.handle
+
+        self.handle = outparms.handle
+
+        self.dispatcher.add(self)
+
+    def hold(self):
+        rc = lowlevel.call_hold(self.handle)
+        if rc:
+            raise AculabError(rc, 'call_hold')
+
+    def reconnect(self):
+        rc = lowlevel.call_reconnect(self.handle)
+        if rc:
+            raise AculabError(rc, 'call_reconnect')
 
     def send_overlap(self, addr, complete = 0):
         overlap = lowlevel.OVERLAP_XPARMS()
