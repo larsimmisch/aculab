@@ -1,6 +1,5 @@
 
 CXX		:= cl /MD
-
 DEFINES := -DWIN32
 
 # check for our standard locations of SWIG and Python
@@ -10,55 +9,67 @@ SWIG := $(dir $(strip $(wildcard c:/swig-1.3.21/swig.exe) \
                       $(wildcard e:/swig-1.3.21/swig.exe)))
 SWIGLIB := $(SWIG)Lib
 
-PYTHON := $(dir $(strip $(wildcard c:/python22/python.exe) \
-                        $(wildcard d:/python22/python.exe) \
-                        $(wildcard e:/python22/python.exe) \
-                        $(wildcard c:/python23/python.exe) \
-                        $(wildcard d:/python23/python.exe) \
-                        $(wildcard e:/python23/python.exe)))
+DTK := $(dir $(strip $(wildcard c:/Aculab/v6/include) \
+                     $(wildcard c:/Programs/Aculab/v6/include) \
+                     $(wildcard c:/Programme/Aculab/v6/include)))
 
-PYTHON_INCLUDES = $(PYTHON)include
+PYTHON := $(dir $(strip $(wildcard c:/python23/python.exe) \
+                        $(wildcard d:/python23/python.exe) \
+                        $(wildcard e:/python23/python.exe) \
+                        $(wildcard c:/python24/python.exe) \
+                        $(wildcard d:/python24/python.exe) \
+                        $(wildcard e:/python24/python.exe)))
+
+PYTHON_INCLUDE = -I$(PYTHON)include
 PYTHON_LIBS	= $(PYTHON)libs/python23.lib advapi32.lib
 
-OBJS	:= acu_wrap.obj cllib.obj clnt.obj common.obj swlib.obj swnt.obj \
-			smnt.obj smbesp.obj smlib.obj smfwcaps.obj
+DTK_INCLUDE = -I$(DTK)include -I$(DTK)TiNG/include
+DTK_LIBS = $(DTK)lib/res_lib.lib $(DTK)lib/sw_lib.lib $(DTK)lib/cl_lib.lib $(DTK)lib/TiNG.lib
+
+OBJS	:= acu_wrap.obj
 
 all: aculab/_lowlevel.dll aculab/lowlevel.py
 
 aculab/_lowlevel.dll: $(OBJS)
-	$(CXX) $(LDFLAGS) /LD -o $@ $(OBJS) $(PYTHON_LIBS) \
+	$(CXX) $(LDFLAGS) /LD -o $@ $(OBJS) $(PYTHON_LIBS) $(DTK_LIBS) \
 		 /link /EXPORT:init_lowlevel
 
-acu.i: top.i ../include/mvcldrvr.h ../include/mvswdrvr.h ../include/smdrvr.h \
-	   ../include/smosintf.h bottom.i makefile
-	cat top.i >$@
-	cat ../include/mvswdrvr.h >> $@
-	cat ../include/mvcldrvr.h >> $@
-	cat ../include/smosintf.h >> $@
-	cat ../include/smdrvr.h >> $@
-	cat ../include/smbesp.h >> $@
-	cat ../include/smfwcaps.h >> $@
-	cat bottom.i >>$@
+cl_lib.h2: $(DTK)/include/cl_lib.h cl_lib.patch
+	patch -o $@ $(DTK)/include/cl_lib.h cl_lib.patch
 
-acu_wrap.c aculab/lowlevel.py: acu.i
-	$(SWIG)swig $(DEFINES) -I$(SWIGLIB) -I$(SWIGLIB)/Python -I../include \
-		-modern -shadow -python $<
+res_lib.h2: $(DTK)/include/res_lib.h res_lib.patch
+	patch -o $@ $(DTK)/include/res_lib.h res_lib.patch
+
+# builds are very slow - only rebuild if cl_lib.h changes
+sized_struct.i: acu.i $(DTK)include/cl_lib.h $(DTK)include/sw_lib.h
+	$(SWIG)swig $(DEFINES) $(DTK_INCLUDE) -xml -xmllite acu.i
+	python sized_struct.py acu_wrap.xml
+	rm acu_wrap.xml
+
+acu_wrap.xml: acu.i
+	swig $(DEFINES) -xml $<
+
+acu_wrap.c aculab/lowlevel.py: acu.i cl_lib.h2 $(DTK)/include/sw_lib.h \
+		res_lib.h2 $(DTK)/ting/include/smdrvr.h $(DTK)/ting/include/smbesp.h \
+		sized_struct.i
+	$(SWIG)swig $(DEFINES) $(DTK_INCLUDE) -python -modern -new_repr $<
 	mv lowlevel.py aculab
-
-%.obj: ../src/%.c
-	$(CXX) -c -I$(PYTHON_INCLUDES) -I../include $(DEFINES) $< -o $@ 
-
-%.obj: %.c
-	$(CXX) -c -I$(PYTHON_INCLUDES) -I../include $(DEFINES) $< -o $@ 
-
-test:
-	python test_swig.py
 
 install:
 	python setup.py install
 
 installer:
 	python setup.py bdist_wininst
+
+# this target should be used to regenerate cl_lib.patch
+# after cl_lib.h2 was modified
+# Error 1 is ok, Error 2 indicates trouble
+patch: $(DTK)/include/cl_lib.h
+	-diff -u -b $(DTK)/include/cl_lib.h cl_lib.h2 > cl_lib.patch
+	-diff -u -b $(DTK)/include/res_lib.h res_lib.h2 > res_lib.patch
+
+%.obj: %.c
+	$(CXX) -c $(PYTHON_INCLUDE) $(DTK_INCLUDE) $(DEFINES) $< -o $@ 
 
 clean:
 	rm -f aculab/*.dll *.obj aculab/*.lib aculab/*.exp aculab/*.pyc \

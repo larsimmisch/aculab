@@ -7,10 +7,12 @@ CXX := gcc
 TiNGTYPE := LINUX
 DEFINES := -DACU_LINUX -DSM_POLL_UNIX -DTiNGTYPE_$(TiNGTYPE) -DTiNG_USE_V6
 
-C_DEFINES := -DNDEBUG -fPIC $(DEFINES) -I$(DTK)/include -I$(DTK)/ting/include
+DTK_INCLUDE = -I$(DTK)/include -I$(DTK)/TiNG/include
 
-PYTHON_INCLUDES = /usr/local/include/python2.3
-PYTHON_LIBDIR	= -L/usr/local/lib/python2.3/config
+C_DEFINES := -DNDEBUG -fPIC $(DEFINES) $(DTK_include)
+
+PYTHON_INCLUDE = -I/usr/local/include/python2.4
+PYTHON_LIBDIR	= -L/usr/local/lib/python2.4/config
 PYTHON_LIBS = -lpython2.3
 
 OBJS	:= acu_wrap.o
@@ -31,31 +33,20 @@ res_lib.h2: $(DTK)/include/res_lib.h res_lib.patch
 	patch -o $@ $(DTK)/include/res_lib.h res_lib.patch
 
 # builds are very slow - only rebuild if cl_lib.h changes
-sized_struct.i: $(DTK)/include/cl_lib.h
-	swig $(DEFINES) -xml -xmllite acu.i
+sized_struct.i: $(DTK)/include/cl_lib.h $(DTK)/include/sw_lib.h
+	swig $(DEFINES) $(DTK_INCLUDE) -xml -xmllite acu.i
 	python sized_struct.py acu_wrap.xml
 	rm acu_wrap.xml
 
-acu.i: top.i cl_lib.h2 $(DTK)/include/sw_lib.h res_lib.h2 \
-       $(DTK)/ting/include/smdrvr.h $(DTK)/ting/include/smbesp.h \
-	   bottom.i sized_struct.i makefile.unix
-	cat top.i > $@
-	cat cl_lib.h2 >> $@
-	cat res_lib.h2 >> $@
-	cat $(DTK)/include/sw_lib.h >> $@
-	cat $(DTK)/ting/include/smdrvr.h >> $@
-	cat $(DTK)/ting/include/smbesp.h >> $@
-	cat bottom.i >>$@
-
 acu_wrap.xml: acu.i
-	swig $(DEFINES) -xml $<
+	swig $(DEFINES) $(DTK_INCLUDE) -xml $<
 
 acu_wrap.c aculab/lowlevel.py: acu.i
 	swig $(DEFINES) -python -modern -new_repr $<
 	mv lowlevel.py aculab
 
 %.o: %.c
-	$(CXX) -c $(C_DEFINES) -I$(PYTHON_INCLUDES) -Iaculib $< -o $@ 
+	$(CXX) -c $(C_DEFINES) $(PYTHON_INCLUDE) -Iaculib $< -o $@ 
 
 info: info.o
 	$(CXX) -o $@ info.o $(DTK)/ting/apilib/gen-${TiNGTYPE}_V6/TiNGlib.o -lm -lpthread
