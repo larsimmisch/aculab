@@ -31,7 +31,9 @@ extern "C" {
 
 tSMDevHandle smd_open_ctl_dev(void);
 
+#ifdef WIN32
 ACUDLL void smd_close_ctl_dev( void );
+#endif
 
 tSMDevHandle smd_open_chnl_dev(tSMChannelId);
 
@@ -72,7 +74,9 @@ ACUDLL int smd_ev_wait(
 
 #ifdef UNIX_SYSTEM
 
+#ifndef SM_POLL_UNIX
 int smd_ev_abort(int,int,int);
+#endif
 
 #ifdef SM_CLONE_UNIX
 
