@@ -207,6 +207,9 @@ class Call:
     def ev_outgoing_ringing(self):
         self.get_details()
 
+    def ev_call_connected(self):
+        self.get_details()
+
     def ev_idle(self):
         dispatcher.remove(self)
         cause = lowlevel.CAUSE_XPARMS()
