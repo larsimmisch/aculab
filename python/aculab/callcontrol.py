@@ -5,17 +5,31 @@ from busses import CTBusConnection
 from error import AculabError
 from names import event_names
 
+# These events are not set in call.last_event because they don't
+# change the state of the call as far as we want to know
+# They are delivered to the controller, of course
+no_state_change_events = [lowlevel.EV_CALL_CHARGE,
+                          lowlevel.EV_CHARGE_INT,
+                          lowlevel.EV_DETAILS]
+
+no_state_change_extended_events = [lowlevel.EV_EXT_FACILITY,
+                                   lowlevel.EV_EXT_UUI_PENDING,
+                                   lowlevel.EV_EXT_UUI_CONGESTED,
+                                   lowlevel.EV_EXT_UUI_UNCONGESTED,
+                                   lowlevel.EV_EXT_UUS_SERVICE_REQUEST,
+                                   lowlevel.EV_EXT_TRANSFER_INFORMATION]
+
 class CallEventDispatcher:
 
     def __init__(self):
-        self.calls = {}
+        self.calls = {}                               
 
-    # must only be called from a dispatched event
+    # add must only be called from a dispatched event
     # - not from a separate thread
     def add(self, call):
         self.calls[call.handle] = call
 
-    # must only be called from a dispatched event
+    # remove must only be called from a dispatched event
     # - not from a separate thread
     def remove(self, call):
         del self.calls[call.handle]
@@ -40,10 +54,12 @@ class CallEventDispatcher:
             if event.handle:
                 call = self.calls[event.handle]
                 if event.state == lowlevel.EV_EXTENDED:
-                    ev = event_names[event.extended_state].lower()
+                    e = event.extended_state
                 else:
-                    ev = event_names[event.state].lower()
+                    e = event.state
 
+                ev = event_names[e].lower()
+                    
                 if hasattr(call.controller, 'mutex'):
                     mutex = call.controller.mutex
                     mutex.acquire()
@@ -79,6 +95,16 @@ class CallEventDispatcher:
                         raise
 
                 finally:
+                    # set call.last_event and call.last_extended_event
+                    if event.state == lowlevel.EV_EXTENDED \
+                       and event.extended_state \
+                       not in no_state_change_extended_events:
+                        call.last_event = lowlevel.EV_EXTENDED
+                        call.last_extended_event = event.extended_state
+                    elif event.state not in no_state_change_events:
+                        call.last_event = event.state
+                        call.last_extended_event = None
+
                     if mutex:
                         mutex.release()
                 
@@ -89,37 +115,40 @@ class CallEventDispatcher:
 
 
 # The CallHandle class models a call handle, as defined by the Aculab lowlevel,
-# and common operations on it. Event handling is delegated to the controller.
+# and common operations on it. Some events are handles to maintain the 
+# internal state, but in general, event handling is delegated to the
+# controller.
 
-class Call:
+class CallHandle:
 
     def __init__(self, controller, dispatcher, token = None, port = 0,
-                 number = '', timeslot = -1, feature = None,
-                 feature_data = None):
+                 timeslot = None):
 
         self.token = token
         self.controller = controller
         self.dispatcher = dispatcher
         self.port = port
-        if number:
-            self.number = number
-        self.timeslot = timeslot
-
-        self.restart(feature, feature_data)
-
-    def restart(self, feature = None, feature_data = None):
-        if hasattr(self, 'number'):
-            self.openout(feature=feature, feature_data=feature_data)
+        if not timeslot:
+            self.timeslot = -1
         else:
-            self.openin()
-            
-    def openin(self):
+            self.timeslot = timeslot
+        self.handle = None
+        self.details = lowlevel.DETAIL_XPARMS()
+        # The dispatcher sets the last state changing event after dispatching
+        # the event. Which events are deemed state changing is controlled via
+        # no_state_change_events
+        self.last_event = lowlevel.EV_IDLE
+        self.last_extended_event = None
+
+    def openin(self, unique_xparms = None):
         inparms = lowlevel.IN_XPARMS()
         inparms.net = self.port
         inparms.ts = self.timeslot
         inparms.cnf = lowlevel.CNF_REM_DISC
         if self.timeslot != -1:
              inparms.cnf |= lowlevel.CNF_TSPREFER
+        if unique_xparms:
+            inparms.unique_xparms = unique_xparms
 
         rc = lowlevel.call_openin(inparms)
         if rc:
@@ -129,8 +158,8 @@ class Call:
 
         self.dispatcher.add(self)
 
-    def openout(self, originating_address = '', feature = None,
-                feature_data = None):
+    def openout(self, destination_address, originating_address = '',
+                feature = None, feature_data = None):
 
         if feature and feature_data:
             outparms = lowlevel.FEATURE_OUT_XPARMS()
@@ -142,15 +171,13 @@ class Call:
                 
             outparms.sending_complete = 1
             outparms.originating_address = originating_address
-            outparms.destination_address = self.number
+            outparms.destination_address = destination_address
             outparms.feature_information = feature
             outparms.feature = feature_data
 
             rc = lowlevel.call_feature_openout(outparms)
             if rc:
                 raise AculabError(rc, 'call_feature_openout')
-
-            self.handle = outparms.handle
         else:
             outparms = lowlevel.OUT_XPARMS()
             outparms.net = self.port
@@ -161,13 +188,18 @@ class Call:
                 
             outparms.sending_complete = 1
             outparms.originating_address = originating_address
-            outparms.destination_address = self.number
+            outparms.destination_address = destination_address
 
             rc = lowlevel.call_openout(outparms)
             if rc:
                 raise AculabError(rc, 'call_openout')
 
-            self.handle = outparms.handle
+        # it is permissible to do an openout after an openin
+        # we save the handle from openin in this case
+        if self.handle and (self.handle & lowlevel.INCH):
+            self.in_handle = self.handle
+
+        self.handle = outparms.handle
 
         self.dispatcher.add(self)
 
@@ -269,15 +301,28 @@ class Call:
         cause = lowlevel.CAUSE_XPARMS()
         cause.handle = self.handle
 
-        self.handle = None
-
-        if hasattr(self, 'details'):
-            del self.details
-
-        if hasattr(self, 'number'):
-            del self.number
+        # reset details
+        self.details = lowlevel.DETAIL_XPARMS()
 
         rc = lowlevel.call_release(cause)
         if rc:
             raise AculabError(rc, 'call_release')
+
+        # restore the handle for the inbound call if there is one
+        if hasattr(self, 'in_handle'):
+            self.handle = self.in_handle
+            del self.in_handle
+        else:
+            self.handle = None
+
+class Call(CallHandle):
+
+    def __init__(self, controller, dispatcher, token = None, port = 0,
+                 timeslot = -1):
         
+        CallHandle.__init__(self, controller, dispatcher, token,
+                            port, timeslot)
+
+        self.openin()
+
+            
