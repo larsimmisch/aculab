@@ -3,6 +3,7 @@
 import sys
 import getopt
 import logging
+import aculab
 from aculab.error import AculabError
 from aculab.callcontrol import *
 
@@ -27,13 +28,8 @@ def usage():
     sys.exit(-2)
 
 if __name__ == '__main__':
-    log = logging.getLogger('')
-    log.setLevel(logging.DEBUG)
-    log_formatter = logging.Formatter(
-        '%(asctime)s %(levelname)-5s %(message)s')
-    hdlr = logging.StreamHandler()
-    hdlr.setFormatter(log_formatter)
-    log.addHandler(hdlr)
+
+    aculab.defaultLogging(logging.DEBUG)
     
     port = 0
     timeslot = 1

@@ -5,10 +5,11 @@ import os
 import getopt
 import threading
 import logging
+import aculab
 from aculab.error import AculabError
 from aculab.callcontrol import Call, CallEventDispatcher
 from aculab.speech import SpeechChannel, SpeechEventDispatcher
-from aculab.busses import autodetect
+from aculab.busses import DefaultBus
 
 class AnsweringMachine:
 
@@ -73,19 +74,14 @@ def usage():
     sys.exit(-2)
 
 if __name__ == '__main__':
-    log = logging.getLogger('')
-    log.setLevel(logging.DEBUG)
-    log_formatter = logging.Formatter(
-        '%(asctime)s %(name)s %(levelname)-5s %(message)s')
-    hdlr = logging.StreamHandler()
-    hdlr.setFormatter(log_formatter)
-    log.addHandler(hdlr)
+
+    log = aculab.defaultLogging(logging.DEBUG)
 
     port = 0
     module = 0
     controller = IncomingCallController()
 
-    bus = autodetect()
+    bus = DefaultBus
 
     options, args = getopt.getopt(sys.argv[1:], 'p:rsm:')
 
