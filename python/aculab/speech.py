@@ -47,6 +47,13 @@ class SpeechEventDispatcher:
             d.setDaemon(1)
             d.start()
 
+    def run(self):
+        for d in self.dispatchers[:-1]:
+            d.setDaemon(1)
+            d.start()
+        self.dispatchers[-1].run()
+        
+
 class PlayJob:
     def __init__(self, filename, token):
         self.filename = filename
@@ -402,6 +409,8 @@ class SpeechChannel:
                 rc = lowlevel.sm_record_how_terminated(how)
                 if rc:
                     raise AculabError(rc, 'sm_record_how_terminated')
+
+                print 'how.termination_octets', how.termination_octets
 
                 if hasattr(self.controller, 'mutex'):
                     self.controller.mutex.acquire()
