@@ -4,8 +4,8 @@ CXX		:= cl /MD
 
 DEFINES := -DWIN32
 
-SWIGBIN := c:/swig-1.3.9
-SWIGLIB := c:/swig-1.3.9/Lib
+SWIGBIN := c:/swig-1.3.12
+SWIGLIB := c:/swig-1.3.12/Lib
 
 PYTHON_INCLUDES = c:/python21/include
 PYTHON_LIBS	= c:/python21/libs/python21.lib
@@ -20,10 +20,11 @@ aculabc.dll: $(OBJS)
 		 /link /EXPORT:initaculabc
 
 acu.i: top.i ../include/mvcldrvr.h ../include/mvswdrvr.h ../include/smdrvr.h \
-	   makefile
+	   ../include/smosintf.h makefile
 	cat top.i >$@
 	cat ../include/mvswdrvr.h >> $@
 	cat ../include/mvcldrvr.h >> $@
+	cat ../include/smosintf.h >> $@
 	cat ../include/smdrvr.h >> $@
 	cat ../include/smbesp.h >> $@
 	cat ../include/smfwcaps.h >> $@

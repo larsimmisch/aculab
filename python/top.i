@@ -10,19 +10,47 @@
 /*
   Macro to create a SWIG-compatible pointer-type string from a base type
 */
-#define SWIGTYPE(X) SWIGTYPE_##X
+#define MAKE_SWIGTYPE(X) SWIGTYPE_p_##X
 
 %}
 
 %import "smport.h"
 
+%typemap(python,in) tSMEventId {
+	$1 = (tSMEventId)PyInt_AsLong($input);
+}
+
+%typemap(python,ignore) tSMEventId * ($basetype temp) {
+	$1 = ($basetype*)&temp;
+}
+
+%typemap(python,argout) tSMEventId * {
+	PyObject *o = PyInt_FromLong((unsigned)*$1);
+	if ((!$result) || ($result == Py_None)) 
+	{
+		$result = o;
+    } 
+	else 
+	{
+		if (!PyList_Check($result)) 
+		{
+			PyObject *o2 = $result;
+			$result = PyList_New(0);
+			PyList_Append($result,o2);
+			Py_XDECREF(o2);
+		}
+		PyList_Append($result,o);
+		Py_XDECREF(o);
+	}
+}
+
 /*
 %typemap(python,except) int {
     $function
 
-	if ($source)
+	if ($1)
 	{
-	    PyErr_SetString(PyExc_RuntimeError, error_2_string($source));
+	    PyErr_SetString(PyExc_RuntimeError, error_2_string($1));
     	return NULL;
   	}
 }

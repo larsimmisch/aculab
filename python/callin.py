@@ -1,24 +1,16 @@
 import sys
-import re
 import aculab
+import aculab_names as names
 import __main__
 
-# build a map of EV_* constants
-event_names = {}
-event_pattern = re.compile(r'EV_[A-Z_]+')
-
-for k in aculab.__dict__.keys():
-    if event_pattern.match(k):
-        event_names[aculab.__dict__[k]] = k.lower()
-
-inparms = aculab.in_xparms()
+inparms = aculab.IN_XPARMS()
 inparms.ts = -1
 
 aculab.call_openin(inparms)
     
 handle = inparms.handle
 
-event = aculab.state_xparms()
+event = aculab.STATE_XPARMS()
 
 def ev_ext_facility(handle):
     pass
@@ -33,7 +25,7 @@ def ev_remote_disconnect(handle):
     aculab.call_disconnect(handle)
 
 def ev_idle(handle):
-    cause = aculab.cause_xparms()
+    cause = aculab.CAUSE_XPARMS()
     cause.handle = handle
     aculab.call_release(cause)
     sys.exit(0)
@@ -46,7 +38,7 @@ while 1:
     rc = aculab.call_event(event)
     # call the event handler
     if last_event != event.state:
-        print event_names[event.state]
-        __main__.__dict__[event_names[event.state]](handle)
+        print names.event[event.state].lower()
+        __main__.__dict__[names.event[event.state].lower()](handle)
         last_event = event.state
 
