@@ -30,7 +30,7 @@ if __name__ == '__main__':
     timeslot = 1
     controller = IncomingCallController()
 
-    options, args = getopt.getopt(sys.argv[1:], 'p:t:r')
+    options, args = getopt.getopt(sys.argv[1:], 'p:t:r?')
 
     for o, a in options:
         if o == '-p':
