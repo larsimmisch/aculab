@@ -23,15 +23,18 @@ def usage():
 
 if __name__ == '__main__':
     port = 0
+    timeslot = None
     controller = OutgoingCallController()
 
-    options, args = getopt.getopt(sys.argv[1:], 'p:r')
+    options, args = getopt.getopt(sys.argv[1:], 'p:rt:')
 
     for o, a in options:
         if o == '-p':
             port = int(a)
         elif o == '-r':
             controller = RepeatedOutgoingCallController()
+        elif o == '-t':
+            timeslot = int(a)
         else:
             usage()
 
@@ -40,7 +43,7 @@ if __name__ == '__main__':
 
     calldispatcher = CallEventDispatcher()
     
-    c = Call(controller, calldispatcher, port=port, timeslot=1)
+    c = Call(controller, calldispatcher, port=port, timeslot=timeslot)
 
     c.destination_address = args[0]
     c.openout(args[0])
