@@ -72,6 +72,8 @@ class RecordJob:
         self.file = open(filename, 'wb')
         self.buffer = lowlevel.SM_TS_DATA_PARMS()
         self.buffer.initrecordbuffer()
+        # size in bytes
+        self.size = 0
 
 class DigitsJob:
     def __init__(self, token):
@@ -410,14 +412,12 @@ class SpeechChannel:
                 if rc:
                     raise AculabError(rc, 'sm_record_how_terminated')
 
-                print 'how.termination_octets', how.termination_octets
-
                 if hasattr(self.controller, 'mutex'):
                     self.controller.mutex.acquire()
 
                 try:
                     self.controller.record_done(self, how.termination_reason,
-                                                how.termination_octets,
+                                                self.recordjob.size,
                                                 self.recordjob.token)
                 finally:
                     self.recordjob = None
@@ -439,7 +439,10 @@ class SpeechChannel:
                 if rc:
                     raise AculabError(rc, 'sm_get_recorded_data')
 
-                self.recordjob.file.write(data.getdata())
+                d = data.getdata()
+                self.recordjob.size += len(d)
+
+                self.recordjob.file.write(d)
 
     def stop_record(self):
         if self.recordjob:
