@@ -6,7 +6,7 @@ from error import AculabError
 from names import event_names
 
 # These events are not set in call.last_event because they don't
-# change the state of the call as far as we want to know
+# change the state of the call as far as we are concerned
 # They are delivered to the controller, of course
 no_state_change_events = [lowlevel.EV_CALL_CHARGE,
                           lowlevel.EV_CHARGE_INT,
@@ -121,10 +121,10 @@ class CallEventDispatcher:
 
 class CallHandle:
 
-    def __init__(self, controller, dispatcher, token = None, port = 0,
+    def __init__(self, controller, dispatcher, user_data = None, port = 0,
                  timeslot = None):
 
-        self.token = token
+        self.user_data = user_data
         self.controller = controller
         self.dispatcher = dispatcher
         self.port = port
@@ -155,6 +155,8 @@ class CallHandle:
             raise AculabError(rc, 'call_openin')
 
         self.handle = inparms.handle
+
+        # print '0x%x' % self.handle
 
         self.dispatcher.add(self)
 
@@ -317,10 +319,10 @@ class CallHandle:
 
 class Call(CallHandle):
 
-    def __init__(self, controller, dispatcher, token = None, port = 0,
+    def __init__(self, controller, dispatcher, user_data = None, port = 0,
                  timeslot = -1):
         
-        CallHandle.__init__(self, controller, dispatcher, token,
+        CallHandle.__init__(self, controller, dispatcher, user_data,
                             port, timeslot)
 
         self.openin()

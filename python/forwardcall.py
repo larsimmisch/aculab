@@ -52,7 +52,7 @@ class Forward:
         self.route()
 
     def route(self):
-        self.incall.token = self
+        self.incall.user_data = self
 
         if self.outcall:
             # warning: untested (and probably flawed)
@@ -70,7 +70,7 @@ class Forward:
                     print hex(self.incall.handle), 'no call available'
                     self.incall.disconnect()
                 else:
-                    self.outcall.token = self
+                    self.outcall.user_data = self
                     self.outcall.openout(number)
             elif not wait:
                 self.incall.disconnect()
@@ -101,47 +101,47 @@ class ForwardCallController:
     "controls a single incoming call and its corresponding outgoing call"
 
     def ev_incoming_call_det(self, call):
-        call.token = Forward(call)
+        call.user_data = Forward(call)
 
     def ev_outgoing_ringing(self, call):
-        call.token.connect()
-        call.token.incall.incoming_ringing()
+        call.user_data.connect()
+        call.user_data.incall.incoming_ringing()
 
     def ev_call_connected(self, call):
-        if call == call.token.incall:
-            call.token.connect()
+        if call == call.user_data.incall:
+            call.user_data.connect()
         else:
-            call.token.incall.accept()
+            call.user_data.incall.accept()
 
     def ev_remote_disconnect(self, call):
         # if both calls hang up at the same time, disconnect will be called
         # twice, because the calls are set to None only in ev_idle.
         # This should not matter, however.
-        if call == call.token.incall:
-            if call.token.outcall:
-                call.token.outcall.disconnect()
-        elif call == call.token.outcall:
-            if call.token.incall:
-                call.token.incall.disconnect()
+        if call == call.user_data.incall:
+            if call.user_data.outcall:
+                call.user_data.outcall.disconnect()
+        elif call == call.user_data.outcall:
+            if call.user_data.incall:
+                call.user_data.incall.disconnect()
 
         call.disconnect()
 
     def ev_idle(self, call):
-        if call.token:
-            call.token.disconnect()
+        if call.user_data:
+            call.user_data.disconnect()
         
-            if call == call.token.incall:
-                if call.token.outcall:
-                    print hex(call.token.outcall.handle), \
+            if call == call.user_data.incall:
+                if call.user_data.outcall:
+                    print hex(call.user_data.outcall.handle), \
                           "disconnecting outgoing call"
-                    call.token.outcall.disconnect()            
-            elif call == call.token.outcall:
-                if call.token.incall:
-                    print hex(call.token.incall.handle), \
+                    call.user_data.outcall.disconnect()            
+            elif call == call.user_data.outcall:
+                if call.user_data.incall:
+                    print hex(call.user_data.incall.handle), \
                           "disconnecting incoming call"
-                    call.token.incall.disconnect()
+                    call.user_data.incall.disconnect()
                 
-            call.token = None
+            call.user_data = None
 
         if not call.handle:
             call.openin()

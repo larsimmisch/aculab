@@ -20,18 +20,21 @@ class RepeatedIncomingCallController(IncomingCallController):
         call.openin()
 
 def usage():
-    print 'usage: callin.py [-p <port>] [-r]'
+    print 'usage: callin.py [-p <port>] [-t <timeslot>] [-r]'
     sys.exit(-2)
 
 if __name__ == '__main__':
     port = 0
+    timeslot = 1
     controller = IncomingCallController()
 
-    options, args = getopt.getopt(sys.argv[1:], 'p:r')
+    options, args = getopt.getopt(sys.argv[1:], 'p:t:r')
 
     for o, a in options:
         if o == '-p':
             port = int(a)
+        elif o == '-t':
+            timeslot = int(a)
         elif o == '-r':
             controller = RepeatedIncomingCallController()
         else:
@@ -39,6 +42,6 @@ if __name__ == '__main__':
                 
     calldispatcher = CallEventDispatcher()
     
-    c = Call(controller, calldispatcher, port=port)
+    c = Call(controller, calldispatcher, port=port, timeslot=timeslot)
 
     calldispatcher.run()

@@ -13,7 +13,7 @@ class DispatcherThread(threading.Thread):
         """handles is a map from handles to method"""
         self.handles = handles
         threading.Thread.__init__(self)
-         
+
     def run(self):
         handles = self.handles.keys()
 
