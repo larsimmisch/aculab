@@ -115,7 +115,7 @@ class CallEventDispatcher:
 
 
 # The CallHandle class models a call handle, as defined by the Aculab lowlevel,
-# and common operations on it. Some events are handles to maintain the 
+# and common operations on it. Some events are handled to maintain the 
 # internal state, but in general, event handling is delegated to the
 # controller.
 
@@ -300,14 +300,16 @@ class CallHandle:
         '''cause may be a CAUSE_XPARMS struct or an int'''
         if self.handle:
             if cause is None:
-                cause = lowlevel.CAUSE_XPARMS()
+                xcause = lowlevel.CAUSE_XPARMS()
             elif type(cause) == type(0):
-                cause = lowlevel.CAUSE_XPARMS()
-                cause.cause = cause
+                xcause = lowlevel.CAUSE_XPARMS()
+                xcause.cause = cause
+            else:
+                xcause = cause
 
-            cause.handle = self.handle
-
-            rc = lowlevel.call_disconnect(cause)
+            xcause.handle = self.handle
+            
+            rc = lowlevel.call_disconnect(xcause)
             if rc:
                 raise AculabError(rc, 'call_disconnect')
             
