@@ -667,7 +667,7 @@ class SpeechChannel:
         self.controller = controller
         self.dispatcher = dispatcher
         self.mutex = mutex
-        self.user_data = None
+        self.user_data = user_data
         self.job = None
         self.close_pending = None
         self.module = module
