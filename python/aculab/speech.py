@@ -1,7 +1,7 @@
 import sys
 import lowlevel
 from busses import CTBusConnection
-from error import AculabError
+from error import AculabSpeechError
 import threading
 import os
 if os.name == 'nt':
@@ -125,7 +125,7 @@ class SpeechConnection:
 
         rc = lowlevel.sm_switch_channel_input(input)
         if (rc):
-            raise AculabError(rc, 'sm_switch_channel_input')
+            raise AculabSpeechError(rc, 'sm_switch_channel_input')
 
 class SpeechChannel:
         
@@ -151,7 +151,7 @@ class SpeechChannel:
 
             rc = lowlevel.sm_channel_alloc_placed(alloc);
             if rc:
-                raise AculabError(rc, 'sm_channel_alloc_placed');
+                raise AculabSpeechError(rc, 'sm_channel_alloc_placed');
         else:
             alloc = lowlevel.SM_CHANNEL_ALLOC_PARMS();
 
@@ -159,7 +159,7 @@ class SpeechChannel:
 
             rc = lowlevel.sm_channel_alloc(alloc);
             if rc:
-                raise AculabError(rc, 'sm_channel_alloc');            
+                raise AculabSpeechError(rc, 'sm_channel_alloc');            
 
         self.channel = alloc.channel
 
@@ -168,7 +168,7 @@ class SpeechChannel:
 
         rc = lowlevel.sm_channel_info(self.info)
         if rc:
-            raise AculabError(rc, 'sm_channel_info')
+            raise AculabSpeechError(rc, 'sm_channel_info')
 
         listen_for = lowlevel.SM_LISTEN_FOR_PARMS()
         listen_for.channel = self.channel
@@ -178,7 +178,7 @@ class SpeechChannel:
 
         rc = lowlevel.sm_listen_for(listen_for)
         if rc:
-            raise AculabError(rc, 'sm_listen_for')
+            raise AculabSpeechError(rc, 'sm_listen_for')
 
         # initialise our events
         self.event_read = self.set_event(lowlevel.kSMEventTypeReadData)
@@ -197,7 +197,7 @@ class SpeechChannel:
 
         rc = lowlevel.sm_channel_release(self.channel)
         if rc:
-            raise AculabError(rc, 'sm_channel_release')
+            raise AculabSpeechError(rc, 'sm_channel_release')
 
     def __cmp__(self, other):
         return self.channel.__cmp__(other.channel)
@@ -214,7 +214,7 @@ class SpeechChannel:
                                                       event.event_type,
                                                       event.issue_events)
             if rc:
-                raise AculabError(rc, 'smd_ev_create')
+                raise AculabSpeechError(rc, 'smd_ev_create')
 
             return pywintypes.HANDLE(event.handle)
         else:
@@ -225,7 +225,7 @@ class SpeechChannel:
                                         event.issue_events)
 
             if rc:
-                raise AculabError(rc, 'smd_ev_create')
+                raise AculabSpeechError(rc, 'smd_ev_create')
             
             return event.handle
 
@@ -241,7 +241,7 @@ class SpeechChannel:
         rc = lowlevel.sm_channel_set_event(event);
         if rc:
             lowlevel.smd_ev_free(handle);
-            raise AculabError(rc, 'sm_channel_set_event')
+            raise AculabSpeechError(rc, 'sm_channel_set_event')
 
         return handle
 
@@ -257,7 +257,7 @@ class SpeechChannel:
 
             rc = lowlevel.sm_switch_channel_input(input)
             if (rc):
-                raise AculabError(rc, 'sm_switch_channel_input')
+                raise AculabSpeechError(rc, 'sm_switch_channel_input')
 
             return SpeechConnection(self.channel)
         
@@ -271,7 +271,7 @@ class SpeechChannel:
             
         rc = lowlevel.sw_set_output(self.info.card, output)
         if (rc):
-            raise AculabError(rc, 'sw_set_output')
+            raise AculabSpeechError(rc, 'sw_set_output')
 
         return CTBusConnection(self.info.card, (self.info.ist, self.info.its))
 
@@ -287,7 +287,7 @@ class SpeechChannel:
 
             rc = lowlevel.sm_switch_channel_output(output)
             if rc:
-                return AculabError(rc, 'sm_switch_channel_output')
+                return AculabSpeechError(rc, 'sm_switch_channel_output')
 
             return SpeechConnection(self.channel)
         
@@ -301,7 +301,7 @@ class SpeechChannel:
 
         rc = lowlevel.sw_set_output(self.info.card, output)
         if rc:
-            return AculabError(rc, 'sw_set_output')
+            return AculabSpeechError(rc, 'sw_set_output')
 
         return CTBusConnection(self.info.card, sink)
 
@@ -322,7 +322,7 @@ class SpeechChannel:
         rc = lowlevel.sm_replay_start(replay)
         if rc:
             self.playjob = None
-            raise AculabError(rc, 'sm_replay_start')
+            raise AculabSpeechError(rc, 'sm_replay_start')
 
         self.fill_play_buffer()
 
@@ -334,7 +334,7 @@ class SpeechChannel:
 
             rc = lowlevel.sm_replay_status(status)
             if rc:
-                raise AculabError(rc, 'sm_replay_status')
+                raise AculabSpeechError(rc, 'sm_replay_status')
 
             if status.status == lowlevel.kSMReplayStatusNoCapacity:
                 return
@@ -369,7 +369,7 @@ class SpeechChannel:
 
                 rc = lowlevel.sm_put_replay_data(data)
                 if rc:
-                    raise AculabError(rc, 'sm_put_replay_data')
+                    raise AculabSpeechError(rc, 'sm_put_replay_data')
 
     def digits(self, digits, inter_digit_delay = 0, digit_duration = 0,
                token = None):
@@ -386,7 +386,7 @@ class SpeechChannel:
         rc = lowlevel.sm_play_digits(dp)
         if rc:
             self.digitsjob = None
-            raise AculabError(rc, 'sm_play_digits')
+            raise AculabSpeechError(rc, 'sm_play_digits')
 
     def on_write(self):
         if self.playjob:
@@ -397,7 +397,7 @@ class SpeechChannel:
 
             rc = lowlevel.sm_play_digits_status(status)
             if rc:
-                raise AculabError(rc, 'sm_play_digits_status')
+                raise AculabSpeechError(rc, 'sm_play_digits_status')
 
             if hasattr(self.controller, 'mutex'):
                 self.controller.mutex.acquire()
@@ -417,7 +417,7 @@ class SpeechChannel:
             stop.channel = self.channel
             rc = lowlevel.sm_replay_abort(stop)
             if rc:
-                raise AculabError(rc, 'sm_replay_abort')
+                raise AculabSpeechError(rc, 'sm_replay_abort')
         
             self.playjob.position = stop.offset
 
@@ -440,7 +440,7 @@ class SpeechChannel:
         rc = lowlevel.sm_record_start(record)
         if rc:
             self.recordjob = None
-            raise AculabError(rc, 'sm_record_start')
+            raise AculabSpeechError(rc, 'sm_record_start')
     
     def on_read(self):
         status = lowlevel.SM_RECORD_STATUS_PARMS()
@@ -450,7 +450,7 @@ class SpeechChannel:
 
             rc = lowlevel.sm_record_status(status)
             if rc:
-                raise AculabError(rc, 'sm_record_status')
+                raise AculabSpeechError(rc, 'sm_record_status')
 
             if status.status == lowlevel.kSMRecordStatusComplete:
                 
@@ -462,7 +462,7 @@ class SpeechChannel:
 
                 rc = lowlevel.sm_record_how_terminated(how)
                 if rc:
-                    raise AculabError(rc, 'sm_record_how_terminated')
+                    raise AculabSpeechError(rc, 'sm_record_how_terminated')
 
                 if hasattr(self.controller, 'mutex'):
                     self.controller.mutex.acquire()
@@ -489,7 +489,7 @@ class SpeechChannel:
 
                 rc = lowlevel.sm_get_recorded_data(data)
                 if rc:
-                    raise AculabError(rc, 'sm_get_recorded_data')
+                    raise AculabSpeechError(rc, 'sm_get_recorded_data')
 
                 d = data.getdata()
                 self.recordjob.size += len(d)
@@ -502,7 +502,7 @@ class SpeechChannel:
             abort.channel = self.channel
             rc = lowlevel.sm_record_abort(abort)
             if rc:
-                raise AculabError(rc, 'sm_record_abort')
+                raise AculabSpeechError(rc, 'sm_record_abort')
 
     def on_recog(self):
         recog = lowlevel.SM_RECOGNISED_PARMS()
@@ -512,7 +512,7 @@ class SpeechChannel:
 
             rc = lowlevel.sm_get_recognised(recog)
             if rc:
-                raise AculabError(rc, 'sm_get_recognised')
+                raise AculabSpeechError(rc, 'sm_get_recognised')
 
             if recog.type == lowlevel.kSMRecognisedNothing:
                 return
