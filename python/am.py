@@ -130,7 +130,7 @@ class IncomingCallController:
         call.accept()
 
     def ev_call_connected(self, call, user_data):        
-        user_data.speech.play('greeting.al')
+        user_data.speech.play('greeting.al', speed=100, volume=-127)
         
     def ev_remote_disconnect(self, call, user_data):
         call.disconnect()
