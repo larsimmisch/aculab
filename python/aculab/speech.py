@@ -760,6 +760,10 @@ class SpeechChannel:
 ##         return self.channel
 
     def _ting_connect(self):
+        # create prosody streams as late as possible
+        if not prosodystreams:
+            create_prosody_streams()
+        
         # switch to local timeslots for TiNG
         if self.info.ost == -1:
             self.out_ts = prosodystreams[self.module].allocate()
