@@ -50,14 +50,14 @@ class IncomingCallController:
         user_data.close()
         call.user_data = None
 
-    def play_done(self, f, channel, reason, position, job_data):
+    def play_done(self, channel, f, reason, position, user_data, job_data):
         t = os.tmpfile()
         channel.record(t, 90000)
 
-    def record_done(self, f, channel, reason, position, job_data):
+    def record_done(self, channel, f, reason, position, user_data, job_data):
         f.close()
     
-    def digits_done(self, channel, user_data):
+    def digits_done(self, channel, user_data, job_data):
         pass
     
     def dtmf(self, channel, digit, user_data):

@@ -223,7 +223,7 @@ class PollSpeechEventDispatcher(threading.Thread):
 
     def run(self):
         
-        while 1:
+        while True:
             try:
 
                 active = self.poll.poll()
@@ -291,6 +291,7 @@ class PlayJob:
         self.file.seek(0, 0)
         
     def start(self):
+        'Do not call this method directly - call SpeechChannel.start instead'
         replay = lowlevel.SM_REPLAY_PARMS()
         replay.channel = self.channel.channel
         replay.agc = self.agc
@@ -345,9 +346,10 @@ class PlayJob:
                   channel.name, reason, pos)
 
         channel.lock()
+        channel.job = None
         try:
             channel.controller.play_done(channel, f, reason,
-                                         pos, self.job_data)
+                                         pos, channel.user_data, self.job_data)
         finally:
             channel.job_done(self)
             channel.unlock()
@@ -417,6 +419,8 @@ class RecordJob:
         self.job_data = job_data
 
     def start(self):
+        'Do not call this method directly - call SpeechChannel.start instead'
+        
         record = lowlevel.SM_RECORD_PARMS()
         record.channel = self.channel.channel
         record.type = lowlevel.kSMDataFormat8KHzALawPCM
@@ -429,14 +433,13 @@ class RecordJob:
 
         rc = lowlevel.sm_record_start(record)
         if rc:
-            self.recordjob = None
             raise AculabSpeechError(rc, 'sm_record_start')
 
         log.debug('%s record(%s, max_octets=%d, max_time=%d, max_silence=%d, '
                   'elimination=%d, agc=%d, volume=%d)',
                   self.channel.name, str(self.file), self.max_octets,
                   self.max_elapsed_time, self.max_silence, self.elimination,
-                  self.agc, self.speed, self.volume)
+                  self.agc, self.volume)
                   
         # add the read event to the dispatcher
         self.channel.dispatcher.add(self.channel.event_read, self.on_read)
@@ -473,7 +476,8 @@ class RecordJob:
 
         if channel.close_pending:
             reason = 'closed'
-        if self.filename:
+            
+        if hasattr(self, 'filename'):
             self.file.close()
             self.file = None
             f = self.filename
@@ -485,9 +489,10 @@ class RecordJob:
                   channel.name, reason, self.size)
 
         channel.lock()
+        channel.job = None
         try:
             channel.controller.record_done(self, f, reason, self.size,
-                                           self.job_data)
+                                           channel.user_data, self.job_data)
         finally:
             channel.job_done(self)
             channel.unlock()
@@ -497,8 +502,8 @@ class RecordJob:
     def on_read(self):
         status = lowlevel.SM_RECORD_STATUS_PARMS()
 
-        while self.recordjob:
-            status.channel = self.channel
+        while True:
+            status.channel = self.channel.channel
 
             rc = lowlevel.sm_record_status(status)
             if rc:
@@ -545,6 +550,8 @@ class DigitsJob:
         self.stopped = False
 
     def start(self):
+        'Do not call this method directly - call SpeechChannel.start instead'
+        
         dp = lowlevel.SM_PLAY_DIGITS_PARMS()
         dp.channel = self.channel.channel
         dp.digits.type = lowlevel.kSMDTMFDigits
@@ -573,28 +580,30 @@ class DigitsJob:
 
         if status.status == lowlevel.kSMPlayDigitsStatusComplete:
 
+            channel = self.channel
             reason = ''
             if self.stopped:
                 reason = 'stopped'
 
-            self.channel.lock()
-            if self.channel.close_pending:
+            channel.lock()
+            if channel.close_pending:
                 reason = 'closed'
-            self.channel.unlock()
+            channel.unlock()
 
             # remove the write event from to the dispatcher
-            self.channel.dispatcher.remove(self.channel.event_write)
+            channel.dispatcher.remove(self.channel.event_write)
 
             log.debug('%s digits_done(reason=\'%s\')',
                       self.channel.name, reason)
-            self.channel.lock()
+            channel.lock()
+            channel.job = None
             try:
                 self.channel.controller.digits_done(self, reason,
-                                                    self.user_data,
+                                                    channel.user_data,
                                                     self.job_data)
             finally:
-                self.channel.job_done(self)
-                self.channel.unlock()
+                channel.job_done(self)
+                channel.unlock()
                 # break cyclic reference
                 self.channel = None
                 
@@ -644,9 +653,9 @@ class SpeechChannel:
         dispatcher.
 
         Controllers must implement play_done(channel, file, reason, position,
-        job_data), dtmf(channel, digit),
-        record_done(channel, file, reason, size, job_data) and
-        digits_done(channel, reason, job_data).
+        user_data, job_data), dtmf(channel, digit),
+        record_done(channel, file, reason, size, user_data, job_data) and
+        digits_done(channel, reason, user_data, job_data).
         Reason is normally 'stopped', 'closed' or '' (for normal termination).
         For record_done(), reason may also be 'silence' or 'timeout'.
 
@@ -959,49 +968,58 @@ class SpeechChannel:
         if m:
             m(job)
         
-        self.job = None
         if self.close_pending:
             self.close()
 
     def start(self, job):
-        if not self.job:
-            self.job = job
-            job.start()
+        if self.job:
+            raise RuntimeError('Already executing job')
+
+        self.job = job
+        job.start()
     
     def play(self, file, volume = 0, agc = 0, speed = 0, job_data = None):
-        """Play an alaw file asynchronously.
-        user_data is passed back in play_done"""
+        """Play an alaw file asynchronously. The token job_data is passed
+        back in play_done.
+        The file parameter may be a file object or a string.
+        If it is a string, a file with that name is automatically openend and
+        closed. File objects are played and not rewound or closed at the end"""
 
-        self.job = PlayJob(self, file, agc, volume, speed, job_data)
+        job = PlayJob(self, file, agc, volume, speed, job_data)
 
-        self.job.start()
+        self.start(job)
 
     def record(self, file, max_octets = 0,
                max_elapsed_time = 0, max_silence = 0, elimination = 0,
                agc = 0, volume = 0, job_data = None):
-        """Record an alaw file asynchronously.
-        user_data is passed back in record_done"""
+        """Record an alaw file asynchronously. The token job_data is passed
+        back in record_done.
+        The file parameter may be a file object or a string.
+        If it is a string, a file with that name is automatically openend and
+        closed. File objects are recorded to and not rewound or closed at
+        the end"""
 
-        self.job = RecordJob(self, file, max_octets,
-                             max_elapsed_time, max_silence, elimination,
-                             agc, volume, job_data)
 
-        self.job.start()
+        job = RecordJob(self, file, max_octets,
+                        max_elapsed_time, max_silence, elimination,
+                        agc, volume, job_data)
+
+        self.start(job)
 
     def digits(self, digits, inter_digit_delay = 32, digit_duration = 64,
                job_data = None):
-        """Send a string of DTMF digits asynchronously"""
+        """Send a string of DTMF digits asynchronously. The token job_data
+        is passed back in digits_done."""
 
-        self.job = DigitsJob(self, digits, inter_digit_delay,
-                             digit_duration, job_data)
+        job = DigitsJob(self, digits, inter_digit_delay,
+                        digit_duration, job_data)
 
-        self.job.start()
-
+        self.start(job)
 
     def on_recog(self):
         recog = lowlevel.SM_RECOGNISED_PARMS()
         
-        while 1:
+        while True:
             recog.channel = self.channel
 
             rc = lowlevel.sm_get_recognised(recog)
