@@ -1,0 +1,22 @@
+--- /usr/local/aculab/v6/include/cl_lib.h	2004-11-11 13:08:40.000000000 +0100
++++ cl_lib.h2	2004-11-12 12:34:47.000000000 +0100
+@@ -16,17 +16,8 @@
+ 
+ #include "acu_type.h"
+ 
+-#ifndef ACU_LINUX
+-#ifndef ACU_SOLARIS_SPARC
+-# pragma pack (push, 1 )
+-# define ACU_PACK_DIRECTIVE
+-#else
+-# define ACU_PACK_DIRECTIVE
+-#endif /* ACU_SOLARIS_SPARC */
+-#else
+-# define ACU_PACK_DIRECTIVE __attribute__ ((packed))
+-#endif /* ACU_LINUX */
+-	
++#define ACU_PACK_DIRECTIVE
++#define ACU_EXPORT
+ 
+ //EXPORT_TO_VB START
+ 
