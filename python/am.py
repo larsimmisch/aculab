@@ -23,7 +23,7 @@ smtp_server = 'mail.ibp.de'
 smtp_to = 'lars@ibp.de'
 smtp_from = 'am@ibp.de'
 
-# ripped from wave.py, which is just a teensy little bit to unflexible
+# ripped from wave.py, which is just a teensy little bit too unflexible
 
 WAVE_FORMAT_ALAW = 6
 WAVE_FORMAT_MULAW = 7
