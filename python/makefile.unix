@@ -5,7 +5,7 @@ DTK := ../dtk132
 CXX := gcc
 
 TiNGTYPE := LINUX
-DEFINES := -DUNIX_SYSTEM -DSM_POLL_UNIX -DTiNGTYPE_$(TiNGTYPE)
+DEFINES := -DUNIX_SYSTEM -DSM_POLL_UNIX -DTiNGTYPE_$(TiNGTYPE) -DHAVE_TiNG
 
 C_DEFINES := -DNDEBUG -fPIC $(DEFINES) -I$(DTK)/call/include -I$(DTK)/switch/include -I$(DTK)/ting/include
 

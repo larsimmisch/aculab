@@ -3,6 +3,10 @@
 #include "mvcldrvr.h"
 #include "mvswdrvr.h"
 #include "smdrvr.h"
+#ifndef HAVE_TiNG
+#include "smport.h"
+#include "smosintf.h"
+#endif
 #include "smbesp.h"
 
 /*
