@@ -446,15 +446,16 @@ class CallHandle:
 
     def disconnect(self, cause = None):
         '''cause may be a CAUSE_XPARMS struct or an int'''
-        if self.handle:
-            if cause is None:
-                xcause = lowlevel.CAUSE_XPARMS()
-            elif type(cause) == type(0):
-                xcause = lowlevel.CAUSE_XPARMS()
-                xcause.cause = cause
-            else:
-                xcause = cause
+        if cause is None:
+            xcause = lowlevel.CAUSE_XPARMS()
+            xcause.cause = lowlevel.LC_NORMAL
+        elif type(cause) == type(0):
+            xcause = lowlevel.CAUSE_XPARMS()
+            xcause.cause = cause
+        else:
+            xcause = cause
 
+        if self.handle:
             xcause.handle = self.handle
             
             rc = lowlevel.call_disconnect(xcause)

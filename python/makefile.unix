@@ -27,7 +27,7 @@ EXTRA_OBJS = -Xlinker -R$(DTK)/lib -L$(DTK)/lib \
 			$(DTK)/ting/libutil/gen-$(TiNGTYPE)_V6/bfopen.o \
 			-lacu_cl -lacu_sw -lacu_res -lacu_common -lTiNG
 
-all: aculab/_lowlevel.so aculab/lowlevel.py info
+all: aculab/_lowlevel.so aculab/lowlevel.py info rxfax3
 
 aculab/_lowlevel.so: $(OBJS)
 	$(CXX) -shared -o $@ $(OBJS) $(EXTRA_OBJS) $(PYTHON_LIBDIR) $(PYTHON_LIBS)
@@ -38,8 +38,11 @@ cl_lib.h2: $(DTK)/include/cl_lib.h cl_lib.patch
 res_lib.h2: $(DTK)/include/res_lib.h res_lib.patch
 	patch -o $@ $(DTK)/include/res_lib.h res_lib.patch
 
-actiff.h2: $(DTK)/$(FAX)/include/actiff.h actiff.patch
-	patch -o $@ $(DTK)/$(FAX)/include/actiff.h actiff.patch
+#actiff.h2: $(DTK)/$(FAX)/include/actiff.h actiff.patch
+#	patch -o $@ $(DTK)/$(FAX)/include/actiff.h actiff.patch
+
+bfile.h2: $(DTK)/ting/include/bfile.h bfile.patch
+	patch -o $@ $(DTK)/ting/include/bfile.h bfile.patch
 
 # builds are very slow - only rebuild if cl_lib.h changes
 sized_struct.i: $(DTK)/include/cl_lib.h $(DTK)/include/sw_lib.h
@@ -47,15 +50,20 @@ sized_struct.i: $(DTK)/include/cl_lib.h $(DTK)/include/sw_lib.h
 	python sized_struct.py acu_wrap.xml
 	rm acu_wrap.xml
 
+acu.i: cl_lib.h2 $(DTK)/include/sw_lib.h res_lib.h2 bfile.h2
+
 acu_wrap.c aculab/lowlevel.py: acu.i
 	swig $(DEFINES) $(DTK_INCLUDE) -python -modern -new_repr $<
 	mv lowlevel.py aculab
 
 %.o: %.c
-	$(CXX) -c $(C_DEFINES) $(PYTHON_INCLUDE) -Iaculib $< -o $@ 
+	$(CXX) -g -c $(DEFINES) $(C_DEFINES) $(PYTHON_INCLUDE) -Iaculib $< -o $@ 
 
 info: info.o
 	$(CXX) -o $@ info.o $(DTK)/ting/apilib/gen-${TiNGTYPE}_V6/TiNGlib.o -lm -lpthread
+
+rxfax3: rxfax3.o
+	$(CXX) -g -o $@ rxfax3.o $(EXTRA_OBJS) -lm -lpthread -lstdc++
 
 test:
 	python test_swig.py
@@ -69,10 +77,11 @@ installer:
 # this target should be used to regenerate cl_lib.patch
 # after cl_lib.h2 was modified
 # Error 1 is ok, Error 2 indicates trouble
-patch: $(DTK)/include/cl_lib.h
+patch: cl_lib.h2 res_lib.h2 bfile.h2 # actiff.h2 
 	-diff -u -b $(DTK)/include/cl_lib.h cl_lib.h2 > cl_lib.patch
 	-diff -u -b $(DTK)/include/res_lib.h res_lib.h2 > res_lib.patch
-	-diff -u -b $(DTK)/$(FAX)/include/actiff.h actiff.h2 > actiff.patch
+	-diff -u -b $(DTK)/ting/include/bfile.h bfile.h2 > bfile.patch
+	# -diff -u -b $(DTK)/$(FAX)/include/actiff.h actiff.h2 > actiff.patch
 
 clean:
 	rm -f aculab/*.so *.o aculab/*.pyc \

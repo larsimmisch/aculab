@@ -4,6 +4,7 @@ import time
 import threading
 import logging
 import lowlevel
+import names
 from busses import Connection, CTBusConnection, DefaultBus
 from error import *
 from snapshot import Snapshot
@@ -40,7 +41,7 @@ def fax_global_data():
     global _fax_global_data
     if not _fax_global_data:
         _fax_global_data = lowlevel.SMFAX_GLOBAL_DATA()
-        rc = smfax_lib_init(_fax_global_data)
+        rc = lowlevel.smfax_lib_init(_fax_global_data)
         if rc:
             raise AculabError(rc, 'smfax_lib_init')
 
@@ -571,8 +572,7 @@ class DigitsJob:
         self.digits = digits
         self.inter_digit_delay = inter_digit_delay
         self.digit_duration = digit_duration
-        self.user_data = user_data
-        self.job_data = None
+        self.job_data = job_data
         self.stopped = False
 
     def start(self):
@@ -597,6 +597,9 @@ class DigitsJob:
         self.channel.dispatcher.add(self.channel.event_write, self.on_write)
 
     def on_write(self):
+        if self.channel is None:
+            return
+        
         status = lowlevel.SM_PLAY_DIGITS_STATUS_PARMS()
         status.channel = self.channel.channel
 
@@ -626,19 +629,20 @@ class DigitsJob:
         self.stopped = True
         log.debug('%s disgits_stop()', self.channel.name)
 
-class FAXReceiveJob(threading.Thread):
-    
-    def __init__(self, channel, f, subscriber_id = '', job_data = None):
+class FaxJob:
 
-        threading.Thread.__init__(self, name='faxrx ' + channel.name)
-
+    def __init__(self, channel, file, subscriber_id, job_data):
         self.channel = channel
-        self.file, rc = lowlevel.actiff_write_open(f, None)
-        if rc:
-            raise OSError(rc, 'actiff_write_open')
-        
-        self.filename = f
+        self.filename = file
+        self.job_data = job_data
+        self.session = None
+        self.logfile = None
+        self.trace = None
+        self.subscriber_id = subscriber_id
 
+    def create_session(self, mode):
+        self.mode = mode
+        
         session = lowlevel.SMFAX_SESSION()
         session.channel = self.channel.channel
         # accept five percent bad lines
@@ -648,7 +652,7 @@ class FAXReceiveJob(threading.Thread):
         session.user_options.drop_speed_on_ctc = 0
         session.user_options.fax_modem_fb = 0
         session.user_options.page_retries = 2
-        session.user_options.fax_mode = lowlevel.kSMFaxModeReceiver
+        session.user_options.fax_mode = mode
         session.fax_caps.v27ter = 1
         session.fax_caps.v29 = 1
         # There is currently no V.17 implementation available from Aculab
@@ -661,47 +665,110 @@ class FAXReceiveJob(threading.Thread):
         session.fax_caps.MMRT6 = 0
         session.fax_caps.polling_mode = 0
         session.Res200x200 = 1
-        session.subscriber_id = subscriber_id
-        session.global_data = fax_global_data().global_data
+        session.subscriber_id = self.subscriber_id
+        session.global_data = fax_global_data()
+
+        rc = lowlevel.smfax_create_session(session)
+        if rc != lowlevel.kSMFaxStateMachineRunning:
+            raise AculabError(rc, 'smfax_create_session')
 
         self.session = session
 
+    def trace_on(self, level = 0x7fffffff):
+        # open logfile for tracing
+        rc, self.logfile = lowlevel.bfile()
+        if rc:
+            raise OSError(rc, 'bfile')
+
+        fname = 'faxin.log'
+        if self.mode == lowlevel.kSMFaxModeTransmitter:
+            fname = 'faxout.log'
+
+        rc = lowlevel.bfopen(self.logfile, fname, 'wtcb')
+        if rc:
+            raise OSError(rc, 'bfopen')
+
+        self.trace = lowlevel.SMFAX_TRACE_PARMS()
+        self.trace.log_file = self.logfile
+        self.trace.fax_session = self.session
+        self.trace.trace_level = level
+
+        rc = lowlevel.smfax_trace_on(self.trace)
+        if rc:
+            raise AculabFAXError(rc, 'smfax_trace_on')
+    
     def __del__(self):
-        lowlevel.sm_fax_close_session(self.session)
-        self.session = None
+        self.close()
+        
+    def close(self):
+        if self.session:
+            lowlevel.smfax_close_session(self.session)
+            self.session = None
 
-    def start(self):
-        'Do not call this method directly - call SpeechChannel.start instead'
+        if self.logfile:
+            lowlevel.bfile_dtor(self.logfile)
+            self.logfile = None
 
-        rc = smfax_create_session(self.session)
-        if rc != lowlevel.kSMFaxStateMachineRunning:
-            raise AculabError(rc, 'smfax_create_session')
-            
-        log.debug('%s faxrx(%s)',
-                  self.channel.name, str(self.file))
-                  
-        threading.Thread.start(self)
+    def stop(self):
+        log.debug('%s fax stop', self.channel.name)
+
+        if self.session:
+            rc = lowlevel.smfax_rude_interrupt(self.session)
+            if rc:
+                raise AculabFAXError(rc, 'smfax_rude_interrupt')
 
     def done(self, reason):
-        log.debug('%s digits_done(reason=\'%s\')',
-                  self.channel.name, reason)
 
+        function = 'faxrx_done'
+        if self.mode == lowlevel.kSMFaxModeTransmitter:
+            function = 'faxtx_done'
+        
+        log.debug('%s %s(reason=\'%s\', exit_code=\'%s\')',
+                  self.channel.name, function, reason,
+                  names.fax_error_names[self.session.exit_error_code])
+
+        self.close()
         channel = self.channel
         self.channel = None
 
-        channel.job_done(self, 'faxrx_done', reason)
-        
+        channel.job_done(self, function, reason)
+
+class FaxRxJob(FaxJob, threading.Thread):
+    
+    def __init__(self, channel, file, subscriber_id = '', job_data = None):
+
+        threading.Thread.__init__(self, name='faxrx ' + channel.name)
+
+        FaxJob.__init__(self, channel, file, subscriber_id, job_data)
+                
+        self.file, rc = lowlevel.actiff_write_open(file, None)
+        if rc:
+            raise OSError(rc, 'actiff_write_open')
+                
     def run(self):
+        log.debug('%s faxrx(%s)',
+                  self.channel.name, str(self.filename))
+
+        self.create_session(lowlevel.kSMFaxModeReceiver)
+
+        self.trace_on()
+
         neg = lowlevel.SMFAX_NEGOTIATE_PARMS()
-        neg.session = self.session
-        # neg.page_props =
+        neg.fax_session = self.session
+        neg.page_props = lowlevel.ACTIFF_PAGE_PROPERTIES()
         rc = lowlevel.smfax_rx_negotiate(neg)
 
-        while rc == lowlevel.lowlevel.kSMFaxStateMachineRunning:
-            process = lowlevel.SMFAX_PAGE_PROCESS()
+        log.debug('%s faxrx negotiated: %s', self.channel.name,
+                  names.fax_error_names[rc])
+
+        while rc == lowlevel.kSMFaxStateMachineRunning:
+            process = lowlevel.SMFAX_PAGE_PROCESS_PARMS()
             process.session = session
-            process.page_handle = ACTIFF_PAGE_HANDLE()
+            # process.page_handle = lowlevel.ACTIFF_PAGE_HANDLE()
             rc = lowlevel.smfax_rx_page(process)
+
+            log.debug('%s faxrx page received %s', self.channel.name,
+                      names.fax_error_names[rc])
 
             access = lowlevel.SMFAX_PAGE_ACCESS_PARMS()
             access.session = self.session
@@ -709,7 +776,7 @@ class FAXReceiveJob(threading.Thread):
             access.page_props = neg.page_props
             access.page_handle = process.page_handle
             rc2 = lowlevel.smfax_store_page(access)
-            if rc2 != kSMFaxPageOK:
+            if rc2 != lowlevel.kSMFaxPageOK:
                 self.stop()
                 self.done(AculabFAXError(rc, 'smfax_store_page'))
 
@@ -718,16 +785,86 @@ class FAXReceiveJob(threading.Thread):
                 self.stop()
                 self.done(AculabFAXError(rc, 'smfax_close_page'))
 
-        if rc == kSMFaxPageOK:
+        if rc == lowlevel.kSMFaxPageOK:
             self.done()
         else:
-            self.done(AculabFAXError(rc, 'FaxReceiveJob'))
+            self.done(AculabFAXError(rc, 'FaxRxJob'))
 
-    def stop(self):
-        if self.session:
-            rc = lowlevel.smfax_rude_interrupt(self.session)
-            if rc:
-                raise AculabFAXError(rc, 'smfax_rude_interrupt')
+class FaxTxJob(FaxJob, threading.Thread):
+    
+    def __init__(self, channel, file, subscriber_id = '', job_data = None):
+
+        threading.Thread.__init__(self, name='faxtx ' + channel.name)
+
+        FaxJob.__init__(self, channel, file, subscriber_id, job_data)
+                
+        self.file, rc = lowlevel.actiff_read_open(file)
+        if rc:
+            raise OSError(rc, 'actiff_read_open')
+
+        # count pages in TIFF file
+        self.page_count = 0
+        while lowlevel.actiff_seek_page(self.file, self.page_count) == 0:
+            self.page_count += 1
+        
+    def run(self):
+        log.debug('%s faxtx(%s)',
+                  self.channel.name, str(self.filename))
+
+        self.create_session(lowlevel.kSMFaxModeTransmitter)
+
+        self.trace_on()
+
+        neg = lowlevel.SMFAX_NEGOTIATE_PARMS()
+        neg.fax_session = self.session
+        neg.page_props = lowlevel.ACTIFF_PAGE_PROPERTIES()
+        rc = lowlevel.smfax_tx_negotiate(neg)
+
+        log.debug('%s faxtx negotiated: %s', self.channel.name,
+                  names.fax_error_names[rc])
+
+        if rc == lowlevel.kSMFaxStateMachineTerminated:
+            self.done(AculabFAXError(rc, 'FaxRxJob'))
+            return
+
+        for index in range(self.page_count):
+            access = lowlevel.SMFAX_PAGE_ACCESS_PARMS()
+            access.fax_session = self.session
+            # access.page_handle = lowlevel.ACTIFF_PAGE_HANDLE()
+            access.page_index  = index
+            access.page_props  = neg.page_props
+            access.actiff      = self.file
+
+            rc = lowlevel.smfax_need_conversion(access)
+            if rc == lowlevel.kSMFaxTranscodeNeeded:
+                # Load a page and convert it to suit the remote side
+                rc = lowlevel.smfax_load_convert_page(access);
+            elif rc ==  lowlevel.kSMFaxTranscodeNotNeeded:
+                # Load a page without conversion
+                rc = lowlevel.smfax_load_page(access)
+            else:
+                raise AculabFaxError(rc, 'smfax_need_conversion')
+
+            process = lowlevel.SMFAX_PAGE_PROCESS_PARMS()
+            process.session = self.session
+            # process.page_handle = ACTIFF_PAGE_HANDLE()
+            process.is_last_page = 0
+            if index + 1 >= self.page_count:
+                process.is_last_page = 1
+            rc = lowlevel.smfax_tx_page(process)
+
+            log.debug('%s faxrx page received %s', self.channel.name,
+                      names.fax_error_names[rc])
+            
+            rc2 = lowlevel.smfax_close_page(process.page_handle)
+            if rc2 != kSMFaxPageOK:
+                self.stop()
+                self.done(AculabFAXError(rc, 'smfax_close_page'))
+
+        if rc == lowlevel.kSMFaxPageOK:
+            self.done()
+        else:
+            self.done(AculabFAXError(rc, 'FaxRxJob'))
 
 class SpeechConnection:    
     def __init__(self, channel, direction):
@@ -792,8 +929,10 @@ class SpeechChannel:
         self.job = None
         self.close_pending = None
 
+        s = Snapshot()
+
         if type(module) == type(0):
-            module = Snapshot().prosody[card].modules[module]
+            module = s.prosody[card].modules[module]
 
         self.module = module
         self.module_id = module.open.module_id
@@ -825,12 +964,9 @@ class SpeechChannel:
         # add the recog event to the dispatcher
         self.dispatcher.add(self.event_recog, self.on_recog)
 
-        if version[0] >= 2:
-            self._ting_connect()
-            # don't do sm_listen_for for TiNG
-            # Todo: why not?
-        else:
-            self._listen()
+        self._ting_connect()
+        log.debug('%s out: %d:%d, in: %d:%d', self.name, self.info.ost,
+                  self.info.ots, self.info.ist, self.info.its)
 
     def __del__(self):
         self._close()
@@ -879,7 +1015,7 @@ class SpeechChannel:
 ##         return self.channel
 
     def _ting_connect(self):
-        
+
         # switch to local timeslots for TiNG
         if self.info.ost == -1:
             self.out_ts = self.module.timeslots.allocate()
@@ -1065,7 +1201,9 @@ class SpeechChannel:
         return CTBusConnection(card, sink)
 
     def connect(self, other, bus = DefaultBus):
-        """Connect to another SpeechChannel or a CallHandle."""
+        """Connect to another SpeechChannel or a CallHandle.
+
+        Keep the returned reference until the connection should be broken."""
         if isinstance(other, SpeechChannel):
             c = Connection(bus)
             if self.info.card == other.info.card:
@@ -1077,6 +1215,7 @@ class SpeechChannel:
                     # connect directly
                     c.connections = [self.listen_to((other.info.ost,
                                                      other.info.ots)),
+                                     
                                      other.listen_to((self.info.ost,
                                                       self.info.ots))]
             else:
@@ -1139,6 +1278,22 @@ class SpeechChannel:
 
         self.start(job)
 
+    def faxrx(self, file, subscriber_id = '', job_data = None):
+        """Receive a FAX asynchronously. The token job_data
+        is passed back in faxrx_done."""
+
+        job = FaxRxJob(self, file, subscriber_id, job_data)
+
+        self.start(job)        
+
+    def faxtx(self, file, subscriber_id = '', job_data = None):
+        """Transmit a FAX asynchronously. The token job_data
+        is passed back in faxtx_done."""
+
+        job = FaxTxJob(self, file, subscriber_id, job_data)
+
+        self.start(job)        
+
     def on_recog(self):
         recog = lowlevel.SM_RECOGNISED_PARMS()
         
@@ -1184,18 +1339,20 @@ class SpeechChannel:
 
     def job_done(self, job, fn, reason, *args, **kwargs):
         args += (self.user_data, job.job_data)
-        self.lock()
-        self.job = None
-        if self.close_pending:
-            self.close()
-        self.unlock()
-        
-        f = getattr(self.controller, fn)
-        f(self, reason, *args, **kwargs)
-        m = getattr(self.controller, 'job_done', None)
-        if m:
-            m(job)
-        
+
+        try:
+            f = getattr(self.controller, fn)
+            f(self, reason, *args, **kwargs)
+            m = getattr(self.controller, 'job_done', None)
+            if m:
+                m(job)
+        except:
+            self.lock()
+            self.job = None
+            if self.close_pending:
+                self.close()
+            self.unlock()
+
 class Conference:
     def __init__(self, module = None, mutex = None):
         self.module = module

@@ -1,4 +1,4 @@
-from names import error_names, sm_error_names
+from names import error_names, sm_error_names, fax_error_names
 
 class AculabError(Exception):
 

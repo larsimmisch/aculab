@@ -65,6 +65,10 @@ BLOCKING(dpns_transit_details)
 BLOCKING(dpns_set_l2_ch)
 BLOCKING(dpns_l2_state)
 BLOCKING(dpns_watchdog)
+BLOCKING(smfax_rx_negotiate)
+BLOCKING(smfax_tx_negotiate)
+BLOCKING(smfax_rx_page)
+BLOCKING(smfax_tx_page)
 
 /* Functions that are in Aculab's headers, but not implemented.
 
@@ -86,6 +90,8 @@ BLOCKING(dpns_watchdog)
 %ignore sm_get_card_switch_ix;
 %ignore sm_get_channel_module_ix;
 %ignore sm_get_cards;
+
+%ignore BFILE;
 
 %apply char[ANY] { ACU_UCHAR[ANY] };
 
@@ -138,17 +144,30 @@ BLOCKING(dpns_watchdog)
 };
 #endif
 
+/* typemaps for BFILE** */
+
+%typemap(python,in,numinputs=0) BFILE** ($*1_type temp) {
+	$1 = ($1_type)&temp;
+}
+
+%typemap(python,argout) BFILE** {
+	$result = add_result(
+		$result, SWIG_NewPointerObj(*$1, SWIGTYPE_p_BFILE, 1));
+}
+
 %include "cl_lib.h2"
 %include "res_lib.h2"
 %include "sw_lib.h"
 %include "smdrvr.h"
 %include "smbesp.h"
 %include "actiff.h"
-%include "smfaxapi.h"
 %include "smdc.h"
 %include "smdc_raw.h"
 %include "smdc_sync.h"
 %include "smdc_hdlc.h"
+%include "bfile.h2"
+%include "bfopen.h"
+%include "smfaxapi.h"
 
 
 /* Use macro this for structures with data and length members, where data must
@@ -247,6 +266,28 @@ GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 #ifndef SWIGXML
 %include "sized_struct.i"
 #endif
+
+%{
+PyObject *add_result(PyObject *result, PyObject *o)
+{
+	if ((!result) || (result == Py_None)) 
+	{
+		return o;
+	} 
+
+	if (!PyList_Check(result)) 
+	{
+		PyObject *o2 = result;
+		result = PyList_New(0);
+		PyList_Append(result,o2);
+		Py_XDECREF(o2);
+	}
+	PyList_Append(result,o);
+	Py_XDECREF(o);
+
+	return result;
+}
+%}
 
 %init %{
 %}

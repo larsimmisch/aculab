@@ -4,17 +4,8 @@ from error import AculabError
 
 _singletons = {}
 
-# from Jeremy Bowers - http://c2.com/cgi/wiki?PythonSingleton
-class SingletonMixin:
-    def __new__(cls, *args, **kwargs):
-        if cls in _singletons:
-            return _singletons[cls]
-        self = object.__new__(cls)
-        cls.__init__(self, *args, **kwargs)
-        _singletons[cls] = self
-        return self
 
-class Card:
+class Card(object):
     """Base class for an Aculab card."""
     def __init__(self, card, info):
         self.card = card
@@ -33,7 +24,7 @@ class SwitchCard(Card):
 
         self.open = switchp
 
-class Port:
+class Port(object):
     """A port on an Aculab call control card."""
     def __init__(self, card, index):
         open_portp = lowlevel.OPEN_PORT_PARMS()
@@ -50,13 +41,13 @@ class Port:
 
         rc = lowlevel.call_port_info(info_portp)
         if rc:
-            raise AculabError(rc, 'call_open_port()')
+            raise AculabError(rc, 'call_port_info()')
 
         self.open = open_portp
         self.info = info_portp
         
 class CallControlCard(Card):
-    """An ACulab card capable of call control."""
+    """An Aculab card capable of call control."""
     def __init__(self, card, info):
         Card.__init__(self, card, info)
 
@@ -74,7 +65,7 @@ class CallControlCard(Card):
 
         self.ports = [Port(card, i) for i in range(infop.ports)]
             
-class Module:
+class Module(object):
     """A DSP module on an Aculab Prosody (speech processing) card."""
     def __init__(self, card, index):
         sm_openp = lowlevel.SM_OPEN_MODULE_PARMS()
@@ -98,6 +89,7 @@ class Module:
 class ProsodyCard(Card):
     """An Aculab Prosody (speech processing) card."""
     def __init__(self, card, info):
+        print 'ProsodyCard.__init__'
         Card.__init__(self, card, info)
     
         open_prosp = lowlevel.ACU_OPEN_PROSODY_PARMS()
@@ -115,11 +107,44 @@ class ProsodyCard(Card):
 
         self.modules = [Module(card, i) for i in range(sm_infop.module_count)]
 
-class Snapshot(SingletonMixin): 
-    def __init__(self, notification_queue = None, user_data = None):
+count = 0
+
+# from Jeremy Bowers - http://c2.com/cgi/wiki?PythonSingleton
+class SingletonMixin(object):
+    def __new__(cls, *args, **kwargs):
+        if cls in _singletons:
+            print '__new__ (found)'
+            return _singletons[cls]
+        
+        self = object.__new__(cls)
+        cls.__init__(self, *args, **kwargs)
+        _singletons[cls] = self
+        print '__new__ (not found)'
+        return self
+
+class Snapshot(object):
+
+    # This class is a singleton
+    _singleton = None # our singleton reference
+    def __new__(cls, *args, **kwargs):
+        if Snapshot._singleton is None:
+            Snapshot._singleton = object.__new__(cls)
+            Snapshot._singleton.init(*args, **kwargs)
+        return Snapshot._singleton
+
+    def init(self, notification_queue = None, user_data = None):
+        """Note that we do not have a __init__ method, since this is called
+        every time the singleton is re-issued. We do the work here instead"""
+        
         self.switch = []
         self.call = []
         self.prosody = []
+
+        global count
+        if count > 0:
+            raise RuntimeError
+        
+        count = count + 1
         
         snapshotp = lowlevel.ACU_SNAPSHOT_PARMS()
     
