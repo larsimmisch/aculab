@@ -18,6 +18,9 @@ class CTBusConnection:
         rc = lowlevel.sw_set_output(self.sw, output)
         if rc:
             raise AculabError(rc, 'sw_set_output')
+
+    def __repr__(self):
+        return '<CTBusConnection [' + str(self.sw) + ', ' + str(self.ts) + ']>'
         
 class CTBus:
 
@@ -81,21 +84,16 @@ def autodetect():
     
     n = lowlevel.sw_get_drvrs()
 
-
-##     # this would be nice, but doesn't work on my BRI4
-##     buses = 0xffffffff
+    buses = 0xffffffff
     
-##     # first, determine which busses are available on all cards
-##     for i in range(n):
-##         mode = lowlevel.SWMODE_PARMS()
-##         rc = lowlevel.sw_mode_switch(i, mode)
-##         if rc:
-##             raise AculabError(rc, 'sw_mode_switch')
+    # first, determine which busses are available on all cards
+    for i in range(n):
+        mode = lowlevel.SWMODE_PARMS()
+        rc = lowlevel.sw_mode_switch(i, mode)
+        if rc:
+            raise AculabError(rc, 'sw_mode_switch')
 
-##         print mode.ct_buses
-##         buses &= (1 << mode.ct_buses)
-
-##     print buses
+        buses &= mode.ct_buses
 
     # check if any card is sourced from MVIP or SCBus or drives SCBus
     for i in range(n):
@@ -110,7 +108,16 @@ def autodetect():
                                       | lowlevel.DRIVE_SCBUS):
             return SCBus()
 
-    return H100()
+    if busses & (1 << SWMODE_CTBUS_H100):
+        return H100()
+
+    if busses & (1 << SWMODE_CTBUS_MVIP):
+        return MVIP()
+
+    if busses & (1 << SWMODE_CTBUS_SCBUS):
+        return SCBus()
+    
+    return None
     
     
         
