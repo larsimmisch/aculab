@@ -13,7 +13,7 @@ if os.name == 'nt':
 else:
     import select
 
-__all__ = ['SpeechEventDispatcher', 'PlayJob', 'RecordJob',
+__all__ = ['SpeechDispatcher', 'PlayJob', 'RecordJob',
            'DigitsJob', 'SpeechConnection', 'SpeechChannel', 'version']
 
 log = logging.getLogger('speech')
@@ -258,27 +258,34 @@ class PollSpeechEventDispatcher(threading.Thread):
             except KeyboardInterrupt:
                 raise
             except:
-                log.error('error in SpeechDispatcher main loop', exc_info=1)
+                log.error('error in PollSpeechEventDispatcher main loop',
+                          exc_info=1)
 
 if os.name == 'nt':
-    SpeechEventDispatcher = Win32SpeechEventDispatcher
+    SpeechDispatcher = Win32SpeechEventDispatcher()
 else:
-    SpeechEventDispatcher = PollSpeechEventDispatcher
+    SpeechDispatcher = PollSpeechEventDispatcher()
 
 class PlayJob:
 
-    def __init__(self, channel, filename, agc = 0,
+    def __init__(self, channel, f, agc = 0,
                  speed = 0, volume = 0, user_data = None):
         self.channel = channel
-        self.filename = filename
         self.user_data = user_data
         self.position = 0
         self.agc = agc
         self.speed = speed
         self.volume = volume
 
-        # open the file and read the length
-        self.file = open(filename, 'rb')
+        # f may be a string - if it is, close self.file in done
+        if type(f) == type(''):
+            self.file = file(f, 'rb')
+            self.auto_close = True
+        else:
+            self.file = f
+            self.auto_close = False
+
+        # read the length of the file
         self.file.seek(0, 2)
         self.buffer = lowlevel.SM_TS_DATA_PARMS()
         self.length = self.file.tell()
@@ -298,7 +305,7 @@ class PlayJob:
             raise AculabSpeechError(rc, 'sm_replay_start')
 
         log.debug('%s play(%s, agc=%d, speed=%d, volume=%d)',
-                  self.channel.name, self.filename, self.agc,
+                  self.channel.name, str(self.file), self.agc,
                   self.speed, self.volume)
                   
         # add the write event to the dispatcher
@@ -316,7 +323,7 @@ class PlayJob:
         # Position is only nonzero when play was stopped.
         # Compute reason.
         self.channel.lock()
-        
+        channel = self.channel
         reason = ''
         if self.position:
             reason = 'stopped'
@@ -324,21 +331,24 @@ class PlayJob:
         else:
             pos = self.length
 
-        if self.channel.close_pending:
+        if channel.close_pending:
             reason = 'closed'
+        if self.auto_close:
+            self.file.close()
+            self.file = None
+        channel.unlock()
 
-        self.channel.unlock()
-
+        # no locks held - maybe too cautious
         log.debug('%s play_done(reason=\'%s\', pos=%d)',
-                  self.channel.name, reason, pos)
+                  channel.name, reason, pos)
 
-        self.channel.lock()
+        channel.lock()
         try:
-            self.channel.controller.play_done(self.channel, reason,
-                                              pos, self.user_data)
+            channel.controller.play_done(channel, self.file, reason,
+                                         pos, self.user_data)
         finally:
-            self.channel.job_done(self)
-            self.channel.unlock()
+            channel.job_done(self)
+            channel.unlock()
             # break cyclic reference
             self.channel = None
 
@@ -380,13 +390,19 @@ class PlayJob:
 
 class RecordJob:
     
-    def __init__(self, channel, filename, max_octets = 0,
+    def __init__(self, channel, f, max_octets = 0,
                  max_elapsed_time = 0, max_silence = 0, elimination = 0,
                  agc = 0, volume = 0, user_data = None):
 
         self.channel = channel
-        self.filename = filename
-        self.file = open(filename, 'wb')
+        # f may be a string - if it is, close self.file in done
+        if type(f) == type(''):
+            self.file = file(f, 'wb')
+            self.auto_close = True
+        else:
+            self.file = f
+            self.auto_close = False
+
         self.buffer = lowlevel.SM_TS_DATA_PARMS()
         self.buffer.allocrecordbuffer()
         # size in bytes
@@ -417,7 +433,7 @@ class RecordJob:
 
         log.debug('%s record(%s, max_octets=%d, max_time=%d, max_silence=%d, '
                   'elimination=%d, agc=%d, volume=%d)',
-                  self.channel.name, self.filename, self.max_octets,
+                  self.channel.name, str(self.file), self.max_octets,
                   self.max_elapsed_time, self.max_silence, self.elimination,
                   self.agc, self.speed, self.volume)
                   
@@ -451,22 +467,30 @@ class RecordJob:
             reason = 'error'
 
         self.channel.lock()
-        if self.channel.close_pending:
+        channel = self.channel
+
+        if channel.close_pending:
             reason = 'closed'
-        self.channel.unlock()
+        if self.auto_close:
+            self.file.close()
+            self.file = None
 
+        channel.unlock()
+        
+        # no locks held - maybe too cautious
         log.debug('%s record_done(reason=\'%s\', size=%d)',
-                  self.channel.name, reason, self.size)
+                  channel.name, reason, self.size)
 
-        self.channel.lock()
+        channel.lock()
         try:
-            self.channel.controller.record_done(self,
-                                                reason,
-                                                self.size,
-                                                self.user_data)
+            channel.controller.record_done(self,
+                                           self.file,
+                                           reason,
+                                           self.size,
+                                           self.user_data)
         finally:
-            self.channel.job_done(self)
-            self.channel.unlock()
+            channel.job_done(self)
+            channel.unlock()
             # break cyclic reference
             self.channel = None
     
@@ -609,17 +633,24 @@ class SpeechConnection:
         self.close()
 
 class SpeechChannel:
+    """A full duplex Prosody channel with events"""
         
-    def __init__(self, controller, dispatcher, module = 0, mutex = None,
-                 user_data = None):
-        """Controllers must implement play_done(channel, reason, position,
+    def __init__(self, controller, module = 0, mutex = None,
+                 user_data = None, dispatcher = SpeechDispatcher):
+        """Allocate a full duplex Prosody channel and add the events to
+        dispatcher.
+
+        Controllers must implement play_done(channel, file, reason, position,
         user_data), dtmf(channel, digit, user_data),
-        record_done(channel, reason, size, user_data) and
+        record_done(channel, file, reason, size, user_data) and
         digits_done(channel, reason, user_data).
         Reason is normally 'stopped', 'closed' or '' (for normal termination).
-        For record_done(), reason may also be 'silence' or 'timeout'
-        If a mutex is passed in, it will be acquired
-        before any method is invoked and released as soon as it returns"""
+        For record_done(), reason may also be 'silence' or 'timeout'.
+
+        The module parameter is the Prosody Sharc DSP number.
+        
+        If a mutex is passed in, it will be acquired before any controller
+        method is invoked and released as soon as it returns"""
 
         self.controller = controller
         self.dispatcher = dispatcher
@@ -638,8 +669,11 @@ class SpeechChannel:
             raise AculabSpeechError(rc, 'sm_channel_alloc_placed');
 
         self.channel = alloc.channel
-        
-        self.name = '0x%s' % swig_value(self.channel)
+
+        if type(self.channel) == type(0):
+            self.name = '0x%04x' % self.channel
+        else:
+            self.name = '0x%s' % swig_value(self.channel)
 
         self.info = lowlevel.SM_CHANNEL_INFO_PARMS()
         self.info.channel = alloc.channel
@@ -810,7 +844,8 @@ class SpeechChannel:
         return handle
 
     def listen_to(self, source):
-        """source is a tuple (stream, timeslot)"""
+        """Listen to a timeslot.
+        Source is a tuple (stream, timeslot)"""
         
         if self.info.card == -1:
             input = lowlevel.SM_SWITCH_CHANNEL_PARMS()
@@ -848,7 +883,7 @@ class SpeechChannel:
         return CTBusConnection(self.info.card, (self.info.ist, self.info.its))
 
     def speak_to(self, sink):
-        """sink is a tuple (stream, timeslot)"""
+        """Speak to a timeslot. Sink is a tuple (stream, timeslot)"""
 
         if self.info.card == -1:
             output = lowlevel.SM_SWITCH_CHANNEL_PARMS()
@@ -887,12 +922,12 @@ class SpeechChannel:
         return CTBusConnection(self.info.card, sink)
 
     def connect(self, other, bus = DefaultBus):
+        """Connect to another SpeechChannel or a CallHandle."""
         if isinstance(other, SpeechChannel):
             c = Connection(bus)
             if self.info.card == other.info.card:
                 if other == self:
                     c.timeslots = [ bus.allocate() ]
-                    print c.timeslots[0]
                     c.connections = [self.speak_to(c.timeslots[0]),
                                      self.listen_to(c.timeslots[0])]
                 else:
@@ -930,22 +965,22 @@ class SpeechChannel:
             self.job = job
             job.start()
     
-    def play(self, filename, volume = 0, agc = 0, speed = 0, user_data = None):
-        """plays alaw (asynchronously)
+    def play(self, file, volume = 0, agc = 0, speed = 0, user_data = None):
+        """Play an alaw file asynchronously.
         user_data is passed back in play_done"""
 
-        self.job = PlayJob(self, filename, agc, volume, speed,
+        self.job = PlayJob(self, file, agc, volume, speed,
                            user_data)
 
         self.job.start()
 
-    def record(self, filename, max_octets = 0,
+    def record(self, file, max_octets = 0,
                max_elapsed_time = 0, max_silence = 0, elimination = 0,
                agc = 0, volume = 0, user_data = None):
-        """plays alaw (asynchronously)
+        """Record an alaw file asynchronously.
         user_data is passed back in record_done"""
 
-        self.job = RecordJob(self, filename, max_octets,
+        self.job = RecordJob(self, file, max_octets,
                              max_elapsed_time, max_silence, elimination,
                              agc, volume, user_data)
 
@@ -953,6 +988,7 @@ class SpeechChannel:
 
     def digits(self, digits, inter_digit_delay = 32, digit_duration = 64,
                user_data = None):
+        """Send a string of DTMF digits asynchronously"""
 
         self.job = DigitsJob(self, digits, inter_digit_delay,
                              digit_duration, user_data)

@@ -25,7 +25,7 @@ no_state_change_extended_events = [lowlevel.EV_EXT_FACILITY,
 log = logging.getLogger('call')
 log_switch = logging.getLogger('switch')
 
-class CallEventDispatcher:
+class _CallEventDispatcher:
 
     def __init__(self, verbose = True):
         self.calls = {}
@@ -110,6 +110,8 @@ class CallEventDispatcher:
                         mutex.release()
 
 
+CallDispatcher = _CallEventDispatcher()
+
 # The CallHandle class models a call handle, as defined by the Aculab lowlevel,
 # and common operations on it. Some events are handled to maintain the 
 # internal state, but in general, event handling is delegated to the
@@ -117,8 +119,8 @@ class CallEventDispatcher:
 
 class CallHandle:
 
-    def __init__(self, controller, dispatcher, user_data = None, port = 0,
-                 timeslot = None):
+    def __init__(self, controller, user_data = None, port = 0,
+                 timeslot = None, dispatcher = CallDispatcher):
 
         self.user_data = user_data
         self.controller = controller
@@ -500,11 +502,11 @@ class CallHandle:
 
 class Call(CallHandle):
 
-    def __init__(self, controller, dispatcher, user_data = None, port = 0,
-                 timeslot = -1):
+    def __init__(self, controller, user_data = None, port = 0,
+                 timeslot = -1, dispatcher = CallDispatcher):
         
-        CallHandle.__init__(self, controller, dispatcher, user_data,
-                            port, timeslot)
+        CallHandle.__init__(self, controller, user_data,
+                            port, timeslot, dispatcher)
 
         self.openin()
 
