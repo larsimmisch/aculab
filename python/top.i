@@ -1,12 +1,9 @@
 %module lowlevel
 %{
-#include "mvcldrvr.h"
-#include "mvswdrvr.h"
+#include "cl_lib.h"
+#include "res_lib.h"
+#include "sw_lib.h"
 #include "smdrvr.h"
-#ifndef HAVE_TiNG
-#include "smport.h"
-#include "smosintf.h"
-#endif
 #include "smbesp.h"
 
 /*
@@ -16,8 +13,14 @@
 
 %}
 
-#ifndef HAVE_TiNG
-%include "smport.h"
+%apply int { ACU_ERR, ACU_UINT, ACU_ULONG, ACU_INT, ACU_LONG, ACU_PORT_ID, 
+			 ACU_CALL_HANDLE };
+%apply char[ANY] { ACU_CHAR[ANY] };
+
+#ifdef TiNG_USE_V6
+#define cc_version 6
+#else
+#define cc_version 5
 #endif
 
 /* Allows to execute Python code during function calls */
@@ -60,6 +63,10 @@ BLOCKING(dpns_watchdog)
 %ignore call_l2_state;
 %ignore call_br_l1_stats;
 %ignore call_br_l2_state;
+%ignore dpns_l2_state;
+%ignore port_init;
+%ignore call_get_global_notification_wait_object;
+%ignore acu_get_aculab_directory;
 
 %apply char[ANY] { ACU_UCHAR[ANY] };
 

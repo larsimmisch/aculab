@@ -1,13 +1,13 @@
 # makefile for aculab swig wrapper
 
-DTK := ../dtk132
+DTK := /usr/local/aculab/v6
 
 CXX := gcc
 
 TiNGTYPE := LINUX
-DEFINES := -DUNIX_SYSTEM -DSM_POLL_UNIX -DTiNGTYPE_$(TiNGTYPE) -DHAVE_TiNG
+DEFINES := -DACU_LINUX -DSM_POLL_UNIX -DTiNGTYPE_$(TiNGTYPE) -DTiNG_USE_V6
 
-C_DEFINES := -DNDEBUG -fPIC $(DEFINES) -I$(DTK)/call/include -I$(DTK)/switch/include -I$(DTK)/ting/include
+C_DEFINES := -DNDEBUG -fPIC $(DEFINES) -I$(DTK)/include -I$(DTK)/ting/include
 
 PYTHON_INCLUDES = /usr/local/include/python2.3
 PYTHON_LIBDIR	= -L/usr/local/lib/python2.3/config
@@ -15,35 +15,50 @@ PYTHON_LIBS = -lpython2.3
 
 OBJS	:= acu_wrap.o
 
-EXTRA_OBJS=$(DTK)/call/lib/cllib.o $(DTK)/call/lib/clunix.o \
-           $(DTK)/call/lib/common.o $(DTK)/switch/lib/swlib.o \
-           $(DTK)/switch/lib/swunix.o \
-           $(DTK)/ting/apilib/gen-${TiNGTYPE}/TiNGlib.o
+# 
+EXTRA_OBJS = -Xlinker -R$(DTK)/lib -L$(DTK)/lib -lacu_common -lacu_cl \
+			-lacu_sw -lacu_res $(DTK)/ting/apilib/gen-${TiNGTYPE}_V6/TiNGlib.o
 
 all: aculab/_lowlevel.so aculab/lowlevel.py info
 
 aculab/_lowlevel.so: $(OBJS)
 	$(CXX) -shared -o $@ $(OBJS) $(EXTRA_OBJS) $(PYTHON_LIBDIR) $(PYTHON_LIBS)
 
-acu.i: top.i $(DTK)/call/include/mvcldrvr.h $(DTK)/switch/include/mvswdrvr.h \
+cl_lib.h2: $(DTK)/include/cl_lib.h cl_lib.patch
+	patch -o $@ $(DTK)/include/cl_lib.h cl_lib.patch
+
+res_lib.h2: $(DTK)/include/res_lib.h res_lib.patch
+	patch -o $@ $(DTK)/include/res_lib.h res_lib.patch
+
+# builds are very slow - only rebuild if cl_lib.h changes
+sized_struct.i: $(DTK)/include/cl_lib.h
+	swig $(DEFINES) -xml -xmllite acu.i
+	python sized_struct.py acu_wrap.xml
+	rm acu_wrap.xml
+
+acu.i: top.i cl_lib.h2 $(DTK)/include/sw_lib.h res_lib.h2 \
        $(DTK)/ting/include/smdrvr.h $(DTK)/ting/include/smbesp.h \
-	   bottom.i makefile
+	   bottom.i sized_struct.i makefile.unix
 	cat top.i > $@
-	cat $(DTK)/switch/include/mvswdrvr.h >> $@
-	cat $(DTK)/call/include/mvcldrvr.h >> $@
+	cat cl_lib.h2 >> $@
+	cat res_lib.h2 >> $@
+	cat $(DTK)/include/sw_lib.h >> $@
 	cat $(DTK)/ting/include/smdrvr.h >> $@
 	cat $(DTK)/ting/include/smbesp.h >> $@
 	cat bottom.i >>$@
 
+acu_wrap.xml: acu.i
+	swig $(DEFINES) -xml $<
+
 acu_wrap.c aculab/lowlevel.py: acu.i
-	swig $(DEFINES) -shadow -python $<
+	swig $(DEFINES) -python -modern -new_repr $<
 	mv lowlevel.py aculab
 
 %.o: %.c
 	$(CXX) -c $(C_DEFINES) -I$(PYTHON_INCLUDES) -Iaculib $< -o $@ 
 
 info: info.o
-	$(CXX) -o $@ info.o $(DTK)/ting/apilib/gen-${TiNGTYPE}/TiNGlib.o -lm -lpthread
+	$(CXX) -o $@ info.o $(DTK)/ting/apilib/gen-${TiNGTYPE}_V6/TiNGlib.o -lm -lpthread
 
 test:
 	python test_swig.py
@@ -53,6 +68,13 @@ install:
 
 installer:
 	python setup.py bdist_wininst
+
+# this target should be used to regenerate cl_lib.patch
+# after cl_lib.h2 was modified
+# Error 1 is ok, Error 2 indicates trouble
+patch: $(DTK)/include/cl_lib.h
+	-diff -u -b $(DTK)/include/cl_lib.h cl_lib.h2 > cl_lib.patch
+	-diff -u -b $(DTK)/include/res_lib.h res_lib.h2 > res_lib.patch
 
 clean:
 	rm -f aculab/*.so *.o aculab/*.pyc \

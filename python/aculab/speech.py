@@ -24,17 +24,18 @@ driver_info = lowlevel.SM_DRIVER_INFO_PARMS()
 lowlevel.sm_get_driver_info(driver_info)
 version = (driver_info.major, driver_info.minor)
 
-# create prosody local streams for TiNG
-if version[0] >= 2:
-    prosodystreams = []
+def create_prosody_streams():
+    'create prosody local streams for TiNG'
+    if version[0] >= 2:
+        prosodystreams = []
 
-    cards = lowlevel.sm_get_cards()
-    for i in range(cards):
-        card_info = lowlevel.SM_CARD_INFO_PARMS()
-        card_info.card = i
-        lowlevel.sm_get_card_info(card_info)
-        for j in range(card_info.module_count):
-            prosodystreams.append(ProsodyLocalBus(j))
+        cards = lowlevel.sm_get_cards()
+        for i in range(cards):
+            card_info = lowlevel.SM_CARD_INFO_PARMS()
+            card_info.card = i
+            lowlevel.sm_get_card_info(card_info)
+            for j in range(card_info.module_count):
+                prosodystreams.append(ProsodyLocalBus(j))
 
 def swig_value(s):
     a = s.find('_')
@@ -42,8 +43,7 @@ def swig_value(s):
         o = s.find('_', a+1)
         return s[a+1:o]
 
-    return s
-            
+    return s            
 
 # this class is only needed on Windows
 class Win32DispatcherThread(threading.Thread):

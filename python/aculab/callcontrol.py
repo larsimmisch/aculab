@@ -25,6 +25,13 @@ no_state_change_extended_events = [lowlevel.EV_EXT_FACILITY,
 log = logging.getLogger('call')
 log_switch = logging.getLogger('switch')
 
+_versionp = lowlevel.CALL_API_VERSION_PARMS()
+lowlevel.call_api_version(_versionp)
+
+version = (_versionp.major, _versionp.minor, _versionp.rev)
+
+del _versionp
+
 class _CallEventDispatcher:
 
     def __init__(self, verbose = True):
@@ -119,13 +126,20 @@ CallDispatcher = _CallEventDispatcher()
 
 class CallHandle:
 
-    def __init__(self, controller, user_data = None, port = 0,
+    def __init__(self, controller, user_data = None, port = None,
                  timeslot = None, dispatcher = CallDispatcher):
 
         self.user_data = user_data
         self.controller = controller
         self.dispatcher = dispatcher
         self.port = port
+
+##         if not port:
+##             if version[0] >= 6:
+##                 self.port = snapshot.call[0].ports[0].open.port_id
+##             else:
+##                 self.port = 0
+            
         if not timeslot:
             self.timeslot = -1
         else:
@@ -502,7 +516,7 @@ class CallHandle:
 
 class Call(CallHandle):
 
-    def __init__(self, controller, user_data = None, port = 0,
+    def __init__(self, controller, user_data = None, port = None,
                  timeslot = -1, dispatcher = CallDispatcher):
         
         CallHandle.__init__(self, controller, user_data,

@@ -71,5 +71,36 @@ GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 	}
 }
 
+%extend ACU_SNAPSHOT_PARMS {
+    ACU_SNAPSHOT_PARMS() {
+		ACU_SNAPSHOT_PARMS *v = 
+			(ACU_SNAPSHOT_PARMS*)calloc(1, sizeof(ACU_SNAPSHOT_PARMS));
+		v->size = sizeof(ACU_SNAPSHOT_PARMS);
+		return v;
+    }
+    ~ACU_SNAPSHOT_PARMS() {
+		free(self);
+    }
+	char *get_serial(int i) {
+		return self->serial_no[i];
+	}
+}
+
+
+%define SIZED_STRUCT(name) 
+%extend name {
+    name() {
+		name *v = (name*)calloc(1, sizeof(name));
+		v->size = sizeof(name);
+		return v;
+    }
+    ~name() {
+		free(self);
+    }
+}
+%enddef
+
+%include "sized_struct.i"
+
 %init %{
 %}

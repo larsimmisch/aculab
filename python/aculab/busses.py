@@ -199,5 +199,5 @@ def _autodetect():
     
     return None    
     
-DefaultBus = _autodetect()
+DefaultBus = H100() # _autodetect()
         

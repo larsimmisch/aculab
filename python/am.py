@@ -130,7 +130,7 @@ class IncomingCallController:
         call.accept()
 
     def ev_call_connected(self, call, user_data):        
-        user_data.speech.play('greeting.al', speed=100, volume=-127)
+        user_data.speech.play('greeting.al')
         
     def ev_remote_disconnect(self, call, user_data):
         call.disconnect()
@@ -187,7 +187,12 @@ if __name__ == '__main__':
         else:
             usage()
 
-    call = Call(controller, port)
+    if aculab.callcontrol.version[0] >= 6:
+        from aculab.snapshot import Snapshot
+        snapshot = Snapshot()
+        port = snapshot.call[0].ports[0].open.port_id
+
+    call = Call(controller, port=port)
 
     SpeechDispatcher.start()
     CallDispatcher.run()
