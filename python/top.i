@@ -3,7 +3,9 @@
 #include "mvcldrvr.h"
 #include "mvswdrvr.h"
 #include "smport.h"
+#ifndef WIN32
 #include "smosintf.h"
+#endif
 #include "smdrvr.h"
 #include "smbesp.h"
 #include "smfwcaps.h"
