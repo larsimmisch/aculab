@@ -669,12 +669,12 @@ class SpeechChannel:
             global prosodystreams
             if hasattr(self, 'out_ts') and self.out_ts:
                 # attribute out_ts implies attribute module
-                prosodystreams[self.module].free(out_ts)
+                prosodystreams[self.module].free(self.out_ts)
                 self.out_ts = None
 
             if hasattr(self, 'in_ts') and self.in_ts:
                 # attribute in_ts implies attribute module
-                prosodystreams[self.module].free(in_ts)
+                prosodystreams[self.module].free(self.in_ts)
                 self.in_ts = None
 
             if hasattr(self, 'event_recog') and self.event_recog:

@@ -11,3 +11,5 @@ def defaultLogging(level = logging.WARNING):
     hdlr = logging.StreamHandler()
     hdlr.setFormatter(log_formatter)
     log.addHandler(hdlr)
+
+    return log
