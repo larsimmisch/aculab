@@ -1,0 +1,116 @@
+# makefile for aculab swig wrapper
+
+CXX := gcc
+
+DEFINES := -DUNIX_SYSTEM -DSM_POLL_UNIX
+
+C_DEFINES := -DNDEBUG -fPIC $(DEFINES)
+
+PYTHON_INCLUDES = /usr/local/include/python2.3
+PYTHON_LIBDIR	= -L/usr/local/lib/python2.3/config
+PYTHON_LIBS = -lpython2.3
+
+OBJS	:= acu_wrap.o cllib.o clunix.o common.o swlib.o swunix.o \
+			smunix.o smbesp.o smlib.o smfwcaps.o
+
+EXTRA_HEADERS := aculib/ras_info.h aculib/pipe_interface.h
+
+all: aculab/_lowlevel.so aculab/lowlevel.py
+
+aculab/_lowlevel.so: $(OBJS)
+	$(CXX) -shared -o $@ $(OBJS) $(PYTHON_LIBDIR) $(PYTHON_LIBS)
+
+acu.i: top.i aculib/mvcldrvr.h aculib/mvswdrvr.h aculib/smdrvr.h \
+	   aculib/smosintf.h aculib/smport.h aculib/smbesp.h aculib/smfwcaps.h \
+	   bottom.i makefile
+	cat top.i > $@
+	cat aculib/mvswdrvr.h >> $@
+	cat aculib/mvcldrvr.h >> $@
+	cat aculib/smosintf.h >> $@
+	cat aculib/smport.h >> $@
+	cat aculib/smdrvr.h >> $@
+	cat aculib/smbesp.h >> $@
+	cat aculib/smfwcaps.h >> $@
+	cat bottom.i >>$@
+
+acu_wrap.c aculab/lowlevel.py: acu.i
+	swig $(DEFINES) -shadow -python $<
+	mv lowlevel.py aculab
+
+clunix.o: aculib/clunix.c aculib/mvcldrvr.h $(EXTRA_HEADERS)
+	$(CXX) -c $(C_DEFINES) -I$(PYTHON_INCLUDES) -Iaculib $< -o $@ 
+
+%.o: aculib/%.c
+	$(CXX) -c $(C_DEFINES) -I$(PYTHON_INCLUDES) -Iaculib $< -o $@ 
+
+%.o: %.c
+	$(CXX) -c $(C_DEFINES) -I$(PYTHON_INCLUDES) -Iaculib $< -o $@ 
+
+aculib/clunix.c: ../src/clunix.c
+	cp $< $@
+
+aculib/cllib.c: ../src/cllib.c
+	cp $< $@
+
+aculib/common.c: ../src/common.c
+	cp $< $@
+
+aculib/swunix.c: ../src/swunix.c
+	cp $< $@
+
+aculib/swlib.c: ../src/swlib.c
+	cp $< $@
+
+aculib/smunix.c: ../src/smunix.c
+	cp $< $@
+
+aculib/smlib.c: ../src/smlib.c
+	cp $< $@
+
+aculib/smbesp.c: ../src/smbesp.c
+	cp $< $@
+
+aculib/smfwcaps.c: ../src/smfwcaps.c
+	cp $< $@
+
+aculib/ras_info.h: ../include/ras_info.h
+	cp $< $@
+
+aculib/pipe_interface.h: ../include/pipe_interface.h
+	cp $< $@
+
+aculib/mvswdrvr.h: ../include/mvswdrvr.h
+	cp $< $@
+
+aculib/mvcldrvr.h: ../include/mvcldrvr.h
+	cp $< $@
+
+aculib/smosintf.h: ../include/smosintf.h
+	cp $< $@
+
+aculib/smport.h: ../include/smport.h
+	cp $< $@
+
+aculib/smdrvr.h: ../include/smdrvr.h
+	cp $< $@
+
+aculib/smbesp.h: ../include/smbesp.h
+	cp $< $@
+
+aculib/smfwcaps.h: ../include/smfwcaps.h
+	cp $< $@
+
+test:
+	python test_swig.py
+
+install:
+	python setup.py install
+
+installer:
+	python setup.py bdist_wininst
+
+clean:
+	rm -f aculib/*
+	rm -f aculab/*.so *.o aculab/*.pyc \
+		lowlevel.py acu.i *_wrap.c *_wrap.doc
+	rm -rf build dist
