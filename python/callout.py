@@ -44,9 +44,6 @@ if __name__ == '__main__':
     calldispatcher = CallEventDispatcher()
     
     c = Call(controller, calldispatcher, port=port, timeslot=timeslot)
-
-    # fu = lowlevel.FEATURE_UNION()
-    # fu.raw_data.setdata('\01\9f\x01\x02\x0a\x0b')
-    c.openout(args[0], 1, '41') # , lowlevel.FEATURE_RAW_DATA, fu)
+    c.openout(args[0], 1, '41')
 
     calldispatcher.run()
