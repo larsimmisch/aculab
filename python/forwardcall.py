@@ -8,6 +8,11 @@ import aculab.lowlevel as lowlevel
 
 mvip = MVIP()
 
+portmap = { '41': 8, '42': 8, '43': 8, '44': 8,
+            '45': 9, '46': 9, '47': 9, '48': 9 }
+
+
+
 def routing_table(port, details):
     "returns the tuple (wait, port, timeslot, destination_address)"
     
@@ -15,11 +20,18 @@ def routing_table(port, details):
         return (False, None, None, None)
 
     if port == 0:
-        return (False, 1, 1, '1')
+        # only forward local calls
+        if details.originating_addr in [str(i) for i in range(31, 39)]:
+            return (False, portmap[details.destination_addr], details.ts,
+                    details.destination_addr)
+        else:
+            return (True, None, None, None)
+        
+    elif port in [8, 9]:
+        return (False, 0, details.ts,
+                details.destination_addr)        
     else:
-        return (False, 0, 1, '1')
-    
-    # return (False, None, None, None)
+        return (False, None, None, None)
 
 def find_available_call(port, timeslot = None):
     for c in calls:
@@ -52,7 +64,7 @@ class Forward:
                                                          self.incall.details)
 
             if port != None and number:
-                print 'making outgoing call', port, timeslot
+                print 'making outgoing call', port, timeslot, number
                 self.outcall = find_available_call(port, timeslot)
                 if not self.outcall:
                     print hex(self.incall.handle), 'no call available'
@@ -155,7 +167,8 @@ if __name__ == '__main__':
 
     # we should also look at call_signal_info here, but this
     # hasn't been wrapped properly
-    calls = [Call(controller, dispatcher, None, p, t) for p in (0, 1)
-             for t in (1, 2)]
+    calls = [Call(controller, dispatcher, None, 0, t) for t in (1, 2)]
+    calls += [Call(controller, dispatcher, None, 8, t) for t in (1, 2)]
+    calls += [Call(controller, dispatcher, None, 9, t) for t in (1, 2)]
     
     dispatcher.run()
