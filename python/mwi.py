@@ -30,7 +30,7 @@ if __name__ == '__main__':
 
     calldispatcher = CallEventDispatcher()
 
-    c = Call(controller, calldispatcher, port=port)
+    c = CallHandle(controller, calldispatcher, port=port)
 
     feature_data = FEATURE_UNION()
     feature_data.raw_data.setdata('\x01\x91\xA1\x35\x02\x02\x67\xF9\x06\06\x04'
