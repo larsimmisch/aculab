@@ -256,7 +256,16 @@ class CallHandle:
             raise AculabError(rc, 'sw_set_output')
 
         return CTBusConnection(sw, sink)
-     
+
+    def get_cause(self):
+        cause = lowlevel.CAUSE_XPARMS()
+        cause.handle = self.handle
+        rc = lowlevel.call_getcause(cause)
+        if rc:
+            raise AculabError(rc, 'call_details')
+
+        return cause
+    
     def get_details(self):
         self.details = lowlevel.DETAIL_XPARMS()
         self.details.handle = self.handle
@@ -277,12 +286,18 @@ class CallHandle:
         if rc:
             raise AculabError(rc, 'call_incoming_ringing')
 
-    def disconnect(self, cause = 0):
+    def disconnect(self, cause = None):
+        '''cause may be a CAUSE_XPARMS struct or an int'''
         if self.handle:
-            causeparms = lowlevel.CAUSE_XPARMS()
-            causeparms.handle = self.handle
-            causeparms.cause = cause
-            rc = lowlevel.call_disconnect(causeparms)
+            if cause is None:
+                cause = lowlevel.CAUSE_XPARMS()
+            elif type(cause) == type(0):
+                cause = lowlevel.CAUSE_XPARMS()
+                cause.cause = cause
+
+            cause.handle = self.handle
+
+            rc = lowlevel.call_disconnect(cause)
             if rc:
                 raise AculabError(rc, 'call_disconnect')
             

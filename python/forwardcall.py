@@ -11,8 +11,6 @@ mvip = MVIP()
 portmap = { '41': 8, '42': 8, '43': 8, '44': 8,
             '45': 9, '46': 9, '47': 9, '48': 9 }
 
-
-
 def routing_table(port, details):
     "returns the tuple (wait, port, timeslot, destination_address)"
     
@@ -51,7 +49,7 @@ class Forward:
 
         self.route()
 
-    def route(self):
+    def route(self, originating_address = '41'):
         self.incall.user_data = self
 
         if self.outcall:
@@ -71,7 +69,7 @@ class Forward:
                     self.incall.disconnect()
                 else:
                     self.outcall.user_data = self
-                    self.outcall.openout(number)
+                    self.outcall.openout(number, originating_address)
             elif not wait:
                 self.incall.disconnect()
             else:
@@ -117,12 +115,15 @@ class ForwardCallController:
         # if both calls hang up at the same time, disconnect will be called
         # twice, because the calls are set to None only in ev_idle.
         # This should not matter, however.
+
+        # pass on cause values
+        cause = call.get_cause()
         if call == call.user_data.incall:
             if call.user_data.outcall:
-                call.user_data.outcall.disconnect()
+                call.user_data.outcall.disconnect(cause)
         elif call == call.user_data.outcall:
             if call.user_data.incall:
-                call.user_data.incall.disconnect()
+                call.user_data.incall.disconnect(cause)
 
         call.disconnect()
 
