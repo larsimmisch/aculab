@@ -126,7 +126,17 @@ class Call:
 
         dispatcher.add(self)
 
-    def listen_to(sink, source):
+    def send_overlap(self, addr, complete = 0):
+        overlap = lowlevel.OVERLAP_XPARMS()
+        overlap.handle = self.handle
+        overlap.sending_complete = complete
+        overlap.destination_addr = addr
+
+        rc = lowlevel.call_send_overlap(overlap)
+        if rc:
+            raise AculabError(rc, 'call_send_overlap')
+
+    def listen_to(self, sink, source):
         "sink and source are tuples of timeslots"
         output = lowlevel.OUTPUT_PARMS()
         output.ost = sink[0]
@@ -137,9 +147,25 @@ class Call:
 
         sw = lowlevel.call_port_2_swdrvr(self.port)
 
+        print "%d: %d:%d := %d:%d" % (sw, sink[0], sink[1],
+                                      source[0], source[1])
+        
         rc = lowlevel.sw_set_output(sw, output)
         if rc:
             raise AculabError(rc, 'sw_set_output')
+
+    def disable(self, source):
+        output = lowlevel.OUTPUT_PARMS()
+        output.ost = source[0]
+        output.ots = source[1]
+        output.mode = lowlevel.DISABLE_MODE
+
+        sw = lowlevel.call_port_2_swdrvr(self.port)
+
+        rc = lowlevel.sw_set_output(sw, output)
+        if rc:
+            raise AculabError(rc, 'sw_set_output')
+        
 
     def get_details(self):
         self.details = lowlevel.DETAIL_XPARMS()
@@ -156,6 +182,11 @@ class Call:
         if rc:
             raise AculabError(rc, 'call_accept')
 
+    def incoming_ringing(self):
+        rc = lowlevel.call_incoming_ringing(self.handle)
+        if rc:
+            raise AculabError(rc, 'call_incoming_ringing')
+
     def disconnect(self, cause = 0):
         if self.handle:
             causeparms = lowlevel.CAUSE_XPARMS()
@@ -166,6 +197,9 @@ class Call:
                 raise AculabError(rc, 'call_disconnect')
             
     def ev_incoming_call_det(self):
+        self.get_details()
+
+    def ev_ext_hold_request(self):
         self.get_details()
 
     def ev_outgoing_ringing(self):
