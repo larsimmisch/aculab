@@ -5,16 +5,19 @@ from error import AculabError, AculabSpeechError
 import threading
 import os
 import time
+import logging
 if os.name == 'nt':
     import pywintypes
     import win32api
     import win32event
 else:
-    import marshal
     import select
 
 __all__ = ['SpeechEventDispatcher', 'PlayJob', 'RecordJob',
            'DigitsJob', 'SpeechConnection', 'SpeechChannel', 'version']
+
+log = logging.getLogger('speech')
+log_switch = logging.getLogger('switch')
 
 # check driver info and create prosody streams if TiNG detected
 driver_info = lowlevel.SM_DRIVER_INFO_PARMS()
@@ -152,57 +155,88 @@ class PollSpeechEventDispatcher(threading.Thread):
         threading.Thread.__init__(self)
         self.handles = {}
         self.mutex = threading.Lock()
+        self.queue = []
 
         # create a pipe to add/remove fds
         pfds = os.pipe()
-        self.pipe = (os.fdopen(pfds[0], 'rb'), os.fdopen(pfds[1], 'wb'))
+        self.pipe = (os.fdopen(pfds[0], 'rb', 0), os.fdopen(pfds[1], 'wb', 0))
         self.setDaemon(1)
-        
-    def add(self, handle, method):
-        h = handle.fileno()
-        # function 1 is add
-        self.mutex.acquire()
-        self.handles[h] =  method
-        self.mutex.release()
-        marshal.dump((1, h), self.pipe[1])
-        # we must flush, otherwise the reading end will block
-        self.pipe[1].flush()
-
-    def remove(self, handle):
-        h = handle.fileno()
-        self.mutex.acquire()
-        del self.handles[h]
-        self.mutex.release()
-        # function 0 is remove
-        marshal.dump((0, h), self.pipe[1])
-        # we must flush, otherwise the reading end will block
-        self.pipe[1].flush()
-
-    def run(self):
-        p = select.poll()
+        self.poll = select.poll()
 
         # listen to the read fd of our pipe
-        p.register(self.pipe[0], select.POLLIN)
+        self.poll.register(self.pipe[0], select.POLLIN)
+        
+    def add(self, handle, method):
+        "blocks until handle is added by dispatcher thread"
+        h = handle.fileno()
+        print 'adding', h
+        if threading.currentThread == self:
+            self.handles[h] = method
+            self.poll.register(h)
+            if completion:
+                completion()
+        else:
+            event = threading.Event()
+            self.mutex.acquire()
+            self.handles[h] = method
+            # function 1 is add
+            self.queue.append((1, h, event))
+            self.mutex.release()
+            self.pipe[1].write('1')
+            event.wait()
+
+    def remove(self, handle):
+        "blocks until handle is removed by dispatcher thread"
+        h = handle.fileno()
+        print 'removing', h
+        if threading.currentThread() == self:
+            del self.handles[h]
+            self.poll.unregister(h)
+        else:
+            event = threading.Event()
+            self.mutex.acquire()
+            del self.handles[h]
+            # function 0 is remove
+            self.queue.append((0, h, event))
+            self.mutex.release()
+            self.pipe[1].write('0')        
+            event.wait()
+
+    def run(self):
 
         while 1:
-            active = p.poll()
-            for a, mode in active:
-                if a == self.pipe[0].fileno():
-                    add, fd = marshal.load(self.pipe[0])
-                    if add:
-                        p.register(fd)
-                    else:
-                        p.unregister(fd)
-                else:
-                    self.mutex.acquire()
-                    try:
-                        m = self.handles.get(a, None)
-                    finally:
-                        self.mutex.release()
+            try:
+                active = self.poll.poll()
+                for a, mode in active:
+                    if a == self.pipe[0].fileno():
+                        self.pipe[0].read(1)
+                        self.mutex.acquire()
+                        try:
+                            add, fd, event = self.queue.pop(0)
+                            print self.queue
+                        finally:
+                            self.mutex.release()
+                        if add:
+                            self.poll.register(fd)
+                            print fd, 'added'
+                        else:
+                            self.poll.unregister(fd)
+                            print fd, 'removed'
 
-                    # ignore method not found
-                    if m:
-                        m()
+                        if event:
+                            event.set()
+                    else:
+                        self.mutex.acquire()
+                        try:
+                            m = self.handles.get(a, None)
+                        finally:
+                            self.mutex.release()
+
+                        # ignore method not found
+                        if m:
+                            m()
+            except:
+                log.error('error in SpeechDispatcher main loop', exc_info=1)
 
 if os.name == 'nt':
     SpeechEventDispatcher = Win32SpeechEventDispatcher
@@ -210,7 +244,10 @@ else:
     SpeechEventDispatcher = PollSpeechEventDispatcher
 
 class PlayJob:
-    def __init__(self, filename, user_data):
+
+    def __init__(self, channel, filename, agc = 0,
+                 speed = 0, volume = 0, user_data = None):
+        self.channel = channel
         self.filename = filename
         self.user_data = user_data
         # open the file and read the length
@@ -219,60 +256,354 @@ class PlayJob:
         self.buffer = lowlevel.SM_TS_DATA_PARMS()
         self.length = self.file.tell()
         self.file.seek(0, 0)
-        self.position = 0        
+        self.position = 0
+        self.agc = agc
+        self.speed = speed
+        self.volume = volume
+
+    def start(self):
+        replay = lowlevel.SM_REPLAY_PARMS()
+        replay.channel = self.channel.channel
+        replay.agc = self.agc
+        replay.speed = self.speed
+        replay.volume = self.volume
+        replay.type = lowlevel.kSMDataFormat8KHzALawPCM
+        replay.data_length = self.length
+
+        rc = lowlevel.sm_replay_start(replay)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_replay_start')
+
+        log.debug('%s play(%s, agc=%d, speed=%d, volume=%d)',
+                  self.channel.name, self.filename, self.agc,
+                  self.speed, self.volume)
+                  
+        # add the write event to the dispatcher
+        self.channel.dispatcher.add(self.channel.event_write,
+                                    self.fill_play_buffer)
+
+        self.fill_play_buffer()
+
+        return self
+
+    def done(self):
+        # remove the write event from the dispatcher
+        self.channel.dispatcher.remove(self.channel.event_write)
+
+        # Position is only nonzero when play was stopped.
+        # Compute reason.
+        self.channel.lock()
+        
+        reason = ''
+        if self.position:
+            reason = 'stopped'
+            pos = self.position
+        else:
+            pos = self.length
+
+        if self.channel.close_pending:
+            reason = 'closed'
+
+        self.channel.unlock()
+
+        log.debug('%s play_done(reason=\'%s\', pos=%d)',
+                  self.channel.name, reason, pos)
+
+        self.channel.lock()
+        try:
+            self.channel.controller.play_done(self.channel, reason,
+                                              pos, self.user_data)
+        finally:
+            self.channel.job_done(self)
+            self.channel.unlock()
+            # break cyclic reference
+            self.channel = None
+
+    def fill_play_buffer(self):
+        status = lowlevel.SM_REPLAY_STATUS_PARMS()
+
+        while True:
+            status.channel = self.channel.channel
+
+            rc = lowlevel.sm_replay_status(status)
+            if rc:
+                raise AculabSpeechError(rc, 'sm_replay_status')
+
+            if status.status == lowlevel.kSMReplayStatusNoCapacity:
+                return
+            elif status.status == lowlevel.kSMReplayStatusComplete:
+                self.done()
+                return
+            elif status.status != lowlevel.kSMReplayStatusCompleteData:
+                data = self.buffer
+                data.channel = self.channel.channel
+                data.setdata(self.file.read(
+                    lowlevel.kSMMaxReplayDataBufferSize))
+
+                rc = lowlevel.sm_put_replay_data(data)
+                if rc and rc != lowlevel.ERR_SM_NO_CAPACITY:
+                    raise AculabSpeechError(rc, 'sm_put_replay_data')
+
+    def stop(self):
+        stop = lowlevel.SM_REPLAY_ABORT_PARMS()
+        stop.channel = self.channel.channel
+        rc = lowlevel.sm_replay_abort(stop)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_replay_abort')
+        
+        self.position = stop.offset
+
+        log.debug('%s play_stop()', self.channel.name)
 
 class RecordJob:
-    def __init__(self, filename, user_data):
+    
+    def __init__(self, channel, filename, max_octets = 0,
+                 max_elapsed_time = 0, max_silence = 0, elimination = 0,
+                 agc = 0, volume = 0, user_data = None):
+
+        self.channel = channel
         self.filename = filename
-        self.user_data = user_data
         self.file = open(filename, 'wb')
         self.buffer = lowlevel.SM_TS_DATA_PARMS()
         self.buffer.allocrecordbuffer()
         # size in bytes
         self.size = 0
+        self.max_octets = max_octets
+        self.max_elapsed_time = max_elapsed_time
+        self.max_silence = max_silence
+        self.elimination = elimination
+        self.agc = agc
+        self.volume = volume
+        self.user_data = user_data
+
+    def start(self):
+        record = lowlevel.SM_RECORD_PARMS()
+        record.channel = self.channel.channel
+        record.type = lowlevel.kSMDataFormat8KHzALawPCM
+        record.max_octets = self.max_octets
+        record.max_elapsed_time = self.max_elapsed_time
+        record.max_silence = self.max_silence
+        record.elimination = self.elimination
+        record.agc = self.agc
+        record.volume = self.volume
+
+        rc = lowlevel.sm_record_start(record)
+        if rc:
+            self.recordjob = None
+            raise AculabSpeechError(rc, 'sm_record_start')
+
+        log.debug('%s record(%s, max_octets=%d, max_time=%d, max_silence=%d, '
+                  'elimination=%d, agc=%d, volume=%d)',
+                  self.channel.name, self.filename, self.max_octets,
+                  self.max_elapsed_time, self.max_silence, self.elimination,
+                  self.agc, self.speed, self.volume)
+                  
+        # add the read event to the dispatcher
+        self.channel.dispatcher.add(self.channel.event_read, self.on_read)
 
     def __del__(self):
         self.buffer.freerecordbuffer()
+
+    def done(self):                
+        # remove the read event from the dispatcher
+        self.channel.dispatcher.remove(self.channel.event_read)
+
+        how = lowlevel.SM_RECORD_HOW_TERMINATED_PARMS()
+        how.channel = self.channel.channel
+
+        rc = lowlevel.sm_record_how_terminated(how)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_record_how_terminated')
         
+        reason = ''
+        if how.termination_reason == lowlevel.kSMRecordHowTerminatedLength:
+            reason = 'timeout'
+        elif how.termination_reason == lowlevel.kSMRecordHowTerminatedMaxTime:
+            reason = 'timeout'
+        elif how.termination_reason == lowlevel.kSMRecordHowTerminatedSilence:
+            reason = 'silence'
+        elif how.termination_reason == lowlevel.kSMRecordHowTerminatedAborted:
+            reason = 'stopped'
+        elif how.termination_reason == lowlevel.kSMRecordHowTerminatedError:
+            reason = 'error'
+
+        self.channel.lock()
+        if self.channel.close_pending:
+            reason = 'closed'
+        self.channel.unlock()
+
+        log.debug('%s record_done(reason=\'%s\', size=%d)',
+                  self.channel.name, reason, self.size)
+
+        self.channel.lock()
+        try:
+            self.channel.controller.record_done(self,
+                                                reason,
+                                                self.size,
+                                                self.user_data)
+        finally:
+            self.channel.job_done(self)
+            self.channel.unlock()
+            # break cyclic reference
+            self.channel = None
+    
+    def on_read(self):
+        status = lowlevel.SM_RECORD_STATUS_PARMS()
+
+        while self.recordjob:
+            status.channel = self.channel
+
+            rc = lowlevel.sm_record_status(status)
+            if rc:
+                raise AculabSpeechError(rc, 'sm_record_status')
+
+            if status.status == lowlevel.kSMRecordStatusComplete:
+                self.done()
+                return
+            elif status.status == lowlevel.kSMRecordStatusNoData:
+                return
+            else:
+                data = self.buffer
+                data.channel = self.channel.channel
+                data.length = lowlevel.kSMMaxRecordDataBufferSize
+
+                rc = lowlevel.sm_get_recorded_data(data)
+                if rc:
+                    raise AculabSpeechError(rc, 'sm_get_recorded_data')
+
+                d = data.getdata()
+                self.size += len(d)
+
+                self.file.write(d)
+
+    def stop(self):
+        abort = lowlevel.SM_RECORD_ABORT_PARMS()
+        abort.channel = self.channel.channel
+        rc = lowlevel.sm_record_abort(abort)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_record_abort')
+
+        log.debug('%s record_stop()', self.channel.name)
 
 class DigitsJob:
-    def __init__(self, user_data):
+    
+    def __init__(self, channel, digits, inter_digit_delay = 32,
+                 digit_duration = 64, user_data = None):
+        self.channel = channel
+        self.digits = digits
+        self.inter_digit_delay = inter_digit_delay
+        self.digit_duration = digit_duration
         self.user_data = user_data
+        self.stopped = False
+
+    def start(self):
+        dp = lowlevel.SM_PLAY_DIGITS_PARMS()
+        dp.channel = self.channel.channel
+        dp.digits.type = lowlevel.kSMDTMFDigits
+        dp.digits.digit_string = self.digits
+        dp.digits.inter_digit_delay = self.inter_digit_delay
+        dp.digits.digit_duration = self.digit_duration
+
+        rc = lowlevel.sm_play_digits(dp)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_play_digits')
+
+        log.debug('%s digits(%s, inter_digit_delay=%d, digit_duration=%d)',
+                  self.channel.name, self.digits, self.inter_digit_delay,
+                  self.digit_duration)
+
+        # add the write event to the dispatcher
+        self.channel.dispatcher.add(self.channel.event_write, self.on_write)
+
+    def on_write(self):
+        status = lowlevel.SM_PLAY_DIGITS_STATUS_PARMS()
+        status.channel = self.channel.channel
+
+        rc = lowlevel.sm_play_digits_status(status)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_play_digits_status')
+
+        if status.status == lowlevel.kSMPlayDigitsStatusComplete:
+
+            reason = ''
+            if self.stopped:
+                reason = 'stopped'
+
+            self.channel.lock()
+            if self.channel.close_pending:
+                reason = 'closed'
+            self.channel.unlock()
+
+            # remove the write event from to the dispatcher
+            self.channel.dispatcher.remove(self.channel.event_write)
+
+            log.debug('%s digits_done(reason=\'%s\')',
+                      self.channel.name, reason)
+            self.channel.lock()
+            try:
+                self.channel.controller.digits_done(self, reason, self.user_data)
+            finally:
+                self.channel.job_done(self)
+                self.channel.unlock()
+                # break cyclic reference
+                self.channel = None
+                
+    def stop(self):
+        self.stopped = True
+        log.debug('%s disgits_stop()', self.channel.name)
+        
 
 class SpeechConnection:    
-    def __init__(self, channel):
+    def __init__(self, channel, direction):
         self.channel = channel
+        self.direction = direction
+        if direction not in ['in', 'out']:
+            raise ValueError('direction must be \'in\' or \'out\'')
 
     def close(self):
-        # print "disabling", self.channel
-        input = lowlevel.SM_SWITCH_CHANNEL_PARMS()
+        if self.channel:
+            input = lowlevel.SM_SWITCH_CHANNEL_PARMS()
 
-        input.channel = self.channel
-        input.st = -1
-        input.ts = -1
+            input.channel = self.channel.channel
+            input.st = -1
+            input.ts = -1
 
-        rc = lowlevel.sm_switch_channel_input(input)
-        if (rc):
-            raise AculabSpeechError(rc, 'sm_switch_channel_input')
+            if self.direction == 'in':
+                rc = lowlevel.sm_switch_channel_input(input)
+                if rc:
+                    raise AculabSpeechError(rc, 'sm_switch_channel_input')
+            else:
+                rc = lowlevel.sm_switch_channel_output(input)
+                if rc:
+                    raise AculabSpeechError(rc, 'sm_switch_channel_output')
+
+            log_switch.debug('%s disconnected(%s)', self.channel.name,
+                             self.direction)
+
+            self.channel = None
 
     def __del__(self):
         self.close()
 
 class SpeechChannel:
         
-    def __init__(self, controller, dispatcher, module = -1):
-        """Controllers must implement play_done(channel, position, user_data),
-        dtmf(channel, digit), record_done(channel, how, size, user_data) and
-        digits_done(channel, user_data)
-        If they have a mutex attribute, the mutex will be acquired
-        before any method is invoked and release as soon as it returns"""
+    def __init__(self, controller, dispatcher, module = -1, mutex = None,
+                 user_data = None):
+        """Controllers must implement play_done(channel, reason, position,
+        user_data), dtmf(channel, digit, user_data),
+        record_done(channel, reason, size, user_data) and
+        digits_done(channel, reason, user_data).
+        Reason is normally 'stopped', 'closed' or '' (for normal termination).
+        For record_done(), reason may also be 'silence' or 'timeout'
+        If a mutex is passed in, it will be acquired
+        before any method is invoked and released as soon as it returns"""
 
         self.controller = controller
         self.dispatcher = dispatcher
-        self.playjob = None
-        self.digitsjob = None
-        self.recordjob = None
-        self.signaljob = None
+        self.mutex = mutex
+        self.user_data = None
+        self.job = None
+        self.close_pending = None
 
         if module != -1:
             self.module = module
@@ -294,6 +625,7 @@ class SpeechChannel:
                 raise AculabSpeechError(rc, 'sm_channel_alloc');            
 
         self.channel = alloc.channel
+        self.name = '0x%08x' % self.channel
 
         self.info = lowlevel.SM_CHANNEL_INFO_PARMS()
         self.info.channel = alloc.channel
@@ -301,11 +633,6 @@ class SpeechChannel:
         rc = lowlevel.sm_channel_info(self.info)
         if rc:
             raise AculabSpeechError(rc, 'sm_channel_info')
-
-        # workaround for bug in TiNG
-        global version
-        if version[0] >= 2:
-            self.info.card = 0
 
         # initialise our events
         self.event_read = self.set_event(lowlevel.kSMEventTypeReadData)
@@ -316,94 +643,116 @@ class SpeechChannel:
         self.dispatcher.add(self.event_recog, self.on_recog)
 
         if version[0] >= 2:
-            # switch to local timeslots for TiNG
-            if self.info.ost == -1:
-                self.out_ts = prosodystreams[module].allocate()
-                self.info.ost, self.info.ots = self.out_ts
-
-                output = lowlevel.SM_SWITCH_CHANNEL_PARMS()
-
-                output.channel = self.channel
-                output.st, output.ts = self.out_ts
-
-                rc = lowlevel.sm_switch_channel_output(output)
-                if (rc):
-                    raise AculabSpeechError(rc, 'sm_switch_channel_output')
-
-                self.out_connection = SpeechConnection(self.channel)
-
-
-            if self.info.ist == -1:
-                self.in_ts = prosodystreams[module].allocate()
-                self.info.ist, self.info.its = self.in_ts
-
-                input = lowlevel.SM_SWITCH_CHANNEL_PARMS()
-
-                input.channel = self.channel
-                input.st, input.ts = self.in_ts
-
-                rc = lowlevel.sm_switch_channel_input(input)
-                if (rc):
-                    raise AculabSpeechError(rc, 'sm_switch_channel_input')
-
-                self.in_connection = SpeechConnection(self.channel)
-
-        # don't do sm_listen_for for TiNG
-        # Todo: why not?
-        if version[0] < 2:
-            listen_for = lowlevel.SM_LISTEN_FOR_PARMS()
-            listen_for.channel = self.channel
-            listen_for.tone_detection_mode = \
-                                    lowlevel.kSMToneLenDetectionMinDuration40;
-            listen_for.map_tones_to_digits = \
-                                           lowlevel.kSMDTMFToneSetDigitMapping;
-            rc = lowlevel.sm_listen_for(listen_for)
-            if rc:
-                raise AculabSpeechError(rc, 'sm_listen_for')
+            self._ting_connect()
+            # don't do sm_listen_for for TiNG
+            # Todo: why not?
+            self._listen()
 
     def __del__(self):
-        self.release()
+        self._close()
+        log.debug('%s deleted', self.name)
 
+    def _close(self):
+        self.lock()
+        try:
+            if hasattr(self, 'event_read') and self.event_read:
+                lowlevel.smd_ev_free(self.event_read)
+                self.event_read = None
+            if hasattr(self, 'event_write') and self.event_write:
+                lowlevel.smd_ev_free(self.event_write)
+                self.event_write = None
+
+            global prosodystreams
+            if hasattr(self, 'out_ts') and self.out_ts:
+                # attribute out_ts implies attribute module
+                prosodystreams[self.module].free(out_ts)
+                self.out_ts = None
+
+            if hasattr(self, 'in_ts') and self.in_ts:
+                # attribute in_ts implies attribute module
+                prosodystreams[self.module].free(in_ts)
+                self.in_ts = None
+
+            if hasattr(self, 'event_recog') and self.event_recog:
+                lowlevel.smd_ev_free(self.event_recog)
+                self.dispatcher.remove(self.event_recog)
+                self.event_recog = None
+
+            if hasattr(self, 'channel') and self.channel:
+                rc = lowlevel.sm_channel_release(self.channel)
+                if rc:
+                    raise AculabSpeechError(rc, 'sm_channel_release')
+                self.channel = None
+        finally:
+            self.unlock()
+            log.debug('%s closed', self.name)
+            
     def __cmp__(self, other):
         return self.channel.__cmp__(other.channel)
 
     def __hash__(self):
         return self.channel
 
-    def release(self):
-        if hasattr(self, 'event_read') and self.event_read:
-            lowlevel.smd_ev_free(self.event_read)
-            self.event_read = None
-        if hasattr(self, 'event_recog') and self.event_recog:
-            # Remove the recog event from the dispatcher.
-            self.dispatcher.remove(self.event_recog)
+    def _ting_connect(self):
+        # switch to local timeslots for TiNG
+        if self.info.ost == -1:
+            self.out_ts = prosodystreams[module].allocate()
+            self.info.ost, self.info.ots = self.out_ts
 
-            # Deleting the event may trigger
-            # an 'invalid handle' error in the dispatcher due to a race
-            # condition.
-            # This error is caught, however.
-            lowlevel.smd_ev_free(self.event_recog)
-            self.event_recog = None
-        if hasattr(self, 'event_write') and self.event_write:
-            lowlevel.smd_ev_free(self.event_write)
+            output = lowlevel.SM_SWITCH_CHANNEL_PARMS()
 
-        global prosodystreams
-        if hasattr(self, 'out_ts') and self.out_ts:
-            # attribute out_ts implies attribute module
-            prosodystreams[self.module].free(out_ts)
-            self.out_ts = None
+            output.channel = self.channel
+            output.st, output.ts = self.out_ts
+                
+            rc = lowlevel.sm_switch_channel_output(output)
+            if (rc):
+                raise AculabSpeechError(rc, 'sm_switch_channel_output')
 
-        if hasattr(self, 'in_ts') and self.in_ts:
-            # attribute in_ts implies attribute module
-            prosodystreams[self.module].free(in_ts)
-            self.in_ts = None
+            self.out_connection = SpeechConnection(self, 'out')
 
-        if self.channel:
-            rc = lowlevel.sm_channel_release(self.channel)
-            if rc:
-                raise AculabSpeechError(rc, 'sm_channel_release')
+        if self.info.ist == -1:
+            self.in_ts = prosodystreams[module].allocate()
+            self.info.ist, self.info.its = self.in_ts
 
-            self.channel = None
+            input = lowlevel.SM_SWITCH_CHANNEL_PARMS()
+
+            input.channel = self.channel
+            input.st, input.ts = self.in_ts
+
+            rc = lowlevel.sm_switch_channel_input(input)
+            if (rc):
+                raise AculabSpeechError(rc, 'sm_switch_channel_input')
+            
+            self.in_connection = SpeechConnection(self, 'in')
+
+
+    def _listen(self):
+        listen_for = lowlevel.SM_LISTEN_FOR_PARMS()
+        listen_for.channel = self.channel
+        listen_for.tone_detection_mode = \
+                                  lowlevel.kSMToneLenDetectionMinDuration40;
+        listen_for.map_tones_to_digits = lowlevel.kSMDTMFToneSetDigitMapping;
+        rc = lowlevel.sm_listen_for(listen_for)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_listen_for')
+
+    def close(self):
+        self.lock()
+        self.close_pending = 1
+        self.unlock()
+        if self.job:
+            self.job.stop()
+            return
+
+        self._close()
+        
+    def lock(self):
+        if self.mutex:
+            self.mutex.acquire()
+
+    def unlock(self):
+        if self.mutex:
+            self.mutex.release()
 
     def create_event(self, event):
         """event has type SM_CHANNEL_SET_EVENT_PARMS and is modified in place
@@ -446,7 +795,7 @@ class SpeechChannel:
         return handle
 
     def listen_to(self, source):
-        """source is a tuple (stream, timeslot"""
+        """source is a tuple (stream, timeslot)"""
         
         if self.info.card == -1:
             input = lowlevel.SM_SWITCH_CHANNEL_PARMS()
@@ -459,7 +808,10 @@ class SpeechChannel:
                 raise AculabSpeechError(rc, 'sm_switch_channel_input(%d:%d)' %
                                         (input.st, input.ts))
 
-            return SpeechConnection(self.channel)
+            log_switch.debug('%s listen_to(%d:%d)', self.name,
+                             source[0], source[1])
+
+            return SpeechConnection(self, 'in')
         
         output = lowlevel.OUTPUT_PARMS()
 
@@ -474,10 +826,14 @@ class SpeechChannel:
                               (self.info.card, output.ost, output.ots,
                                output.ist, output.its))
 
+        log_switch.debug('%s %d:%d := %d:%d', self.name,
+                         output.ost, output.ots,
+                         output.ist, output.its)
+
         return CTBusConnection(self.info.card, (self.info.ist, self.info.its))
 
     def speak_to(self, sink):
-        """sink is a tuple (stream, timeslot"""
+        """sink is a tuple (stream, timeslot)"""
 
         if self.info.card == -1:
             output = lowlevel.SM_SWITCH_CHANNEL_PARMS()
@@ -491,7 +847,10 @@ class SpeechChannel:
                                          'sm_switch_channel_output(%d:%d)' %
                                          (output.st, output.ts))
 
-            return SpeechConnection(self.channel)
+            log_switch.debug('%s speak_to(%d:%d)', self.name,
+                             sink[0], sink[1])
+
+            return SpeechConnection(self, 'out')
         
         output = lowlevel.OUTPUT_PARMS()
 
@@ -531,224 +890,50 @@ class SpeechChannel:
         else:
             # assume other is a CallHandle subclass and delegate to it
             return other.connect(self)
+
+    def job_done(self, job):
+        m = getattr(self.controller, 'job_done', None)
+        if m:
+            m(job)
+        
+        self.job = None
+        if self.close_pending:
+            self.close()
+
+    def start(self, job):
+        if not self.job:
+            self.job = job
+            job.start()
     
     def play(self, filename, volume = 0, agc = 0, speed = 0, user_data = None):
-        """only plays alaw (asynchronously)
+        """plays alaw (asynchronously)
         user_data is passed back in play_done"""
 
-        self.playjob = PlayJob(filename, user_data)
+        self.job = PlayJob(self, filename, agc, volume, speed,
+                           user_data)
 
-        replay = lowlevel.SM_REPLAY_PARMS()
-        replay.channel = self.channel
-        replay.agc = agc
-        replay.speed = speed
-        replay.volume = volume
-        replay.type = lowlevel.kSMDataFormat8KHzALawPCM
-        replay.data_length = self.playjob.length
+        self.job.start()
 
-        rc = lowlevel.sm_replay_start(replay)
-        if rc:
-            self.playjob = None
-            raise AculabSpeechError(rc, 'sm_replay_start')
+    def record(self, filename, max_octets = 0,
+               max_elapsed_time = 0, max_silence = 0, elimination = 0,
+               agc = 0, volume = 0, user_data = None):
+        """plays alaw (asynchronously)
+        user_data is passed back in record_done"""
 
-        # add the write event to the dispatcher
-        self.dispatcher.add(self.event_write, self.on_write)
+        self.job = RecordJob(self, filename, max_octets,
+                             max_elapsed_time, max_silence, elimination,
+                             agc, volume, user_data)
 
-        self.fill_play_buffer()
-
-    def fill_play_buffer(self):
-        status = lowlevel.SM_REPLAY_STATUS_PARMS()
-
-        while True:
-            status.channel = self.channel
-
-            rc = lowlevel.sm_replay_status(status)
-            if rc:
-                raise AculabSpeechError(rc, 'sm_replay_status')
-
-            if status.status == lowlevel.kSMReplayStatusNoCapacity:
-                return
-            elif status.status == lowlevel.kSMReplayStatusComplete:
-
-                # remove the write event from the dispatcher
-                self.dispatcher.remove(self.event_write)
-                
-                if hasattr(self.controller, 'mutex'):
-                    self.controller.mutex.acquire()
-
-                # position is only nonzero when play was stopped,
-                if self.playjob.position:
-                    pos = self.playjob.position
-                else:
-                    pos = self.playjob.length
-
-                try:
-                    self.controller.play_done(self, pos, self.playjob.user_data)
-                finally:
-                    self.playjob = None
-
-                    # release mutex
-                    if hasattr(self.controller, 'mutex'):
-                        self.controller.mutex.release()
-                        
-                return
-            
-            elif status.status != lowlevel.kSMReplayStatusCompleteData:
-                data = self.playjob.buffer
-                data.channel = self.channel
-                data.setdata(self.playjob.file.read(
-                    lowlevel.kSMMaxReplayDataBufferSize))
-
-                rc = lowlevel.sm_put_replay_data(data)
-                if rc:
-                    raise AculabSpeechError(rc, 'sm_put_replay_data')
+        self.job.start()
 
     def digits(self, digits, inter_digit_delay = 32, digit_duration = 64,
                user_data = None):
 
-        self.digitsjob = DigitsJob(user_data)
+        self.job = DigitsJob(self, digits, inter_digit_delay,
+                             digit_duration, user_data)
 
-        dp = lowlevel.SM_PLAY_DIGITS_PARMS()
-        dp.channel = self.channel
-        dp.digits.type = lowlevel.kSMDTMFDigits
-        dp.digits.digit_string = digits
-        dp.digits.inter_digit_delay = inter_digit_delay
-        dp.digits.digit_duration = digit_duration
+        self.job.start()
 
-        rc = lowlevel.sm_play_digits(dp)
-        if rc:
-            self.digitsjob = None
-            raise AculabSpeechError(rc, 'sm_play_digits')
-
-        # add the write event to the dispatcher
-        self.dispatcher.add(self.event_write, self.on_write)
-
-    def on_write(self):
-        if self.playjob:
-            self.fill_play_buffer()
-        elif self.digitsjob:
-            status = lowlevel.SM_PLAY_DIGITS_STATUS_PARMS()
-            status.channel = self.channel
-
-            rc = lowlevel.sm_play_digits_status(status)
-            if rc:
-                raise AculabSpeechError(rc, 'sm_play_digits_status')
-
-            if status.status == lowlevel.kSMPlayDigitsStatusComplete:
-                
-                # remove the write event from to the dispatcher
-                self.dispatcher.remove(self.event_write)
-
-                if hasattr(self.controller, 'mutex'):
-                    self.controller.mutex.acquire()
-
-                try:
-                    self.controller.digits_done(self, self.digitsjob.user_data)
-                finally:
-                    self.digitsjob = None
-
-                # release mutex
-                if hasattr(self.controller, 'mutex'):
-                    self.controller.mutex.release()
-
-    def stop_play(self):
-        if self.playjob:
-            stop = lowlevel.SM_REPLAY_ABORT_PARMS()
-            stop.channel = self.channel
-            rc = lowlevel.sm_replay_abort(stop)
-            if rc:
-                raise AculabSpeechError(rc, 'sm_replay_abort')
-        
-            self.playjob.position = stop.offset
-
-    def record(self, filename, max_octets = 0, max_elapsed_time = 0,
-               max_silence = 0, elimination = 0, agc = 0, volume = 0,
-               user_data = None):
-        
-        self.recordjob = RecordJob(filename, user_data)
-
-        record = lowlevel.SM_RECORD_PARMS()
-        record.channel = self.channel
-        record.type = lowlevel.kSMDataFormat8KHzALawPCM
-        record.max_octets = max_octets
-        record.max_elapsed_time = max_elapsed_time
-        record.max_silence = max_silence
-        record.elimination = 0
-        record.agc = agc
-        record.volume = 0
-
-        rc = lowlevel.sm_record_start(record)
-        if rc:
-            self.recordjob = None
-            raise AculabSpeechError(rc, 'sm_record_start')
-
-        # add the read event to the dispatcher
-        self.dispatcher.add(self.event_read, self.on_read)
-
-    def on_read(self):
-        status = lowlevel.SM_RECORD_STATUS_PARMS()
-
-        while self.recordjob:
-            status.channel = self.channel
-
-            rc = lowlevel.sm_record_status(status)
-            if rc:
-                raise AculabSpeechError(rc, 'sm_record_status')
-
-            if status.status == lowlevel.kSMRecordStatusComplete:
-                
-                if not self.recordjob:
-                    return
-
-                # remove the read event from the dispatcher
-                self.dispatcher.add(self.event_read, self.on_read)
-
-                how = lowlevel.SM_RECORD_HOW_TERMINATED_PARMS()
-                how.channel = self.channel
-
-                rc = lowlevel.sm_record_how_terminated(how)
-                if rc:
-                    raise AculabSpeechError(rc, 'sm_record_how_terminated')
-
-                if hasattr(self.controller, 'mutex'):
-                    self.controller.mutex.acquire()
-
-                try:
-                    self.controller.record_done(self, how.termination_reason,
-                                                self.recordjob.size,
-                                                self.recordjob.user_data)
-                finally:
-                    self.recordjob = None
-
-                    # release mutex
-                    if hasattr(self.controller, 'mutex'):
-                        self.controller.mutex.release()
-                        
-                return
-            
-            elif status.status == lowlevel.kSMRecordStatusNoData:
-                return
-            else:
-                data = self.recordjob.buffer
-                data.channel = self.channel
-                data.length = lowlevel.kSMMaxRecordDataBufferSize
-
-                rc = lowlevel.sm_get_recorded_data(data)
-                if rc:
-                    raise AculabSpeechError(rc, 'sm_get_recorded_data')
-
-                d = data.getdata()
-                self.recordjob.size += len(d)
-
-                self.recordjob.file.write(d)
-
-    def stop_record(self):
-        if self.recordjob:
-            abort = lowlevel.SM_RECORD_ABORT_PARMS()
-            abort.channel = self.channel
-            rc = lowlevel.sm_record_abort(abort)
-            if rc:
-                raise AculabSpeechError(rc, 'sm_record_abort')
 
     def on_recog(self):
         recog = lowlevel.SM_RECOGNISED_PARMS()
@@ -763,17 +948,16 @@ class SpeechChannel:
             if recog.type == lowlevel.kSMRecognisedNothing:
                 return
             elif recog.type == lowlevel.kSMRecognisedDigit:
-                
-                if hasattr(self.controller, 'mutex'):
-                    self.controller.mutex.acquire()
 
+                self.lock()
                 try:
-                    self.controller.dtmf(self, chr(recog.param0))
+                    self.controller.dtmf(self, chr(recog.param0),
+                                         self.user_data)
                 finally:
-                    if hasattr(self.controller, 'mutex'):
-                        self.controller.mutex.release()
+                    self.unlock()
             
     def stop(self):
-        self.stop_play()
-        self.stop_record()
+        if self.job:
+            self.job.stop()
+
     
