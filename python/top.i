@@ -61,6 +61,8 @@ BLOCKING(dpns_watchdog)
 %ignore call_br_l1_stats;
 %ignore call_br_l2_state;
 
+%apply char[ANY] { ACU_UCHAR[ANY] };
+
 #ifdef WIN32
 %typemap(python,in) tSMEventId {
 	$1 = (tSMEventId)PyInt_AsLong($input);
