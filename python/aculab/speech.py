@@ -1,6 +1,6 @@
 import sys
 import lowlevel
-from busses import CTBusConnection, ProsodyLocalBus, DefaultBus
+from busses import Connection, CTBusConnection, ProsodyLocalBus, DefaultBus
 from error import AculabError, AculabSpeechError
 import threading
 import os
@@ -34,6 +34,15 @@ if version[0] >= 2:
         lowlevel.sm_get_card_info(card_info)
         for j in range(card_info.module_count):
             prosodystreams.append(ProsodyLocalBus(j))
+
+def swig_value(s):
+    a = s.find('_')
+    if a != -1:
+        o = s.find('_', a+1)
+        return s[a+1:o]
+
+    return s
+            
 
 # this class is only needed on Windows
 class Win32DispatcherThread(threading.Thread):
@@ -169,13 +178,12 @@ class PollSpeechEventDispatcher(threading.Thread):
     def add(self, handle, method):
         "blocks until handle is added by dispatcher thread"
         h = handle.fileno()
-        print 'adding', h
-        if threading.currentThread == self:
+        if threading.currentThread() == self or not self.isAlive():
+            print 'self adding', h
             self.handles[h] = method
             self.poll.register(h)
-            if completion:
-                completion()
         else:
+            print 'adding', h
             event = threading.Event()
             self.mutex.acquire()
             self.handles[h] = method
@@ -188,11 +196,12 @@ class PollSpeechEventDispatcher(threading.Thread):
     def remove(self, handle):
         "blocks until handle is removed by dispatcher thread"
         h = handle.fileno()
-        print 'removing', h
-        if threading.currentThread() == self:
+        if threading.currentThread() == self or not self.isAlive():
+            print 'self removing', h
             del self.handles[h]
             self.poll.unregister(h)
         else:
+            print 'removing', h
             event = threading.Event()
             self.mutex.acquire()
             del self.handles[h]
@@ -203,9 +212,10 @@ class PollSpeechEventDispatcher(threading.Thread):
             event.wait()
 
     def run(self):
-
+        
         while 1:
             try:
+
                 active = self.poll.poll()
                 for a, mode in active:
                     if a == self.pipe[0].fileno():
@@ -235,6 +245,8 @@ class PollSpeechEventDispatcher(threading.Thread):
                         # ignore method not found
                         if m:
                             m()
+            except KeyboardInterrupt:
+                raise
             except:
                 log.error('error in SpeechDispatcher main loop', exc_info=1)
 
@@ -587,7 +599,7 @@ class SpeechConnection:
 
 class SpeechChannel:
         
-    def __init__(self, controller, dispatcher, module = -1, mutex = None,
+    def __init__(self, controller, dispatcher, module = 0, mutex = None,
                  user_data = None):
         """Controllers must implement play_done(channel, reason, position,
         user_data), dtmf(channel, digit, user_data),
@@ -604,28 +616,19 @@ class SpeechChannel:
         self.user_data = None
         self.job = None
         self.close_pending = None
+        self.module = module
 
-        if module != -1:
-            self.module = module
-            alloc = lowlevel.SM_CHANNEL_ALLOC_PLACED_PARMS();
-
-            alloc.type = lowlevel.kSMChannelTypeFullDuplex;
-            alloc.module = module;
-
-            rc = lowlevel.sm_channel_alloc_placed(alloc);
-            if rc:
-                raise AculabSpeechError(rc, 'sm_channel_alloc_placed');
-        else:
-            alloc = lowlevel.SM_CHANNEL_ALLOC_PARMS();
-
-            alloc.type = lowlevel.kSMChannelTypeFullDuplex;
-
-            rc = lowlevel.sm_channel_alloc(alloc);
-            if rc:
-                raise AculabSpeechError(rc, 'sm_channel_alloc');            
+        alloc = lowlevel.SM_CHANNEL_ALLOC_PLACED_PARMS();
+        alloc.type = lowlevel.kSMChannelTypeFullDuplex;
+        alloc.module = module;
+        
+        rc = lowlevel.sm_channel_alloc_placed(alloc);
+        if rc:
+            raise AculabSpeechError(rc, 'sm_channel_alloc_placed');
 
         self.channel = alloc.channel
-        self.name = '0x%08x' % self.channel
+        
+        self.name = '0x%s' % swig_value(self.channel)
 
         self.info = lowlevel.SM_CHANNEL_INFO_PARMS()
         self.info.channel = alloc.channel
@@ -646,7 +649,7 @@ class SpeechChannel:
             self._ting_connect()
             # don't do sm_listen_for for TiNG
             # Todo: why not?
-            self._listen()
+            # self._listen()
 
     def __del__(self):
         self._close()
@@ -687,16 +690,16 @@ class SpeechChannel:
             self.unlock()
             log.debug('%s closed', self.name)
             
-    def __cmp__(self, other):
-        return self.channel.__cmp__(other.channel)
+##     def __cmp__(self, other):
+##         return self.channel.__cmp__(other.channel)
 
-    def __hash__(self):
-        return self.channel
+##     def __hash__(self):
+##         return self.channel
 
     def _ting_connect(self):
         # switch to local timeslots for TiNG
         if self.info.ost == -1:
-            self.out_ts = prosodystreams[module].allocate()
+            self.out_ts = prosodystreams[self.module].allocate()
             self.info.ost, self.info.ots = self.out_ts
 
             output = lowlevel.SM_SWITCH_CHANNEL_PARMS()
@@ -711,7 +714,7 @@ class SpeechChannel:
             self.out_connection = SpeechConnection(self, 'out')
 
         if self.info.ist == -1:
-            self.in_ts = prosodystreams[module].allocate()
+            self.in_ts = prosodystreams[self.module].allocate()
             self.info.ist, self.info.its = self.in_ts
 
             input = lowlevel.SM_SWITCH_CHANNEL_PARMS()
@@ -871,11 +874,15 @@ class SpeechChannel:
         if isinstance(other, SpeechChannel):
             c = Connection(bus)
             if self.info.card == other.info.card:
-                # connect directly
-                c.connections = [self.listen_to((other.info.ost,
-                                                 other.info.ots)),
-                                 other.listen_to((self.info.ost,
-                                                  self.info.ots))]
+                if other == self:
+                    c.connections = [self.listen_to((self.info.ost,
+                                                     self.info.ots))]
+                else:
+                    # connect directly
+                    c.connections = [self.listen_to((other.info.ost,
+                                                     other.info.ots)),
+                                     other.listen_to((self.info.ost,
+                                                      self.info.ots))]
             else:
                 # allocate two timeslots
                 c.timeslots = [ bus.allocate(), bus.allocate() ]
