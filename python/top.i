@@ -15,8 +15,6 @@
 
 %}
 
-%import "smport.h"
-
 /* This allows to execute Python code during the function call. */
 %exception {
 	PyThreadState *tstate = PyEval_SaveThread();

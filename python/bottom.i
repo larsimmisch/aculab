@@ -1,3 +1,11 @@
+#ifdef SM_POLL_UNIX
+%extend tSMEventId {
+	int fileno() {
+		return self->fd;
+	}
+};
+#endif
+
 %extend SM_TS_DATA_PARMS {
 	PyObject *getdata() {
 		return PyString_FromStringAndSize((const char*)self->data, 
