@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import sys
 import getopt
 from aculab.error import AculabError
@@ -5,16 +7,16 @@ from aculab.callcontrol import *
 
 class OutgoingCallController:
 
-    def ev_outgoing_ringing(self, call):
-        print hex(call.handle), 'stream: %d timeslot: %d' \
-              % (call.details.stream, call.details.ts)
+    def ev_outgoing_ringing(self, call, model):
+        log.debug('%s stream: %d timeslot: %d', call.name,
+                  call.details.stream, call.details.ts)
 
-    def ev_remote_disconnect(self, call):
+    def ev_remote_disconnect(self, call, model):
         call.disconnect()
 
 class RepeatedOutgoingCallController:
 
-    def ev_idle(self, call):
+    def ev_idle(self, call, model):
         call.openout(call.destination_address)
 
 def usage():

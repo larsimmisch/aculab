@@ -8,10 +8,10 @@ from aculab.lowlevel import *
 
 class OutgoingCallController:
 
-    def ev_remote_disconnect(self, call):
+    def ev_remote_disconnect(self, call, model):
         call.disconnect()
 
-    def ev_idle(self, call):
+    def ev_idle(self, call, model):
         print call.feature_details.feature.facility.length
         openout(call, args[0])
         

@@ -2,23 +2,24 @@
 
 import sys
 import getopt
+import logging
 from aculab.error import AculabError
 from aculab.callcontrol import *
 
 class IncomingCallController:
 
-    def ev_incoming_call_det(self, call):
-        print hex(call.handle), 'stream: %d timeslot: %d' \
-              % (call.details.stream, call.details.ts)
+    def ev_incoming_call_det(self, call, model):
+        log.debug('%s stream: %d timeslot: %d',
+                  call.name, call.details.stream, call.details.ts)
 
         call.accept()
 
-    def ev_remote_disconnect(self, call):
+    def ev_remote_disconnect(self, call, model):
         call.disconnect()
 
 class RepeatedIncomingCallController(IncomingCallController):
 
-    def ev_idle(self, call):
+    def ev_idle(self, call, model):
         call.openin()
 
 def usage():
@@ -26,6 +27,14 @@ def usage():
     sys.exit(-2)
 
 if __name__ == '__main__':
+    log = logging.getLogger('')
+    log.setLevel(logging.DEBUG)
+    log_formatter = logging.Formatter(
+        '%(asctime)s %(levelname)-5s %(message)s')
+    hdlr = logging.StreamHandler()
+    hdlr.setFormatter(log_formatter)
+    log.addHandler(hdlr)
+    
     port = 0
     timeslot = 1
     controller = IncomingCallController()
