@@ -111,13 +111,13 @@ class Call:
 
         dispatcher.add(self)
 
-    def openout(self):
+    def openout(self, originating_address = '3172542'):
         outparms = lowlevel.OUT_XPARMS()
         outparms.net = self.port
         outparms.ts = self.timeslot
         outparms.cnf = lowlevel.CNF_REM_DISC | lowlevel.CNF_TSPREFER
         outparms.sending_complete = 1
-        outparms.originating_address = '3172542'
+        outparms.originating_address = originating_address
         outparms.destination_address = self.number
 
         rc = lowlevel.call_openout(outparms)
