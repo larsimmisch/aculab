@@ -1,9 +1,24 @@
 import sys
+import getopt
 import aculab
 import aculab_names as names
 import __main__
 
+def usage():
+    print 'callin.py [-p <port>]'
+    
+port = 0
+
+options, args = getopt.getopt(sys.argv[1:], 'p:')
+
+for o, a in options:
+    if o == '-p':
+        port = int(a)
+    else:
+        usage()
+
 inparms = aculab.IN_XPARMS()
+inparms.net = port
 inparms.ts = -1
 
 aculab.call_openin(inparms)
@@ -28,7 +43,15 @@ def ev_idle(handle):
     cause = aculab.CAUSE_XPARMS()
     cause.handle = handle
     aculab.call_release(cause)
-    sys.exit(0)
+
+    inparms = aculab.IN_XPARMS()
+    inparms.net = port
+    inparms.ts = -1
+
+    aculab.call_openin(inparms)
+    
+    handle = inparms.handle
+
 
 last_event = None
 while 1:
