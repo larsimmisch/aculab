@@ -4,8 +4,8 @@ CXX		:= cl /MD
 
 DEFINES := -DWIN32
 
-SWIGBIN := c:/swig-1.3.15
-SWIGLIB := c:/swig-1.3.15/Lib
+SWIGBIN := c:/swig-1.3.17
+SWIGLIB := c:/swig-1.3.17/Lib
 
 PYTHON_INCLUDES = c:/python22/include
 PYTHON_LIBS	= c:/python22/libs/python22.lib

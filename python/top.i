@@ -28,7 +28,7 @@
 	$1 = (tSMEventId)PyInt_AsLong($input);
 }
 
-%typemap(python,ignore) tSMEventId * ($basetype temp) {
+%typemap(python,in,numinputs=0) tSMEventId * ($basetype temp) {
 	$1 = ($basetype*)&temp;
 }
 
