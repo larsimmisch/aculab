@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import sys
 import getopt
 from aculab.error import AculabError
