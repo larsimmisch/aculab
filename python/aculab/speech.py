@@ -93,6 +93,7 @@ class PlayJob:
         # open the file and read the length
         self.file = open(filename, 'rb')
         self.file.seek(0, 2)
+        self.buffer = lowlevel.SM_TS_DATA_PARMS()
         self.length = self.file.tell()
         self.file.seek(0, 0)
         self.position = 0        
@@ -103,9 +104,13 @@ class RecordJob:
         self.token = token
         self.file = open(filename, 'wb')
         self.buffer = lowlevel.SM_TS_DATA_PARMS()
-        self.buffer.initrecordbuffer()
+        self.buffer.allocrecordbuffer()
         # size in bytes
         self.size = 0
+
+    def __del__(self):
+        self.buffer.freerecordbuffer()
+        
 
 class DigitsJob:
     def __init__(self, token):
@@ -361,7 +366,7 @@ class SpeechChannel:
                 return
             
             elif status.status != lowlevel.kSMReplayStatusCompleteData:
-                data = lowlevel.SM_TS_DATA_PARMS()
+                data = self.playjob.buffer
                 data.channel = self.channel
                 data.data = self.playjob.file.read(
                     lowlevel.kSMMaxReplayDataBufferSize)
