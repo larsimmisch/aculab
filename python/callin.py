@@ -31,6 +31,13 @@ def ev_ext_facility(handle):
     pass
 
 def ev_incoming_call_det(handle):
+    details = aculab.DETAIL_XPARMS()
+    details.handle = handle
+
+    aculab.call_details(details)
+
+    print 'stream: %d timeslot: %d' % (details.stream, details.ts)
+    
     aculab.call_accept(handle)
 
 def ev_call_connected(handle):
