@@ -260,7 +260,7 @@ class CallHandle:
         self.dispatcher.add(self)
 
     def transfer(self, call):
-        transfer = TRANSFER_XPARMS()
+        transfer = lowlevel.TRANSFER_XPARMS()
         transfer.handlea = self.handle
         transfer.handlec = call.handle
         

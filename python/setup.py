@@ -3,7 +3,7 @@
 from distutils.core import setup,Extension
 
 setup (name = "aculab",
-	   version = "1.1",
+	   version = "1.2",
 	   description = "Aculab Python wrapper",
 	   author = "Lars Immisch",
 	   author_email = "lars@ibp.de",
