@@ -19,9 +19,6 @@ aculab/_lowlevel.dll: $(OBJS)
 	$(CXX) $(LDFLAGS) /LD -o $@ $(OBJS) $(PYTHON_LIBS) \
 		 /link /EXPORT:init_lowlevel
 
-aculab/lowlevel.py: lowlevel.py
-	mv lowlevel.py aculab/lowlevel.py
-
 acu.i: top.i ../include/mvcldrvr.h ../include/mvswdrvr.h ../include/smdrvr.h \
 	   ../include/smosintf.h bottom.i makefile
 	cat top.i >$@
@@ -33,9 +30,10 @@ acu.i: top.i ../include/mvcldrvr.h ../include/mvswdrvr.h ../include/smdrvr.h \
 	cat ../include/smfwcaps.h >> $@
 	cat bottom.i >>$@
 
-acu_wrap.c lowlevel.py: acu.i
+acu_wrap.c aculab/lowlevel.py: acu.i
 	$(SWIG)/swig $(DEFINES) -I$(SWIGLIB) -I$(SWIGLIB)/Python -I../include \
 					-shadow -python $<
+	mv lowlevel.py aculab
 
 %.obj: ../src/%.c
 	$(CXX) -c -I$(PYTHON_INCLUDES) -I../include $(DEFINES) $< -o $@ 
