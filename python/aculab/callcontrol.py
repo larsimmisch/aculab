@@ -2,6 +2,7 @@ import sys
 import getopt
 import lowlevel
 import aculab
+import logging
 from busses import Connection, CTBusConnection, DefaultBus
 from error import AculabError
 from names import event_names
@@ -20,8 +21,9 @@ no_state_change_extended_events = [lowlevel.EV_EXT_FACILITY,
                                    lowlevel.EV_EXT_UUS_SERVICE_REQUEST,
                                    lowlevel.EV_EXT_TRANSFER_INFORMATION]
 
-def foo():
-    print aculab.Bus
+
+log = logging.getLogger('call')
+log_switch = logging.getLogger('switch')
 
 class CallEventDispatcher:
 
@@ -47,7 +49,7 @@ class CallEventDispatcher:
                 return
             
             event.handle = 0
-            event.timeout = 1000
+            event.timeout = 200
 
             rc = lowlevel.call_event(event)
             if rc:
@@ -63,39 +65,35 @@ class CallEventDispatcher:
                 else:
                     ev = event_names[event.state].lower()
                     
-                if hasattr(call.controller, 'mutex'):
-                    mutex = call.controller.mutex
+                mutex = getattr(call.user_data, 'mutex', None)
+                if mutex:
                     mutex.acquire()
-                else:
-                    mutex = None
+
+                mcall = None
+                mcontroller = None
 
                 try:
-                    # let the call handle events first
-                    try:
-                        m = getattr(call, ev)
-                        m()
-                        handled = '(call'
-                    except AttributeError:
-                        if hasattr(call, ev):
-                            raise
-                    except:
-                        raise
+                    mcall = getattr(call, ev, None)
+                    mcontroller = getattr(call.controller, ev, None)
 
+                    # compute description of handlers
+                    if mcontroller and mcall:
+                        handled = '(call, controller)'
+                    elif mcontroller:
+                        handled = '(controller)'
+                    elif mcall:
+                        handled = '(call)'
+                    else:
+                        handled = '(ignored)'
+
+                    log.debug('%s %s %s', call.name, ev, handled)
+
+                    # let the call handle events first
+                    if mcall:
+                        mcall()
                     # pass the event on to the controller
-                    try:
-                        m = getattr(call.controller, ev)
-                        m(call)
-                        if handled:
-                            handled += ', controller)'
-                        else:
-                            handled = '(controller)'
-                    except AttributeError:
-                        if handled:
-                            handled += ')'
-                        if hasattr(call.controller, ev):
-                            raise
-                    except:
-                        raise
+                    if mcontroller:
+                        mcontroller(call, call.user_data)
 
                 finally:
                     # set call.last_event and call.last_extended_event
@@ -110,11 +108,6 @@ class CallEventDispatcher:
 
                     if mutex:
                         mutex.release()
-
-                if self.verbose:
-                    if not handled:
-                        handled = '(ignored)'
-                    print hex(event.handle), ev, handled
 
 
 # The CallHandle class models a call handle, as defined by the Aculab lowlevel,
@@ -141,6 +134,7 @@ class CallHandle:
             raise AculabError(self.switch, 'call_port_2_swdrvr')
             
         self.handle = None
+        self.name = '0x0000'
         self.details = lowlevel.DETAIL_XPARMS()
         # The dispatcher sets the last state changing event after dispatching
         # the event. Which events are deemed state changing is controlled via
@@ -167,10 +161,11 @@ class CallHandle:
             raise AculabError(rc, 'call_openin')
 
         self.handle = inparms.handle
-
-        # print '0x%x' % self.handle
+        self.name = hex(self.handle)
 
         self.dispatcher.add(self)
+
+        log.debug('%s openin()', self.name)
 
     def _outparms(self, destination_address, sending_complete = 1,
                   originating_address = '',
@@ -230,8 +225,12 @@ class CallHandle:
             self.in_handle = self.handle
 
         self.handle = outparms.handle
+        self.name = hex(self.handle)
 
         self.dispatcher.add(self)
+
+        log.debug('%s openout(%s, %d, %s)', self.name, destination_address,
+                  sending_complete, originating_address)
 
     def enquiry(self, destination_address, sending_complete = 1,
                 originating_address = '',
@@ -256,8 +255,12 @@ class CallHandle:
             self.in_handle = self.handle
 
         self.handle = outparms.handle
+        self.name = hex(self.handle)
 
         self.dispatcher.add(self)
+
+        log.debug('%s enquiry(%s, %d, %s)', self.name, destination_address,
+                  sending_complete, originating_address)
 
     def transfer(self, call):
         transfer = lowlevel.TRANSFER_XPARMS()
@@ -267,16 +270,22 @@ class CallHandle:
         rc = lowlevel.call_transfer(transfer)
         if rc:
             raise AculabError(rc, 'call_transfer')
+        
+        log.debug('%s transfer(%s)', self.name, call.name)
 
     def hold(self):
         rc = lowlevel.call_hold(self.handle)
         if rc:
             raise AculabError(rc, 'call_hold')
 
+        log.debug('%s hold()', self.name)
+
     def reconnect(self):
         rc = lowlevel.call_reconnect(self.handle)
         if rc:
             raise AculabError(rc, 'call_reconnect')
+
+        log.debug('%s reconnect()', self.name)
 
     def send_overlap(self, addr, complete = 0):
         overlap = lowlevel.OVERLAP_XPARMS()
@@ -287,6 +296,8 @@ class CallHandle:
         rc = lowlevel.call_send_overlap(overlap)
         if rc:
             raise AculabError(rc, 'call_send_overlap')
+
+        log.debug('%s send_overlap(%s, %d)', self.name, addr, complete)
 
     def listen_to(self, source):
         """source is a tuple of (stream, timeslot).
@@ -304,6 +315,10 @@ class CallHandle:
         rc = lowlevel.sw_set_output(self.switch, output)
         if rc:
             raise AculabError(rc, 'sw_set_output')
+
+        log_switch.debug('%s %d:%d := %d:%d', self.name,
+                         output.ost, output.ots,
+                         output.ist, output.its)
 
         return CTBusConnection(self.switch,
                                (self.details.stream, self.details.ts))
@@ -324,6 +339,10 @@ class CallHandle:
         rc = lowlevel.sw_set_output(self.switch, output)
         if rc:
             raise AculabError(rc, 'sw_set_output')
+
+        log_switch.debug('%s %d:%d := %d:%d', self.name,
+                         output.ost, output.ots,
+                         output.ist, output.its)
 
         return CTBusConnection(self.switch, sink)
 
@@ -400,10 +419,14 @@ class CallHandle:
         if rc:
             raise AculabError(rc, 'call_accept')
 
+        log.debug('%s accept()', self.name)
+
     def incoming_ringing(self):
         rc = lowlevel.call_incoming_ringing(self.handle)
         if rc:
             raise AculabError(rc, 'call_incoming_ringing')
+
+        log.debug('%s incoming_ringing()', self.name)
 
     def disconnect(self, cause = None):
         '''cause may be a CAUSE_XPARMS struct or an int'''
@@ -421,6 +444,8 @@ class CallHandle:
             rc = lowlevel.call_disconnect(xcause)
             if rc:
                 raise AculabError(rc, 'call_disconnect')
+
+        log.debug('%s disconnect(%d)', self.name, xcause.cause)
 
     def release(self, cause = None):
         '''cause may be a CAUSE_XPARMS struct or an int'''
@@ -445,12 +470,16 @@ class CallHandle:
             if rc:
                 raise AculabError(rc, 'call_release')
 
+        log.debug('%s release(%d)', self.name, xcause.cause)
+
         # restore the handle for the inbound call if there is one
         if hasattr(self, 'in_handle'):
             self.handle = self.in_handle
+            self.name = hex(self.handle)
             del self.in_handle
         else:
             self.handle = None
+            self.name = '0x0000'
             
     def ev_incoming_call_det(self):
         self.get_details()
