@@ -26,6 +26,7 @@ class TimerThread(threading.Thread):
         self.timers = []
 
     def add(self, interval, function, args = [], kwargs={}):
+        '''Add a timer after interval in seconds.'''
         t = Timer(interval, function, args, kwargs)
 
         self.mutex.acquire()
@@ -35,14 +36,20 @@ class TimerThread(threading.Thread):
             i = self.timers.index(t)
         finally:
             self.mutex.release()
-        
+
+        # if the new timer is the next, wake up the timer thread to readjust
+        # the wait period
         if i == 0:
             self.event.set()
 
         return t
         
     def cancel(self, timer):
+        '''cancel a timer. Cancelling an expired timer raises a ValueError'''
         self.mutex.acquire()
+
+        # if the deleted timer was the next, wake up the timer thread to
+        # readjust the wait period
         try:
             i = self.timers.index(timer)
             del self.timers[i]
@@ -76,18 +83,24 @@ def _test(id):
     print 'timer', id, 'fired'
 
 if __name__ == '__main__':
-    
+
+    print 'expect 3 timers firing with 1 sec delay between them...'
     timer = TimerThread()
 
     timer.start()
 
+    timer.add(3.0, _test, '3')
+    t = timer.add(2.0, _test, '2')
+    timer.cancel(t)
+    # cancelling a timer twice raises a ValueError
+    try:
+        timer.cancel(t)
+    except ValueError:
+        pass
     t = timer.add(1.0, _test, '1')
     timer.cancel(t)
     timer.add(1.0, _test, '1')    
-    t = timer.add(2.0, _test, '2')
-    timer.cancel(t)
     timer.add(2.0, _test, '2')
-    timer.add(3.0, _test, '3')
 
     for i in range(4):
         time.sleep(1.0)
