@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+dtk = '../dtk111'
+
 from distutils.core import setup,Extension
 
 setup (name = "aculab",
@@ -7,18 +9,15 @@ setup (name = "aculab",
 	   description = "Aculab Python wrapper",
 	   author = "Lars Immisch",
 	   author_email = "lars@ibp.de",
-	   ext_modules = [Extension("aculab._lowlevel", ["acu_wrap.c",
-                                                     "../src/clnt.c",
-                                                     "../src/cllib.c",
-                                                     "../src/common.c",
-                                                     "../src/swnt.c",
-                                                     "../src/swlib.c",
-                                                     "../src/smnt.c",
-                                                     "../src/smlib.c",
-                                                     "../src/smbesp.c",
-                                                     "../src/smfwcaps.c"],
-                                include_dirs = ['../include'],
-                                libraries = ['advapi32'],
-                                define_macros = [('WIN32', None)])],
+	   ext_modules = [Extension("aculab._lowlevel", ["acu.i"],
+                                include_dirs = [dtk + '/call/include',
+                                                dtk + '/switch/include',
+                                                dtk + '/speech/include'],
+                                library_dirs = [dtk + '/call/lib',
+                                                dtk + '/switch/lib',
+                                                dtk + '/speech/lib'],
+                                libraries = ['mvcl', 'mvsw', 'mvsm'],
+                                define_macros = [('UNIX_SYSTEM', None),
+                                                 ('SM_POLL_UNIX', None)])],
        packages = ["aculab"])
 

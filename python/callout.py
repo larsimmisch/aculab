@@ -42,10 +42,8 @@ if __name__ == '__main__':
 
     if not len(args):
         usage()
-
-    calldispatcher = CallEventDispatcher()
     
-    c = Call(controller, calldispatcher, port=port, timeslot=timeslot)
+    c = Call(controller,  port=port, timeslot=timeslot)
     c.openout(args[0], 1, '41')
 
-    calldispatcher.run()
+    CallDispatcher.run()

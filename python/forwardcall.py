@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import sys
 import getopt
 from aculab.error import AculabError
@@ -116,50 +118,46 @@ class Forward:
 class ForwardCallController:
     "controls a single incoming call and its corresponding outgoing call"
 
-    def ev_incoming_call_det(self, call):
+    def ev_incoming_call_det(self, call, model):
         call.user_data = Forward(call)
 
-    def ev_outgoing_ringing(self, call):
-        if call.user_data.incall and call.user_data.outcall:
-            call.user_data.connect()
+    def ev_outgoing_ringing(self, call, model):
+        if model.incall and model.outcall:
+            model.connect()
 
-        call.user_data.incall.incoming_ringing()
+        model.incall.incoming_ringing()
 
-    def ev_call_connected(self, call):
-        if call == call.user_data.incall:
-            call.user_data.connect()
+    def ev_call_connected(self, call, model):
+        if call == model.incall:
+            model.connect()
         else:
-            call.user_data.incall.accept()
+            model.incall.accept()
 
-    def ev_remote_disconnect(self, call):
+    def ev_remote_disconnect(self, call, model):
         # if both calls hang up at the same time, disconnect will be called
         # twice, because the calls are set to None only in ev_idle.
         # This should not matter, however.
 
         # pass on cause values
         cause = call.get_cause()
-        if call == call.user_data.incall:
-            if call.user_data.outcall:
-                call.user_data.outcall.disconnect(cause)
-        elif call == call.user_data.outcall:
-            if call.user_data.incall:
-                call.user_data.incall.disconnect(cause)
+        if call == model.incall:
+            if model.outcall:
+                model.outcall.disconnect(cause)
+        elif call == model.outcall:
+            if model.incall:
+                model.incall.disconnect(cause)
 
         call.disconnect()
 
-    def ev_idle(self, call):
-        if call.user_data:
-            call.user_data.disconnect()
+    def ev_idle(self, call, model):
+        if model:
+            model.disconnect()
         
-            if call == call.user_data.incall:
-                if call.user_data.outcall:
-                    print hex(call.user_data.outcall.handle), \
-                          "disconnecting outgoing call"
-                    call.user_data.outcall.disconnect()            
-            elif call == call.user_data.outcall:
-                if call.user_data.incall:
-                    print hex(call.user_data.incall.handle), \
-                          "disconnecting incoming call"
+            if call == model.incall:
+                if model.outcall:
+                    model.outcall.disconnect()            
+            elif call == model.outcall:
+                if model.incall:
                     call.user_data.incall.disconnect()
                 
             call.user_data = None
@@ -173,6 +171,14 @@ def usage():
     sys.exit(-2)
 
 if __name__ == '__main__':
+    log = logging.getLogger('')
+    log.setLevel(logging.DEBUG)
+    log_formatter = logging.Formatter(
+        '%(asctime)s %(levelname)-5s %(message)s')
+    hdlr = logging.StreamHandler()
+    hdlr.setFormatter(log_formatter)
+    log.addHandler(hdlr)
+
     port = 2
 
     options, args = getopt.getopt(sys.argv[1:], 'p:')
@@ -183,7 +189,6 @@ if __name__ == '__main__':
         else:
             usage()
 
-    dispatcher = CallEventDispatcher()
     controller = ForwardCallController()
 
     bri_ts = (1, 2)
@@ -193,8 +198,8 @@ if __name__ == '__main__':
 
     # we should also look at call_signal_info here, but this
     # hasn't been swigged properly yet
-    calls = [Call(controller, dispatcher, None, 0, t) for t in bri_ts]
-    calls += [Call(controller, dispatcher, None, 8, t) for t in e1_ts]
-    calls += [Call(controller, dispatcher, None, 9, t) for t in e1_ts]
+    calls = [Call(controller, None, 0, t) for t in bri_ts]
+    calls += [Call(controller, None, 8, t) for t in e1_ts]
+    calls += [Call(controller, None, 9, t) for t in e1_ts]
     
-    dispatcher.run()
+    CallDispatcher.run()

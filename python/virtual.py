@@ -36,9 +36,7 @@ if __name__ == '__main__':
         else:
             usage()
 
-    calldispatcher = CallEventDispatcher()
-    
-    c = CallHandle(controller, calldispatcher, port=port, timeslot=-1)
+    c = CallHandle(controller, port=port, timeslot=-1)
     c.openin(cnf=lowlevel.CNF_TSVIRTUAL)
 
-    calldispatcher.run()
+    CallDispatcher.run()

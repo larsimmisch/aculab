@@ -47,9 +47,7 @@ if __name__ == '__main__':
     if not len(args):
         usage()
 
-    calldispatcher = CallEventDispatcher()
-
-    c = CallHandle(controller, calldispatcher, port=port)
+    c = CallHandle(controller, CallDispatcher, port=port)
     openout(c, args[0])
     
-    calldispatcher.run()
+    CallDispatcher.run()
