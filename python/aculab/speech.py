@@ -280,10 +280,9 @@ class PlayJob:
         # f may be a string - if it is, close self.file in done
         if type(f) == type(''):
             self.file = file(f, 'rb')
-            self.auto_close = True
+            self.filename = f
         else:
             self.file = f
-            self.auto_close = False
 
         # read the length of the file
         self.file.seek(0, 2)
@@ -331,11 +330,14 @@ class PlayJob:
         else:
             pos = self.length
 
+        f = self.file
+
         if channel.close_pending:
             reason = 'closed'
-        if self.auto_close:
+        if hasattr(self, 'filename'):
             self.file.close()
             self.file = None
+            f = self.filename
         channel.unlock()
 
         # no locks held - maybe too cautious
@@ -344,7 +346,7 @@ class PlayJob:
 
         channel.lock()
         try:
-            channel.controller.play_done(channel, self.file, reason,
+            channel.controller.play_done(channel, f, reason,
                                          pos, self.user_data)
         finally:
             channel.job_done(self)
@@ -398,10 +400,9 @@ class RecordJob:
         # f may be a string - if it is, close self.file in done
         if type(f) == type(''):
             self.file = file(f, 'wb')
-            self.auto_close = True
+            self.filename = f
         else:
             self.file = f
-            self.auto_close = False
 
         self.buffer = lowlevel.SM_TS_DATA_PARMS()
         self.buffer.allocrecordbuffer()
@@ -468,12 +469,14 @@ class RecordJob:
 
         self.channel.lock()
         channel = self.channel
+        f = self.file
 
         if channel.close_pending:
             reason = 'closed'
-        if self.auto_close:
+        if self.filename:
             self.file.close()
             self.file = None
+            f = self.filename
 
         channel.unlock()
         
@@ -483,10 +486,7 @@ class RecordJob:
 
         channel.lock()
         try:
-            channel.controller.record_done(self,
-                                           self.file,
-                                           reason,
-                                           self.size,
+            channel.controller.record_done(self, f, reason, self.size,
                                            self.user_data)
         finally:
             channel.job_done(self)
