@@ -30,7 +30,9 @@ class IncomingCallController:
         
     def ev_remote_disconnect(self, call):
         call.speech.stop()
+        call.connection.close()
         call.connection = None
+        call.speech.release()
         call.speech = None
         call.disconnect()
 
@@ -49,7 +51,7 @@ class IncomingCallController:
 class RepeatedIncomingCallController(IncomingCallController):
 
     def ev_idle(self, call):
-        call.restart()
+        call.openin()
 
 def usage():
     print 'usage: callin.py [-p <port>] [-m <module>] [-r]'

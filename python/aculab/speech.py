@@ -4,6 +4,7 @@ from busses import CTBusConnection, ProsodyLocalBus, DefaultBus
 from error import AculabError, AculabSpeechError
 import threading
 import os
+import time
 if os.name == 'nt':
     import pywintypes
     import win32api
@@ -46,30 +47,41 @@ class Win32DispatcherThread(threading.Thread):
         
         threading.Thread.__init__(self)
 
+    def update(self):
+        self.mutex.acquire()
+        try:
+            while self.queue:
+                add, handle, method = self.queue.pop(0)
+                if add:
+                    # print 'added 0x%04x' % handle
+                    self.handles[handle] = method
+                else:
+                    # print 'removed 0x%04x' % handle
+                    del self.handles[handle]
+
+        finally:
+            self.mutex.release()
+
+        return self.handles.keys()
+
     def run(self):
         handles = self.handles.keys()
 
         while handles:
-            rc = win32event.WaitForMultipleObjects(handles, 0, -1)
-            if rc == win32event.WAIT_FAILED:
-                raise "WaitForMultipleObjects failed"
-
-            if rc == win32event.WAIT_OBJECT_0:
-                self.mutex.acquire()
-                try:
-                    while self.queue:
-                        add, handle, method = self.queue.pop(0)
-                        if add:
-                            self.handles[handle] = method
-                        else:
-                            del self.handles[handle]
-
-                    handles = self.handles.keys()
-                finally:
-                    self.mutex.release()
+            try:
+                rc = win32event.WaitForMultipleObjects(handles, 0, -1)
+            except win32event.error, e:
+                # 'invalid handle' may occur if an event is deleted
+                # before the update arrives
+                if e[0] == 6:
+                    handles = self.update()
+                    continue
+                else:
+                    raise
                 
+            if rc == win32event.WAIT_OBJECT_0:
+                handles = self.update()
             else:
-                m = None
                 self.mutex.acquire()
                 try:
                     m = self.handles[handles[rc - win32event.WAIT_OBJECT_0]]
@@ -174,7 +186,6 @@ class PollSpeechEventDispatcher(threading.Thread):
 
         while 1:
             active = p.poll()
-            print active
             for a, mode in active:
                 if a == self.pipe[0].fileno():
                     add, fd = marshal.load(self.pipe[0])
@@ -350,33 +361,49 @@ class SpeechChannel:
             if rc:
                 raise AculabSpeechError(rc, 'sm_listen_for')
 
-
     def __del__(self):
-        print '__del__'
-        if hasattr(self, 'event_read'):
-            lowlevel.smd_ev_free(self.event_read)
-        if hasattr(self, 'event_recog'):
-            lowlevel.smd_ev_free(self.event_recog)
-        if hasattr(self, 'event_write'):            
-            lowlevel.smd_ev_free(self.event_write)
-
-        if hasattr(self, 'out_ts'):
-            # attribute out_ts implies attribute module
-            prosodystreams[self.module].free(out_ts)
-
-        if hasattr(self, 'in_ts'):
-            # attribute in_ts implies attribute module
-            prosodystreams[self.module].free(in_ts)
-
-        rc = lowlevel.sm_channel_release(self.channel)
-        if rc:
-            raise AculabSpeechError(rc, 'sm_channel_release')
+        self.release()
 
     def __cmp__(self, other):
         return self.channel.__cmp__(other.channel)
 
     def __hash__(self):
         return self.channel
+
+    def release(self):
+        if hasattr(self, 'event_read') and self.event_read:
+            lowlevel.smd_ev_free(self.event_read)
+            self.event_read = None
+        if hasattr(self, 'event_recog') and self.event_recog:
+            # Remove the recog event from the dispatcher.
+            self.dispatcher.remove(self.event_recog)
+
+            # Deleting the event may trigger
+            # an 'invalid handle' error in the dispatcher due to a race
+            # condition.
+            # This error is caught, however.
+            lowlevel.smd_ev_free(self.event_recog)
+            self.event_recog = None
+        if hasattr(self, 'event_write') and self.event_write:
+            lowlevel.smd_ev_free(self.event_write)
+
+        global prosodystreams
+        if hasattr(self, 'out_ts') and self.out_ts:
+            # attribute out_ts implies attribute module
+            prosodystreams[self.module].free(out_ts)
+            self.out_ts = None
+
+        if hasattr(self, 'in_ts') and self.in_ts:
+            # attribute in_ts implies attribute module
+            prosodystreams[self.module].free(in_ts)
+            self.in_ts = None
+
+        if self.channel:
+            rc = lowlevel.sm_channel_release(self.channel)
+            if rc:
+                raise AculabSpeechError(rc, 'sm_channel_release')
+
+            self.channel = None
 
     def create_event(self, event):
         """event has type SM_CHANNEL_SET_EVENT_PARMS and is modified in place
@@ -597,7 +624,6 @@ class SpeechChannel:
         self.dispatcher.add(self.event_write, self.on_write)
 
     def on_write(self):
-        print "on_write"
         if self.playjob:
             self.fill_play_buffer()
         elif self.digitsjob:
