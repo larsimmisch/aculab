@@ -106,7 +106,7 @@ class IncomingCallController:
         # Proper applications that handle multiple modules 
         # can be more clever here
         global module
-        call.user_data = Glue(self, module)        
+        call.user_data = Glue(self, module, call)
         call.accept()
 
     def ev_call_connected(self, call, user_data):        
