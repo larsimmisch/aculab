@@ -3229,8 +3229,10 @@ extern "C"{
 #endif
 /*-----------------------------------------------*/
 
+#ifndef SWIG
 ACUDLL int            call_free_admin_msg       ( voip_admin_msg * );
 ACUDLL int ACU_WINAPI call_set_default_gk_config( struct default_ras_config * );
+#endif
 ACUDLL int ACU_WINAPI call_init                 ( struct init_xparms * );
 ACUDLL int ACU_WINAPI call_signal_info          ( struct siginfo_xparms * );
 ACUDLL int ACU_WINAPI call_system_info          ( struct sysinfo_xparms * );
@@ -3271,7 +3273,9 @@ ACUDLL int ACU_WINAPI call_watchdog             ( struct watchdog_xparms * );
 ACUDLL int ACU_WINAPI call_l1_stats             ( struct l1_xstats * );
 ACUDLL int ACU_WINAPI call_l2_state             ( struct l2_xstate * );
 ACUDLL int            call_br_l1_stats          ( struct br_l1_xstats * );
+#ifndef SWIG
 ACUDLL int            call_br_l2_state          ( struct br_l2_xstate * );
+#endif
 ACUDLL int ACU_WINAPI call_type                 ( int );
 ACUDLL int ACU_WINAPI call_line                 ( int );
 ACUDLL int ACU_WINAPI call_is_download          ( int );
@@ -3287,6 +3291,7 @@ ACUDLL int ACU_WINAPI call_proceeding           ( struct proceeding_xparms * );
 ACUDLL int ACU_WINAPI call_setup_ack            ( struct setup_ack_xparms * );
 ACUDLL int ACU_WINAPI call_notify               ( struct notify_xparms * );
 ACUDLL int ACU_WINAPI call_dsp_config           ( struct dsp_xparms * );
+#ifndef SWIG
 ACUDLL int ACU_WINAPI call_send_voip_admin_msg  ( struct voip_admin_out_xparms *);
 ACUDLL int ACU_WINAPI call_get_voip_admin_msg   ( struct voip_admin_in_xparms *);
 ACUDLL int ACU_WINAPI call_open_voip_admin_chan ( void );
@@ -3296,6 +3301,7 @@ ACUDLL int ACU_WINAPI call_set_configuration	( struct set_configuration_xparms *
 ACUDLL int ACU_WINAPI call_get_stats            ( struct voip_get_stats_xparms * pdsp );
 ACUDLL int ACU_WINAPI call_set_debug            ( struct set_debug_xparms * pdsp );
 ACUDLL int ACU_WINAPI call_set_system_info      ( struct set_sysinfo_xparms * set_sysinfop, struct sysinfo_xparms * sysinfop);
+#endif
 ACUDLL int ACU_WINAPI xcall_incoming_ringing    ( struct incoming_ringing_xparms * );
 ACUDLL int ACU_WINAPI xcall_accept              ( struct accept_xparms * );
 ACUDLL int ACU_WINAPI xcall_getcause            ( struct disconnect_xparms * );
@@ -3305,8 +3311,9 @@ ACUDLL int ACU_WINAPI xcall_hold                ( struct hold_xparms * );
 ACUDLL int ACU_WINAPI xcall_reconnect           ( struct hold_xparms * );
 ACUDLL int ACU_WINAPI xcall_get_originating_addr( struct get_originating_addr_xparms * );
 ACUDLL int ACU_WINAPI xcall_trace               ( struct trace_xparms * );
+#ifndef SWIG
 ACUDLL int ACU_WINAPI call_codec_config         ( struct codec_xparms * );
-
+#endif
 ACUDLL int            call_endpoint_initialise  ( struct send_spid_xparms * );
 ACUDLL int            call_get_spid             ( struct get_spid_xparms * );
 ACUDLL int            call_send_endpoint_id     ( struct send_endpoint_id_xparms * );
@@ -3372,7 +3379,9 @@ ACUDLL int receive_dpr_event     ( struct dpr_xparms *);
 #endif
 
 ACUDLL int call_tsinfo                  ( struct tsinfo_xparms * );
+#ifndef SWIG
 ACUDLL int call_assoc_net               ( struct acuc_assoc_net_xparms * );
+#endif
 ACUDLL int call_signal_apievent ( struct  signal_apievent_xparms * );
 
 
@@ -3381,8 +3390,10 @@ ACUDLL int call_signal_apievent ( struct  signal_apievent_xparms * );
 
 ACUDLL int  ACU_WINAPI system_init ( void );       /* initialise switch and call driver system */
 ACUDLL void ACU_WINAPI swap_clock  ( int  );       /* change clock sources between cards       */
+#ifndef SWIG
 ACUDLL int             chknet_port ( int );        /* returns a signalling system dependent value */
 ACUDLL int             chknet      ( char * );     /* returns a signalling system dependent value */
+#endif
 ACUDLL void            init_api_reg ( struct api_register *, ACU_LONG );
 
 ACUDLL char * ACU_WINAPI port_2_filename  ( int ); /* select firmware file name to be downloaded */
@@ -3412,6 +3423,7 @@ IOCTL definitions for WINDOWS NT
 
 --*/
 
+#ifndef SWIG
 #if 1
 
 #define GPD_TYPE 40000
@@ -3479,7 +3491,7 @@ typedef struct report_driverversion_parms {
    int ret;
 } ACU_PACK_DIRECTIVE REPORT_DRIVERVERSION_PARMS, *PREPORT_DRIVERVERSION_PARMS;
 
-
+#endif
 #endif
 
 /*----------------- end of file -----------------*/

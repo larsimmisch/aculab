@@ -93,7 +93,7 @@
  *  48  - 127 : f/w specific module control  (no associated channel)
  *  128 - 255 : f/w specific channel control (always an associated channel)
  */
-
+#ifndef SWIG
 #ifndef ACU_DIGITAL
 
 #define SMIO_GENERIC_BASE				0
@@ -185,7 +185,7 @@
 #define SMIO_CHANNEL_IX_DUMP			(int)(SMIO_SUP_GENERIC_BASE+3)
 
 #endif
-
+#endif
 
 /*
  * Maximum size of block copied to driver i/o space in i/o call.
@@ -482,6 +482,7 @@ typedef union {
 
 
 #ifdef __NT__
+#ifndef SWIG
 	#define kSMDNTDevControlName 			"MVIP$SMC"
 	#define kSMDNTDevControlWideName 		L"MVIP$SMC"
 	#define kSMDNTDevBasisName 	 			"MVIP$SM"
@@ -516,6 +517,7 @@ typedef union {
 
 	#define SM_IOCTL \
 		CTL_CODE ( GPD_TYPE, 0x904, METHOD_BUFFERED, FILE_ANY_ACCESS )
+#endif
 #endif
 
 #ifdef UNIX_SYSTEM

@@ -37,9 +37,11 @@ tSMDevHandle smd_open_chnl_dev(tSMChannelId);
 
 void smd_close_chnl_dev(tSMDevHandle);
 
+#ifndef SWIG
 int  smd_ioctl_dev_generic(tSM_INT, SMIOCTLU *, tSMDevHandle, tSM_INT );
 
 int smd_ioctl_dev_fwapi( tSM_INT, SMIOCTLU*, tSMDevHandle, tSM_INT, tSM_INT, tSM_INT);
+#endif
 
 tSMFileHandle smd_file_open( char* );
 

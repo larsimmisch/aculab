@@ -852,6 +852,8 @@ typedef union pioctl
 #define kSWDrvrCtlCmdAbortEventWait	1
 #define kSWDrvrCtlCmdIOCTLEventWait	2
 
+#ifndef SWIG
+
 typedef struct swmsgblk
 {
     int  		status;
@@ -871,6 +873,8 @@ typedef struct sxntioctl {
 
 #define SX_IOCTL \
 	CTL_CODE ( GPD_TYPE, 0x904, METHOD_BUFFERED, FILE_ANY_ACCESS )
+
+#endif
 
 #ifndef COMPILE_DRIVER
 
