@@ -1,3 +1,4 @@
+import sys
 import lowlevel
 from error import AculabError
 
@@ -78,13 +79,20 @@ class H100(CTBus):
             for ts in range(128):
                 self.slots.append((st, ts))
 
+class ProsodyLocal(CTBus):
+    def __init__(self, module):
+        self.slots = []
+        for st in range(48 + module * 2, 50 + module * 2):
+            for ts in range(32):
+                self.slots.append((st, ts))
+
 def autodetect():
     """autodetects currently running clocked bus and returns
     a suitable CTBus subclass"""
     
     n = lowlevel.sw_get_drvrs()
 
-    buses = 0xffffffff
+    buses = 0
     
     # first, determine which busses are available on all cards
     for i in range(n):
@@ -93,7 +101,7 @@ def autodetect():
         if rc:
             raise AculabError(rc, 'sw_mode_switch')
 
-        buses &= mode.ct_buses
+        buses |= mode.ct_buses
 
     # check if any card is sourced from MVIP or SCBus or drives SCBus
     for i in range(n):
@@ -102,19 +110,19 @@ def autodetect():
         if rc:
             raise AculabError(rc, 'sw_query_clock_control')
 
-        if clock.last_clock_mode & lowlevel.CLOCK_REF_MVIP:
+        if clock.last_clock_mode == lowlevel.CLOCK_REF_MVIP:
             return MVIP()
-        elif clock.last_clock_mode & (lowlevel.CLOCK_REF_SCBUS
-                                      | lowlevel.DRIVE_SCBUS):
+        elif clock.last_clock_mode & lowlevel.DRIVE_SCBUS or \
+                 clock.last_clock_mode == lowlevel.CLOCK_REF_SCBUS:
             return SCBus()
 
-    if busses & (1 << SWMODE_CTBUS_H100):
+    if buses & (1 << lowlevel.SWMODE_CTBUS_H100):
         return H100()
 
-    if busses & (1 << SWMODE_CTBUS_MVIP):
+    if buses & (1 << lowlevel.SWMODE_CTBUS_MVIP):
         return MVIP()
 
-    if busses & (1 << SWMODE_CTBUS_SCBUS):
+    if buses & (1 << lowlevel.SWMODE_CTBUS_SCBUS):
         return SCBus()
     
     return None

@@ -26,8 +26,8 @@ class IncomingCallController:
                              call.speak_to(call.timeslots[1]),
                              call.speech.listen_to(call.timeslots[1]) ]
         
-        call.speech.play('startrek.al')
-        # call.speech.digits('12345')
+        call.speech.play('../../menu.al')
+        # call.speech.digits('123456')
         # call.speech.record('recording.al', 90000)
         
     def ev_remote_disconnect(self, call):
@@ -53,22 +53,24 @@ class RepeatedIncomingCallController(IncomingCallController):
         call.restart()
 
 def usage():
-    print 'usage: callin.py [-p <port>] [-r]'
+    print 'usage: callin.py [-p <port>] [-m <module>] [-r]'
     sys.exit(-2)
 
 if __name__ == '__main__':
 
     port = 0
+    module = 0
     controller = IncomingCallController()
 
     bus = autodetect()
-    # print bus
 
-    options, args = getopt.getopt(sys.argv[1:], 'p:rs')
+    options, args = getopt.getopt(sys.argv[1:], 'p:rsm:')
 
     for o, a in options:
         if o == '-p':
             port = int(a)
+        elif o == '-m':
+            module = int(a)
         elif o == '-r':
             controller = RepeatedIncomingCallController()
         elif o == '-s':
@@ -83,7 +85,7 @@ if __name__ == '__main__':
     calldispatcher = CallEventDispatcher()
 
     call = Call(controller, calldispatcher, port)
-    call.speech = SpeechChannel(controller, speechdispatcher)
+    call.speech = SpeechChannel(controller, speechdispatcher, 0)
     call.timeslots = (bus.allocate(), bus.allocate())
 
     speechdispatcher.start()

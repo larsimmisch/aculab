@@ -50,6 +50,22 @@ GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 		free(self->data);
 	}
 
+	void setdata(PyObject *s) {
+		if (!PyString_Check(s)) {
+	    	PyErr_SetString(PyExc_TypeError,"Expected a string");
+			return;
+		}
+		if (PyString_GET_SIZE(s) > kSMMaxReplayDataBufferSize)
+		{
+	    	PyErr_SetString(PyExc_ValueError, 
+							"max size for name.data exceeded");
+			return;
+		}
+		self->length = PyString_GET_SIZE(s);
+		self->data = PyString_AS_STRING(s);
+	}
+	
+
 	PyObject *getdata() {
 		return PyBuffer_FromMemory(self->data, self->length);
 	}

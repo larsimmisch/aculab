@@ -1,7 +1,7 @@
 import sys
 import lowlevel
-from busses import CTBusConnection
-from error import AculabSpeechError
+from busses import CTBusConnection, ProsodyLocal
+from error import AculabError, AculabSpeechError
 import threading
 import os
 if os.name == 'nt':
@@ -12,7 +12,7 @@ else:
     import select
 
 __all__ = ['SpeechEventDispatcher', 'PlayJob', 'RecordJob',
-           'DigitsJob', 'SpeechConnection', 'SpeechChannel']
+           'DigitsJob', 'SpeechConnection', 'SpeechChannel', 'version']
 
 # this class is only needed on Windows
 class Win32DispatcherThread(threading.Thread):
@@ -149,6 +149,7 @@ class SpeechChannel:
         self.signaljob = None
 
         if module != -1:
+            self.module = module
             alloc = lowlevel.SM_CHANNEL_ALLOC_PLACED_PARMS();
 
             alloc.type = lowlevel.kSMChannelTypeFullDuplex;
@@ -175,30 +176,81 @@ class SpeechChannel:
         if rc:
             raise AculabSpeechError(rc, 'sm_channel_info')
 
-        listen_for = lowlevel.SM_LISTEN_FOR_PARMS()
-        listen_for.channel = self.channel
-        listen_for.tone_detection_mode = \
-                                   lowlevel.kSMToneLenDetectionMinDuration64;
-        listen_for.map_tones_to_digits = lowlevel.kSMDTMFToneSetDigitMapping;
-
-        rc = lowlevel.sm_listen_for(listen_for)
-        if rc:
-            raise AculabSpeechError(rc, 'sm_listen_for')
+        # workaround for bug in TiNG
+        if version >= 2:
+            self.info.card = 0
 
         # initialise our events
         self.event_read = self.set_event(lowlevel.kSMEventTypeReadData)
-        self.event_recog = self.set_event(lowlevel.kSMEventTypeRecog)
         self.event_write = self.set_event(lowlevel.kSMEventTypeWriteData);
+        self.event_recog = self.set_event(lowlevel.kSMEventTypeRecog)
 
         # add them to the dispatcher
         self.dispatcher.add(self.event_read, self.on_read)
-        self.dispatcher.add(self.event_recog, self.on_recog)
         self.dispatcher.add(self.event_write, self.on_write)
-            
+        self.dispatcher.add(self.event_recog, self.on_recog)
+
+        # switch to local timeslots for TiNG
+        if self.info.ost == -1:
+            self.out_ts = prosodystreams[module].allocate()
+            self.info.ost, self.info.ots = self.out_ts
+
+            output = lowlevel.SM_SWITCH_CHANNEL_PARMS()
+
+            output.channel = self.channel
+            output.st, output.ts = self.out_ts
+
+            rc = lowlevel.sm_switch_channel_output(output)
+            if (rc):
+                raise AculabSpeechError(rc, 'sm_switch_channel_output')
+
+            self.out_connection = SpeechConnection(self.channel)
+
+
+        if self.info.ist == -1:
+            self.in_ts = prosodystreams[module].allocate()
+            self.info.ist, self.info.its = self.in_ts
+
+            input = lowlevel.SM_SWITCH_CHANNEL_PARMS()
+
+            input.channel = self.channel
+            input.st, input.ts = self.in_ts
+
+            rc = lowlevel.sm_switch_channel_input(input)
+            if (rc):
+                raise AculabSpeechError(rc, 'sm_switch_channel_input')
+
+            self.in_connection = SpeechConnection(self.channel)
+
+        # don't do sm_listen_for for TiNG
+        if version[0] < 2:
+            listen_for = lowlevel.SM_LISTEN_FOR_PARMS()
+            listen_for.channel = self.channel
+            listen_for.tone_detection_mode = \
+                                    lowlevel.kSMToneLenDetectionMinDuration40;
+            listen_for.map_tones_to_digits = \
+                                           lowlevel.kSMDTMFToneSetDigitMapping;
+            rc = lowlevel.sm_listen_for(listen_for)
+            if rc:
+                raise AculabSpeechError(rc, 'sm_listen_for')
+
+
     def __del__(self):
-        lowlevel.smd_ev_free(self.event_read)
-        lowlevel.smd_ev_free(self.event_recog)
-        lowlevel.smd_ev_free(self.event_write)
+        print '__del__'
+        if hasattr(self, 'event_read'):
+            lowlevel.smd_ev_free(self.event_read)
+        if hasattr(self, 'event_recog'):
+            lowlevel.smd_ev_free(self.event_recog)
+        if hasattr(self, 'event_write'):            
+            lowlevel.smd_ev_free(self.event_write)
+
+        if hasattr(self, 'out_ts'):
+            # attribute out_ts implies attribute module
+            prosodystreams[self.module].free(out_ts)
+
+        if hasattr(self, 'in_ts'):
+            # attribute in_ts implies attribute module
+            prosodystreams[self.module].free(in_ts)
 
         rc = lowlevel.sm_channel_release(self.channel)
         if rc:
@@ -237,15 +289,15 @@ class SpeechChannel:
     def set_event(self, type):
         event = lowlevel.SM_CHANNEL_SET_EVENT_PARMS()
 
-        event.channel = self.channel;
-        event.issue_events = lowlevel.kSMChannelSpecificEvent;
-        event.event_type = type;
+        event.channel = self.channel
+        event.issue_events = lowlevel.kSMChannelSpecificEvent
+        event.event_type = type
         
         handle = self.create_event(event)
         
-        rc = lowlevel.sm_channel_set_event(event);
+        rc = lowlevel.sm_channel_set_event(event)
         if rc:
-            lowlevel.smd_ev_free(handle);
+            lowlevel.smd_ev_free(handle)
             raise AculabSpeechError(rc, 'sm_channel_set_event')
 
         return handle
@@ -257,12 +309,12 @@ class SpeechChannel:
             input = lowlevel.SM_SWITCH_CHANNEL_PARMS()
 
             input.channel = self.channel
-            input.st = source[0]
-            input.ts = source[1]
+            input.st, input.ts = source
 
             rc = lowlevel.sm_switch_channel_input(input)
             if (rc):
-                raise AculabSpeechError(rc, 'sm_switch_channel_input')
+                raise AculabSpeechError(rc, 'sm_switch_channel_input(%d:%d)' %
+                                        (input.st, input.ts))
 
             return SpeechConnection(self.channel)
         
@@ -271,12 +323,13 @@ class SpeechChannel:
         output.ost = self.info.ist		# sink
         output.ots = self.info.its
         output.mode = lowlevel.CONNECT_MODE
-        output.ist = source[0]
-        output.its = source[1]
+        output.ist, output.its = source
             
         rc = lowlevel.sw_set_output(self.info.card, output)
         if (rc):
-            raise AculabSpeechError(rc, 'sw_set_output')
+            raise AculabError(rc, 'sw_set_output(%d, %d:%d := %d:%d)' %
+                              (self.info.card, output.ost, output.ots,
+                               output.ist, output.its))
 
         return CTBusConnection(self.info.card, (self.info.ist, self.info.its))
 
@@ -287,26 +340,28 @@ class SpeechChannel:
             output = lowlevel.SM_SWITCH_CHANNEL_PARMS()
 
             output.channel = self.channel
-            output.st = sink[0]
-            output.ts = sink[1]
+            output.st, output.ts = sink
 
             rc = lowlevel.sm_switch_channel_output(output)
             if rc:
-                return AculabSpeechError(rc, 'sm_switch_channel_output')
+                return AculabSpeechError(rc,
+                                         'sm_switch_channel_output(%d:%d)' %
+                                         (output.st, output.ts))
 
             return SpeechConnection(self.channel)
         
         output = lowlevel.OUTPUT_PARMS()
 
-        output.ost = sink[0]                     # sink
-        output.ots = sink[1]
+        output.ost, output.ots = sink       # sink
         output.mode = lowlevel.CONNECT_MODE
         output.ist = self.info.ost			# source
         output.its = self.info.ots
 
         rc = lowlevel.sw_set_output(self.info.card, output)
         if rc:
-            return AculabSpeechError(rc, 'sw_set_output')
+            raise AculabError(rc, 'sw_set_output(%d, %d:%d := %d:%d)' %
+                              (self.info.card, output.ost, output.ots,
+                               output.ist, output.its))
 
         return CTBusConnection(self.info.card, sink)
 
@@ -368,15 +423,14 @@ class SpeechChannel:
             elif status.status != lowlevel.kSMReplayStatusCompleteData:
                 data = self.playjob.buffer
                 data.channel = self.channel
-                data.data = self.playjob.file.read(
-                    lowlevel.kSMMaxReplayDataBufferSize)
-                data.length = len(data.data)
+                data.setdata(self.playjob.file.read(
+                    lowlevel.kSMMaxReplayDataBufferSize))
 
                 rc = lowlevel.sm_put_replay_data(data)
                 if rc:
                     raise AculabSpeechError(rc, 'sm_put_replay_data')
 
-    def digits(self, digits, inter_digit_delay = 0, digit_duration = 0,
+    def digits(self, digits, inter_digit_delay = 32, digit_duration = 64,
                token = None):
 
         self.digitsjob = DigitsJob(digits)
@@ -394,6 +448,7 @@ class SpeechChannel:
             raise AculabSpeechError(rc, 'sm_play_digits')
 
     def on_write(self):
+
         if self.playjob:
             self.fill_play_buffer()
         elif self.digitsjob:
@@ -404,13 +459,15 @@ class SpeechChannel:
             if rc:
                 raise AculabSpeechError(rc, 'sm_play_digits_status')
 
-            if hasattr(self.controller, 'mutex'):
-                self.controller.mutex.acquire()
+            if status.status == lowlevel.kSMPlayDigitsStatusComplete:
 
-            try:
-                self.controller.digits_done(self, self.digitsjob.token)
-            finally:
-                self.digitsjob = None
+                if hasattr(self.controller, 'mutex'):
+                    self.controller.mutex.acquire()
+
+                try:
+                    self.controller.digits_done(self, self.digitsjob.token)
+                finally:
+                    self.digitsjob = None
 
                 # release mutex
                 if hasattr(self.controller, 'mutex'):
@@ -535,3 +592,19 @@ class SpeechChannel:
     def stop(self):
         self.stop_play()
         self.stop_record()
+
+driver_info = lowlevel.SM_DRIVER_INFO_PARMS()
+lowlevel.sm_get_driver_info(driver_info)
+version = (driver_info.major, driver_info.minor)
+
+if version[0] >= 2:
+    prosodystreams = []
+
+    cards = lowlevel.sm_get_cards()
+    for i in range(cards):
+        card_info = lowlevel.SM_CARD_INFO_PARMS()
+        card_info.card = i
+        lowlevel.sm_get_card_info(card_info)
+        for j in range(card_info.module_count):
+            prosodystreams.append(ProsodyLocal(j))
+    

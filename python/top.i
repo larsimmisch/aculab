@@ -2,13 +2,8 @@
 %{
 #include "mvcldrvr.h"
 #include "mvswdrvr.h"
-#include "smport.h"
-#ifndef WIN32
-#include "smosintf.h"
-#endif
 #include "smdrvr.h"
 #include "smbesp.h"
-#include "smfwcaps.h"
 
 /*
   Macro to create a SWIG-compatible pointer-type string from a base type
@@ -26,11 +21,12 @@
 }
 %enddef
 
-/* This list was manually created from all structures that:
+/* This list was manually created (for version 5.10.0) from all structures 
+   that:
    - have a timeout member
    - are used in a function call
 
-   It might become incomplete in future versions
+   It might become incomplete in future versions.
 */
 BLOCKING(call_event)
 BLOCKING(call_state)
@@ -44,6 +40,18 @@ BLOCKING(dpns_transit_details)
 BLOCKING(dpns_set_l2_ch)
 BLOCKING(dpns_l2_state)
 BLOCKING(dpns_watchdog)
+
+/* Functions that are in Aculab's headers, but not implemented.
+
+  In other words, ignore the cruft.
+*/
+%ignore chknet_port;
+%ignore chknet;
+%ignore call_assoc_net;
+%ignore call_l1_stats;
+%ignore call_l2_state;
+%ignore call_br_l1_stats;
+%ignore call_br_l2_state;
 
 #ifdef WIN32
 %typemap(python,in) tSMEventId {
