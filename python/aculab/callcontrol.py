@@ -137,7 +137,8 @@ class Call:
             raise AculabError(rc, 'call_send_overlap')
 
     def listen_to(self, sink, source):
-        "sink and source are tuples of timeslots"
+        """sink and source are tuples of timeslots.
+           returns the tuple (switch, sink)."""
         output = lowlevel.OUTPUT_PARMS()
         output.ost = sink[0]
         output.ots = sink[1]
@@ -154,6 +155,8 @@ class Call:
         if rc:
             raise AculabError(rc, 'sw_set_output')
 
+        return (sw, sink)
+    
     def disable(self, source):
         output = lowlevel.OUTPUT_PARMS()
         output.ost = source[0]
@@ -164,8 +167,7 @@ class Call:
 
         rc = lowlevel.sw_set_output(sw, output)
         if rc:
-            raise AculabError(rc, 'sw_set_output')
-        
+            raise AculabError(rc, 'sw_set_output')        
 
     def get_details(self):
         self.details = lowlevel.DETAIL_XPARMS()

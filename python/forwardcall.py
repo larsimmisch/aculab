@@ -11,12 +11,12 @@ class ForwardCallController:
     "controls a single incoming call and its corresponding outgoing call"
 
     def __init__(self):
-        self.slots = None
-        self.in_slot = None
-        self.out_slot = None
         self.incall = None
         self.outcall = None
+        self.in_slot = None
+        self.out_slot = None
         self.saru_slot = None
+        self.connections = []
 
     def on_details(self):
         d = self.incall.details
@@ -44,39 +44,42 @@ class ForwardCallController:
 
                 switch = lowlevel.call_port_2_swdrvr(1)
 
-                self.slots = [mvip.allocate()]
+                slot = mvip.allocate()
                 
                 self.in_slot = (self.incall.details.stream,
                                 self.incall.details.ts)
 
-                self.incall.listen_to(self.slots[0], self.in_slot)
-                mvip.listen_to(switch, self.saru_slot,
-                               mvip.invert(self.slots[0]))
+                c = [self.incall.listen_to(slot, self.in_slot),
+                     mvip.listen_to(switch, self.saru_slot, mvip.invert(slot))]
+
+                self.connections.append(c)
+                
             else:
                 self.outcall = Call(self, int(d.destination_addr[0]),
                                     d.destination_addr)
 
     def connect(self):
         if not self.saru_slot:
-            self.slots = [mvip.allocate(), mvip.allocate()]
+            slots = [mvip.allocate(), mvip.allocate()]
 
             self.in_slot = (self.incall.details.stream, self.incall.details.ts)
             self.out_slot = (self.outcall.details.stream,
                              self.outcall.details.ts)
 
-            self.incall.listen_to(self.slots[0], self.in_slot)
-            self.outcall.listen_to(self.out_slot, mvip.invert(self.slots[0]))
-            self.outcall.listen_to(self.slots[1], self.out_slot)
-            self.incall.listen_to(self.in_slot, mvip.invert(self.slots[1]))
+            c = [self.incall.listen_to(slots[0], self.in_slot),
+                 self.outcall.listen_to(self.out_slot, mvip.invert(slots[0])),
+                 self.outcall.listen_to(slots[1], self.out_slot),
+                 self.incall.listen_to(self.in_slot, mvip.invert(slots[1]))]
+
+            self.connections.append(c)
 
     def disconnect(self):
-        if not self.slots:
-            return
+        for c in self.connections:
+            mvip.disable(c[0], c[1])
+            if c[1][0] < 16:
+                mvip.free(c[1])
 
-        for s in self.slots:
-            mvip.free(s)
-
-        self.slots = None
+        self.connections = []
         self.in_slot = None
         self.out_slot = None
         self.saru_slot = None

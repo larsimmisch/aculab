@@ -10,7 +10,8 @@ class CTBus:
         self.slots.append(slot)
 
     def listen_to(self, switch, sink, source):
-        "sink and source are tuples of timeslots"
+        """sink and source are tuples of timeslots.
+           returns the tuple (switch, sink)."""
         output = lowlevel.OUTPUT_PARMS()
         output.ost = sink[0]
         output.ots = sink[1]
@@ -20,6 +21,18 @@ class CTBus:
 
         print "%d: %d:%d := %d:%d" % (switch, sink[0], sink[1],
                                       source[0], source[1])
+
+        rc = lowlevel.sw_set_output(switch, output)
+        if rc:
+            raise AculabError(rc, 'sw_set_output')
+
+        return (switch, sink)
+
+    def disable(self, switch, source):
+        output = lowlevel.OUTPUT_PARMS()
+        output.ost = source[0]
+        output.ots = source[1]
+        output.mode = lowlevel.DISABLE_MODE
 
         rc = lowlevel.sw_set_output(switch, output)
         if rc:

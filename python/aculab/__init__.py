@@ -1,1 +1,2 @@
-__all__ = ['lowlevelc', 'lowlevel', 'names', 'error', 'callcontrol', 'speech']
+__all__ = ['lowlevelc', 'lowlevel', 'names', 'error',
+           'busses', 'callcontrol', 'speech']
