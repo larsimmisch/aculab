@@ -17,12 +17,33 @@
 
 %}
 
-/* This allows to execute Python code during the function call. */
-%exception {
+/* Allows to execute Python code during function calls */
+%define BLOCKING(name) 
+%exception name {
 	PyThreadState *tstate = PyEval_SaveThread();
 	$function
 	PyEval_RestoreThread(tstate);
 }
+%enddef
+
+/* This list was manually created from all structures that:
+   - have a timeout member
+   - are used in a function call
+
+   It might become incomplete in future versions
+*/
+BLOCKING(call_event)
+BLOCKING(call_state)
+BLOCKING(call_details)
+BLOCKING(call_send_q921)
+BLOCKING(call_get_q921)
+BLOCKING(call_watchdog)
+BLOCKING(dpns_call_details)
+BLOCKING(dpns_send_transit)
+BLOCKING(dpns_transit_details)
+BLOCKING(dpns_set_l2_ch)
+BLOCKING(dpns_l2_state)
+BLOCKING(dpns_watchdog)
 
 #ifdef WIN32
 %typemap(python,in) tSMEventId {

@@ -21,17 +21,15 @@
 	    	PyErr_SetString(PyExc_TypeError,"Expected a string");
 			return;
 		}
-		self->length = PyString_GET_SIZE(s);
-		if (self->length > maxsize)
+		if (PyString_GET_SIZE(s) > maxsize)
 		{
-			printf("boohoo\n");
-	    	PyErr_Format(PyExc_ValueError, "max size(%d) exceeded",
-						 maxsize);
+	    	PyErr_SetString(PyExc_ValueError, 
+							"max size for name.data exceeded");
 			return;
 		}
+		self->length = PyString_GET_SIZE(s);
 		memcpy(self->data, PyString_AS_STRING(s), self->length);
 	}
-
 };
 %enddef
 
@@ -57,3 +55,5 @@ GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 	}
 }
 
+%init %{
+%}
