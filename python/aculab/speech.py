@@ -269,9 +269,9 @@ else:
 class PlayJob:
 
     def __init__(self, channel, f, agc = 0,
-                 speed = 0, volume = 0, user_data = None):
+                 speed = 0, volume = 0, job_data = None):
         self.channel = channel
-        self.user_data = user_data
+        self.job_data = job_data
         self.position = 0
         self.agc = agc
         self.speed = speed
@@ -347,7 +347,7 @@ class PlayJob:
         channel.lock()
         try:
             channel.controller.play_done(channel, f, reason,
-                                         pos, self.user_data)
+                                         pos, self.job_data)
         finally:
             channel.job_done(self)
             channel.unlock()
@@ -394,7 +394,7 @@ class RecordJob:
     
     def __init__(self, channel, f, max_octets = 0,
                  max_elapsed_time = 0, max_silence = 0, elimination = 0,
-                 agc = 0, volume = 0, user_data = None):
+                 agc = 0, volume = 0, job_data = None):
 
         self.channel = channel
         # f may be a string - if it is, close self.file in done
@@ -414,7 +414,7 @@ class RecordJob:
         self.elimination = elimination
         self.agc = agc
         self.volume = volume
-        self.user_data = user_data
+        self.job_data = job_data
 
     def start(self):
         record = lowlevel.SM_RECORD_PARMS()
@@ -487,7 +487,7 @@ class RecordJob:
         channel.lock()
         try:
             channel.controller.record_done(self, f, reason, self.size,
-                                           self.user_data)
+                                           self.job_data)
         finally:
             channel.job_done(self)
             channel.unlock()
@@ -535,12 +535,13 @@ class RecordJob:
 class DigitsJob:
     
     def __init__(self, channel, digits, inter_digit_delay = 32,
-                 digit_duration = 64, user_data = None):
+                 digit_duration = 64, job_data = None):
         self.channel = channel
         self.digits = digits
         self.inter_digit_delay = inter_digit_delay
         self.digit_duration = digit_duration
         self.user_data = user_data
+        self.job_data = None
         self.stopped = False
 
     def start(self):
@@ -588,7 +589,9 @@ class DigitsJob:
                       self.channel.name, reason)
             self.channel.lock()
             try:
-                self.channel.controller.digits_done(self, reason, self.user_data)
+                self.channel.controller.digits_done(self, reason,
+                                                    self.user_data,
+                                                    self.job_data)
             finally:
                 self.channel.job_done(self)
                 self.channel.unlock()
@@ -641,9 +644,9 @@ class SpeechChannel:
         dispatcher.
 
         Controllers must implement play_done(channel, file, reason, position,
-        user_data), dtmf(channel, digit, user_data),
-        record_done(channel, file, reason, size, user_data) and
-        digits_done(channel, reason, user_data).
+        job_data), dtmf(channel, digit),
+        record_done(channel, file, reason, size, job_data) and
+        digits_done(channel, reason, job_data).
         Reason is normally 'stopped', 'closed' or '' (for normal termination).
         For record_done(), reason may also be 'silence' or 'timeout'.
 
@@ -965,33 +968,32 @@ class SpeechChannel:
             self.job = job
             job.start()
     
-    def play(self, file, volume = 0, agc = 0, speed = 0, user_data = None):
+    def play(self, file, volume = 0, agc = 0, speed = 0, job_data = None):
         """Play an alaw file asynchronously.
         user_data is passed back in play_done"""
 
-        self.job = PlayJob(self, file, agc, volume, speed,
-                           user_data)
+        self.job = PlayJob(self, file, agc, volume, speed, job_data)
 
         self.job.start()
 
     def record(self, file, max_octets = 0,
                max_elapsed_time = 0, max_silence = 0, elimination = 0,
-               agc = 0, volume = 0, user_data = None):
+               agc = 0, volume = 0, job_data = None):
         """Record an alaw file asynchronously.
         user_data is passed back in record_done"""
 
         self.job = RecordJob(self, file, max_octets,
                              max_elapsed_time, max_silence, elimination,
-                             agc, volume, user_data)
+                             agc, volume, job_data)
 
         self.job.start()
 
     def digits(self, digits, inter_digit_delay = 32, digit_duration = 64,
-               user_data = None):
+               job_data = None):
         """Send a string of DTMF digits asynchronously"""
 
         self.job = DigitsJob(self, digits, inter_digit_delay,
-                             digit_duration, user_data)
+                             digit_duration, job_data)
 
         self.job.start()
 
@@ -1012,8 +1014,7 @@ class SpeechChannel:
 
                 self.lock()
                 try:
-                    self.controller.dtmf(self, chr(recog.param0),
-                                         self.user_data)
+                    self.controller.dtmf(self, chr(recog.param0))
                 finally:
                     self.unlock()
             

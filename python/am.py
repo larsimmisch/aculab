@@ -14,7 +14,6 @@ from aculab.busses import DefaultBus
 class AnsweringMachine:
 
     def __init__(self, call = None, speech = None, connection = None):
-        self.mutex = threading.RLock()
         self.call = call
         self.speech = speech
         self.connection = connection
@@ -29,43 +28,44 @@ class AnsweringMachine:
 
 class IncomingCallController:
 
-    def ev_incoming_call_det(self, call, model):
+    def ev_incoming_call_det(self, call, user_data):
         log.debug('%s stream: %d timeslot: %d',
                   call.name, call.details.stream, call.details.ts)
 
         global module
-        speech = SpeechChannel(self, module)
+        speech = SpeechChannel(self, module, user_data=user_data)
 
         call.user_data = AnsweringMachine(call, speech,
                                           call.connect(speech))
 
         call.accept()
 
-    def ev_call_connected(self, call, model):        
-        model.speech.play('greeting.al')
+    def ev_call_connected(self, call, user_data):        
+        user_data.speech.play('greeting.al')
         
-    def ev_remote_disconnect(self, call, model):
+    def ev_remote_disconnect(self, call, user_data):
         call.disconnect()
 
-    def ev_idle(self, call, model):
-        model.close()
+    def ev_idle(self, call, user_data):
+        user_data.close()
         call.user_data = None
 
-    def play_done(self, f, channel, reason, position, model):
-        model.record(os.tmpfile(), 90000)
+    def play_done(self, f, channel, reason, position, job_data):
+        t = os.tmpfile()
+        channel.record(t, 90000)
 
-    def record_done(self, f, channel, reason, position, model):
+    def record_done(self, f, channel, reason, position, job_data):
         f.close()
     
-    def digits_done(self, channel, model):
+    def digits_done(self, channel, user_data):
         pass
     
-    def dtmf(self, channel, digit, model):
+    def dtmf(self, channel, digit, user_data):
         print 'got DTMF:', digit
 
 class RepeatedIncomingCallController(IncomingCallController):
 
-    def ev_idle(self, call, model):
+    def ev_idle(self, call, user_data):
         call.openin()
 
 def usage():

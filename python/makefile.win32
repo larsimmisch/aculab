@@ -5,9 +5,9 @@ DEFINES := -DWIN32
 
 # check for our standard locations of SWIG and Python
 
-SWIG := $(dir $(strip $(wildcard c:/swig-1.3.20/swig.exe) \
-                      $(wildcard d:/swig-1.3.20/swig.exe) \
-                      $(wildcard e:/swig-1.3.20/swig.exe)))
+SWIG := $(dir $(strip $(wildcard c:/swig-1.3.21/swig.exe) \
+                      $(wildcard d:/swig-1.3.21/swig.exe) \
+                      $(wildcard e:/swig-1.3.21/swig.exe)))
 SWIGLIB := $(SWIG)Lib
 
 PYTHON := $(dir $(strip $(wildcard c:/python22/python.exe) \
@@ -42,7 +42,7 @@ acu.i: top.i ../include/mvcldrvr.h ../include/mvswdrvr.h ../include/smdrvr.h \
 
 acu_wrap.c aculab/lowlevel.py: acu.i
 	$(SWIG)swig $(DEFINES) -I$(SWIGLIB) -I$(SWIGLIB)/Python -I../include \
-					-shadow -python $<
+		-modern -shadow -python $<
 	mv lowlevel.py aculab
 
 %.obj: ../src/%.c
