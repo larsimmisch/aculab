@@ -312,6 +312,36 @@ class CallHandle:
             rc = lowlevel.call_disconnect(xcause)
             if rc:
                 raise AculabError(rc, 'call_disconnect')
+
+    def release(self, cause = None):
+        '''cause may be a CAUSE_XPARMS struct or an int'''
+
+        self.dispatcher.remove(self)
+
+        # reset details
+        self.details = lowlevel.DETAIL_XPARMS()
+
+        if self.handle:
+            if cause is None:
+                xcause = lowlevel.CAUSE_XPARMS()
+            elif type(cause) == type(0):
+                xcause = lowlevel.CAUSE_XPARMS()
+                xcause.cause = cause
+            else:
+                xcause = cause
+
+            xcause.handle = self.handle
+            
+            rc = lowlevel.call_release(xcause)
+            if rc:
+                raise AculabError(rc, 'call_release')
+
+        # restore the handle for the inbound call if there is one
+        if hasattr(self, 'in_handle'):
+            self.handle = self.in_handle
+            del self.in_handle
+        else:
+            self.handle = None
             
     def ev_incoming_call_det(self):
         self.get_details()
@@ -326,23 +356,7 @@ class CallHandle:
         self.get_details()
 
     def ev_idle(self):
-        self.dispatcher.remove(self)
-        cause = lowlevel.CAUSE_XPARMS()
-        cause.handle = self.handle
-
-        # reset details
-        self.details = lowlevel.DETAIL_XPARMS()
-
-        rc = lowlevel.call_release(cause)
-        if rc:
-            raise AculabError(rc, 'call_release')
-
-        # restore the handle for the inbound call if there is one
-        if hasattr(self, 'in_handle'):
-            self.handle = self.in_handle
-            del self.in_handle
-        else:
-            self.handle = None
+        self.release()
 
 class Call(CallHandle):
 
