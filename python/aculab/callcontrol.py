@@ -117,7 +117,9 @@ class Call:
         inparms = lowlevel.IN_XPARMS()
         inparms.net = self.port
         inparms.ts = self.timeslot
-        inparms.cnf = lowlevel.CNF_REM_DISC | lowlevel.CNF_TSPREFER
+        inparms.cnf = lowlevel.CNF_REM_DISC
+        if self.timeslot != -1:
+             inparms.cnf |= lowlevel.CNF_TSPREFER
 
         rc = lowlevel.call_openin(inparms)
         if rc:
@@ -134,7 +136,10 @@ class Call:
             outparms = lowlevel.FEATURE_OUT_XPARMS()
             outparms.net = self.port
             outparms.ts = self.timeslot
-            outparms.cnf = lowlevel.CNF_REM_DISC | lowlevel.CNF_TSPREFER
+            outparms.cnf = lowlevel.CNF_REM_DISC
+            if self.timeslot != -1:
+                outparms.cnf |= lowlevel.CNF_TSPREFER
+                
             outparms.sending_complete = 1
             outparms.originating_address = originating_address
             outparms.destination_address = self.number
@@ -150,7 +155,10 @@ class Call:
             outparms = lowlevel.OUT_XPARMS()
             outparms.net = self.port
             outparms.ts = self.timeslot
-            outparms.cnf = lowlevel.CNF_REM_DISC | lowlevel.CNF_TSPREFER
+            outparms.cnf = lowlevel.CNF_REM_DISC
+            if self.timeslot != -1:
+                outparms.cnf |= lowlevel.CNF_TSPREFER
+                
             outparms.sending_complete = 1
             outparms.originating_address = originating_address
             outparms.destination_address = self.number
