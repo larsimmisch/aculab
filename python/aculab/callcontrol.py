@@ -94,7 +94,8 @@ class CallEventDispatcher:
 class Call:
 
     def __init__(self, controller, dispatcher, token = None, port = 0,
-                 number = '', timeslot = -1):
+                 number = '', timeslot = -1, feature = None,
+                 feature_data = None):
 
         self.token = token
         self.controller = controller
@@ -104,11 +105,11 @@ class Call:
             self.number = number
         self.timeslot = timeslot
 
-        self.restart()
+        self.restart(feature, feature_data)
 
-    def restart(self):
+    def restart(self, feature = None, feature_data = None):
         if hasattr(self, 'number'):
-            self.openout()
+            self.openout(feature=feature, feature_data=feature_data)
         else:
             self.openin()
             
@@ -126,20 +127,39 @@ class Call:
 
         self.dispatcher.add(self)
 
-    def openout(self, originating_address = ''):
-        outparms = lowlevel.OUT_XPARMS()
-        outparms.net = self.port
-        outparms.ts = self.timeslot
-        outparms.cnf = lowlevel.CNF_REM_DISC | lowlevel.CNF_TSPREFER
-        outparms.sending_complete = 1
-        outparms.originating_address = originating_address
-        outparms.destination_address = self.number
+    def openout(self, originating_address = '', feature = None,
+                feature_data = None):
 
-        rc = lowlevel.call_openout(outparms)
-        if rc:
-            raise AculabError(rc, 'call_openout')
+        if feature and feature_data:
+            outparms = lowlevel.FEATURE_OUT_XPARMS()
+            outparms.net = self.port
+            outparms.ts = self.timeslot
+            outparms.cnf = lowlevel.CNF_REM_DISC | lowlevel.CNF_TSPREFER
+            outparms.sending_complete = 1
+            outparms.originating_address = originating_address
+            outparms.destination_address = self.number
+            outparms.feature_information = feature
+            outparms.feature = feature_data
 
-        self.handle = outparms.handle
+            rc = lowlevel.call_feature_openout(outparms)
+            if rc:
+                raise AculabError(rc, 'call_feature_openout')
+
+            self.handle = outparms.handle
+        else:
+            outparms = lowlevel.OUT_XPARMS()
+            outparms.net = self.port
+            outparms.ts = self.timeslot
+            outparms.cnf = lowlevel.CNF_REM_DISC | lowlevel.CNF_TSPREFER
+            outparms.sending_complete = 1
+            outparms.originating_address = originating_address
+            outparms.destination_address = self.number
+
+            rc = lowlevel.call_openout(outparms)
+            if rc:
+                raise AculabError(rc, 'call_openout')
+
+            self.handle = outparms.handle
 
         self.dispatcher.add(self)
 
