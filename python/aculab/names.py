@@ -13,6 +13,9 @@ _sm_error_pattern = re.compile(r'ERR_SM_[A-Z_]+')
 error_names = {}
 _error_pattern = re.compile(r'ERR_[A-Z_]+')
 
+fax_error_names = {}
+_fax_error_pattern = re.compile(r'kSMFax[A-Za-z0-9_]+')
+
 for k in lowlevel.__dict__.keys():
     if _ext_pattern.match(k):
         ext_event_names[lowlevel.__dict__[k]] = k
@@ -22,3 +25,5 @@ for k in lowlevel.__dict__.keys():
         sm_error_names[lowlevel.__dict__[k]] = k
     elif _error_pattern.match(k):
         error_names[lowlevel.__dict__[k]] = k
+    elif _fax_error_pattern.match(k):
+        fax_error_names[lowlevel.__dict__[k]] = k

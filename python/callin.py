@@ -4,6 +4,7 @@ import sys
 import getopt
 import logging
 import aculab
+from aculab.snapshot import Snapshot
 from aculab.error import AculabError
 from aculab.callcontrol import *
 
@@ -24,13 +25,14 @@ class RepeatedIncomingCallController(IncomingCallController):
         call.openin()
 
 def usage():
-    print 'usage: callin.py [-p <port>] [-t <timeslot>] [-r]'
+    print 'usage: callin.py [-c <card> ] [-p <port>] [-t <timeslot>] [-r]'
     sys.exit(-2)
 
 if __name__ == '__main__':
 
     aculab.defaultLogging(logging.DEBUG)
-    
+
+    card = 0
     port = 0
     timeslot = 1
     controller = IncomingCallController()
@@ -38,6 +40,8 @@ if __name__ == '__main__':
     options, args = getopt.getopt(sys.argv[1:], 'p:t:r?')
 
     for o, a in options:
+        if o == '-c':
+            card = int(a)
         if o == '-p':
             port = int(a)
         elif o == '-t':
@@ -46,6 +50,9 @@ if __name__ == '__main__':
             controller = RepeatedIncomingCallController()
         else:
             usage()
+
+    snapshot = Snapshot()
+    port = snapshot.call[card].ports[port].open.port_id
                 
     c = Call(controller, port=port, timeslot=timeslot)
 

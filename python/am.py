@@ -17,11 +17,11 @@ import aculab
 from aculab.error import AculabError
 from aculab.snapshot import Snapshot
 from aculab.callcontrol import Call, CallDispatcher
-from aculab.speech import SpeechChannel, SpeechDispatcher
+from aculab.speech import SpeechChannel, SpeechDispatcher, Glue
 from aculab.busses import DefaultBus
 
-smtp_server = 'mail.ibp.de'
-smtp_to = 'lars@ibp.de'
+smtp_server = 'mail.basis-audionet.de'
+smtp_to = 'martiniuc@basis-audionet.de'
 smtp_from = 'am@ibp.de'
 
 # ripped from wave.py, which is just a teensy little bit too unflexible
@@ -87,29 +87,14 @@ class AsyncEmail(threading.Thread):
             smtp = smtplib.SMTP(smtp_server)
             smtp.sendmail(smtp_from, smtp_to, msg.as_string(unixfrom=0))
             smtp.close()
-            
-            log.debug('answering machine mail sent from %s' % self.cli)
-            
+
+            log.debug('answering machine mail sent from %s' % cli)
+                        
         except:
             log.warn('answering machine email failed', exc_info=1)
             return
 
         log.info('sent answering machine message')
-
-class AnsweringMachine:
-
-    def __init__(self, call = None, speech = None, connection = None):
-        self.call = call
-        self.speech = speech
-        self.connection = connection
-
-    def close(self):
-        if self.connection:
-            self.connection.close()
-            self.connection = None
-        if self.speech:
-            self.speech.close()
-            self.speech = None
 
 class IncomingCallController:
 
@@ -121,13 +106,7 @@ class IncomingCallController:
         # Proper applications that handle multiple modules 
         # can be more clever here
         global module
-        speech = SpeechChannel(self, module)
-
-        connections = call.connect(speech)
-
-        call.user_data = AnsweringMachine(call, speech, connections)
-        speech.user_data = call.user_data
-        
+        call.user_data = Glue(self, module)        
         call.accept()
 
     def ev_call_connected(self, call, user_data):        
@@ -147,7 +126,7 @@ class IncomingCallController:
     def record_done(self, channel, f, reason, position, user_data, job_data):
         f.seek(0)        
         # f will be closed by AsyncEmail.run
-        # the call will be hangup from AsyncEmail.run, too
+        # the call will be hungup from AsyncEmail.run, too
         e = AsyncEmail(f, user_data.call)
         e.start()
         

@@ -1,10 +1,11 @@
 import lowlevel
+from busses import ProsodyLocalBus
 from error import AculabError
 
 _singletons = {}
 
+# from Jeremy Bowers - http://c2.com/cgi/wiki?PythonSingleton
 class SingletonMixin:
-    "from Jeremy Bowers - http://c2.com/cgi/wiki?PythonSingleton"
     def __new__(cls, *args, **kwargs):
         if cls in _singletons:
             return _singletons[cls]
@@ -14,11 +15,13 @@ class SingletonMixin:
         return self
 
 class Card:
+    """Base class for an Aculab card."""
     def __init__(self, card, info):
         self.card = card
         self.info = info
 
 class SwitchCard(Card):
+    """An Aculab card with a switch matrix."""
     def __init__(self, card, info):
         Card.__init__(self, card, info)
         
@@ -31,6 +34,7 @@ class SwitchCard(Card):
         self.open = switchp
 
 class Port:
+    """A port on an Aculab call control card."""
     def __init__(self, card, index):
         open_portp = lowlevel.OPEN_PORT_PARMS()
 
@@ -52,6 +56,7 @@ class Port:
         self.info = info_portp
         
 class CallControlCard(Card):
+    """An ACulab card capable of call control."""
     def __init__(self, card, info):
         Card.__init__(self, card, info)
 
@@ -70,6 +75,7 @@ class CallControlCard(Card):
         self.ports = [Port(card, i) for i in range(infop.ports)]
             
 class Module:
+    """A DSP module on an Aculab Prosody (speech processing) card."""
     def __init__(self, card, index):
         sm_openp = lowlevel.SM_OPEN_MODULE_PARMS()
 
@@ -77,9 +83,20 @@ class Module:
         sm_openp.module_ix = index
         rc = lowlevel.sm_open_module(sm_openp)
         if rc:
-            raise AculabError(rc, 'sm_open_module()')    
+            raise AculabError(rc, 'sm_open_module()')
+
+        self.open = sm_openp
+
+        self.info = lowlevel.SM_MODULE_INFO_PARMS()
+        self.info.module = sm_openp.module_id
+        rc = lowlevel.sm_get_module_info(self.info)
+        if rc:
+            raise AculabError(rc, 'sm_get_module_info()')
+
+        self.timeslots = ProsodyLocalBus(self.info.min_stream)
 
 class ProsodyCard(Card):
+    """An Aculab Prosody (speech processing) card."""
     def __init__(self, card, info):
         Card.__init__(self, card, info)
     

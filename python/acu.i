@@ -5,6 +5,12 @@
 #include "sw_lib.h"
 #include "smdrvr.h"
 #include "smbesp.h"
+#include "smfaxapi.h"
+#include "actiff.h"
+#include "smdc.h"
+#include "smdc_raw.h"
+#include "smdc_sync.h"
+#include "smdc_hdlc.h"
 
 /*
   Macro to create a SWIG-compatible pointer-type string from a base type
@@ -13,12 +19,17 @@
 
 %}
 
+%include "typemaps.i"
+
 %apply int { ACU_ERR, ACU_UINT, ACU_ULONG, ACU_INT, ACU_LONG, ACU_PORT_ID, 
 			 ACU_CALL_HANDLE, ACU_CARD_ID, tSMCardId, ACU_RESOURCE_ID,
 			 tSM_INT, tSM_UT32 };
+
 %apply char[ANY] { ACU_CHAR[ANY] };
 
 %apply void * { ACU_EVENT_QUEUE, ACU_ACT };
+
+%apply (int *OUTPUT) { int *perrno };
 
 #ifdef TiNG_USE_V6
 #define cc_version 6
@@ -132,6 +143,12 @@ BLOCKING(dpns_watchdog)
 %include "sw_lib.h"
 %include "smdrvr.h"
 %include "smbesp.h"
+%include "actiff.h"
+%include "smfaxapi.h"
+%include "smdc.h"
+%include "smdc_raw.h"
+%include "smdc_sync.h"
+%include "smdc_hdlc.h"
 
 
 /* Use macro this for structures with data and length members, where data must

@@ -92,6 +92,17 @@ class CTBus:
 
         return CTBusConnection(switch, sink)
 
+class ProsodyLocalBus(CTBus):
+    """An instance of this class represents the timeslots on
+    Aculab-specific streams for one Prosody DSP.
+    """
+
+    def __init__(self, stream):
+        self.slots = []
+        for st in range(stream, stream + 2):
+            for ts in range(32):
+                self.slots.append((st, ts))
+
 class MVIP(CTBus):
     """MVIP Bus.
     An instance of this class represents 16 streams of 32 unidirectional
@@ -138,17 +149,6 @@ class H100(CTBus):
         self.slots = []
         for st in range(32):
             for ts in range(128):
-                self.slots.append((st, ts))
-
-class ProsodyLocalBus(CTBus):
-    """An instance of this class represents the timeslots on
-    Aculab-specific streams for one Prosody DSP.
-    """
-
-    def __init__(self, module):
-        self.slots = []
-        for st in range(48 + module * 2, 50 + module * 2):
-            for ts in range(32):
                 self.slots.append((st, ts))
 
 def _autodetect():
