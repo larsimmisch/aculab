@@ -13,11 +13,14 @@ PYTHON_LIBS	= c:/python21/libs/python21.lib
 OBJS	:= acu_wrap.obj cllib.obj clnt.obj common.obj swlib.obj swnt.obj \
 			smnt.obj smbesp.obj smlib.obj smfwcaps.obj
 
-all: aculabc.dll
+all: aculab/lowlevelc.dll aculab/lowlevel.py
 
-aculabc.dll: $(OBJS)
+aculab/lowlevelc.dll: $(OBJS)
 	$(CXX) $(LDFLAGS) /LD -o $@ $(OBJS) $(PYTHON_LIBS) \
-		 /link /EXPORT:initaculabc
+		 /link /EXPORT:initlowlevelc
+
+aculab/lowlevel.py: lowlevel.py
+	cp lowlevel.py aculab/lowlevel.py
 
 acu.i: top.i ../include/mvcldrvr.h ../include/mvswdrvr.h ../include/smdrvr.h \
 	   ../include/smosintf.h makefile
@@ -30,7 +33,7 @@ acu.i: top.i ../include/mvcldrvr.h ../include/mvswdrvr.h ../include/smdrvr.h \
 	cat ../include/smfwcaps.h >> $@
 	# cat bottom.i >>$@
 
-%_wrap.c: %.i
+acu_wrap.c lowlevel.py: acu.i
 	$(SWIGBIN)/swig $(DEFINES) -I$(SWIGLIB) -I$(SWIGLIB)/Python -I../include \
 					-shadow -python $<
 
@@ -50,6 +53,6 @@ installer:
 	python setup.py bdist_wininst
 
 clean:
-	rm -f *.dll *.exe *.obj *.lib *.exp *.pyc \
-		acu.i *_wrap.c *_wrap.doc
+	rm -f aculab/*.dll *.obj aculab/*.lib aculab/*.exp aculab/*.pyc \
+		lowlevel.py acu.i *_wrap.c *_wrap.doc
 	rm -rf build dist

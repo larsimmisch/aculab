@@ -1,4 +1,4 @@
-%module aculab
+%module lowlevel
 %{
 #include "mvcldrvr.h"
 #include "mvswdrvr.h"

@@ -1,7 +1,8 @@
 import sys
 import getopt
-import aculab
-import aculab_names as names
+import lowlevel
+from error import AculabError
+from names import event_names
 
 class CallEventDispatcher:
 
@@ -19,7 +20,7 @@ class CallEventDispatcher:
         del self.calls[call.handle]
 
     def run(self):
-        event = aculab.STATE_XPARMS()
+        event = lowlevel.STATE_XPARMS()
         
         while 1:
             if not self.calls:
@@ -28,16 +29,16 @@ class CallEventDispatcher:
             event.handle = 0
             event.timeout = 1000
 
-            handled = 0
-
-            rc = aculab.call_event(event)
+            rc = lowlevel.call_event(event)
+            if rc:
+                raise AculabError(rc, 'call_event')
 
             handled = ''
             
             # call the event handlers
             if event.handle:
                 call = self.calls[event.handle]
-                ev = names.event[event.state].lower()
+                ev = event_names[event.state].lower()
                 # let the call handle events first
                 try:
                     m = getattr(call, ev)
@@ -73,7 +74,7 @@ class CallEventDispatcher:
 
 dispatcher = CallEventDispatcher()
 
-# The CallHandle class models a call handle, as defined by Aculab,
+# The CallHandle class models a call handle, as defined by the Aculab lowlevel,
 # and common operations on it. Event handling is delegated to the controller,
 # in classical OO decomposition.
 
@@ -95,61 +96,75 @@ class Call:
             self.openin()
             
     def openin(self):
-        inparms = aculab.IN_XPARMS()
+        inparms = lowlevel.IN_XPARMS()
         inparms.net = self.port
         inparms.ts = self.timeslot
-        inparms.cnf = aculab.CNF_REM_DISC | aculab.CNF_TSPREFER
+        inparms.cnf = lowlevel.CNF_REM_DISC | lowlevel.CNF_TSPREFER
 
-        aculab.call_openin(inparms)
+        rc = lowlevel.call_openin(inparms)
+        if rc:
+            raise AculabError(rc, 'call_openin')
+
         self.handle = inparms.handle
 
         dispatcher.add(self)
 
     def openout(self):
-        outparms = aculab.OUT_XPARMS()
+        outparms = lowlevel.OUT_XPARMS()
         outparms.net = self.port
         outparms.ts = self.timeslot
-        outparms.cnf = aculab.CNF_REM_DISC | aculab.CNF_TSPREFER
+        outparms.cnf = lowlevel.CNF_REM_DISC | lowlevel.CNF_TSPREFER
         outparms.sending_complete = 1
         outparms.originating_address = '3172542'
         outparms.destination_address = self.number
 
-        aculab.call_openout(outparms)
+        rc = lowlevel.call_openout(outparms)
+        if rc:
+            raise AculabError(rc, 'call_openout')
+
         self.handle = outparms.handle
 
         dispatcher.add(self)
 
     def listen_to(sink, source):
         "sink and source are tuples of timeslots"
-        output = aculab.OUTPUT_PARMS()
+        output = lowlevel.OUTPUT_PARMS()
         output.ost = sink[0]
         output.ots = sink[1]
-        output.mode = aculab.CONNECT_MODE
+        output.mode = lowlevel.CONNECT_MODE
         output.ist = source[0]
         output.its = source[1]
 
-        sw = call_port_2_swdrvr(self.port)
+        sw = lowlevel.call_port_2_swdrvr(self.port)
 
-        sw_set_output(sw, output)
+        rc = lowlevel.sw_set_output(sw, output)
+        if rc:
+            raise AculabError(rc, 'sw_set_output')
 
     def get_details(self):
-        self.details = aculab.DETAIL_XPARMS()
+        self.details = lowlevel.DETAIL_XPARMS()
         self.details.handle = self.handle
 
-        aculab.call_details(self.details)
+        rc = lowlevel.call_details(self.details)
+        if rc:
+            raise AculabError(rc, 'call_details')
 
         return self.details
 
     def accept(self):
-        aculab.call_accept(self.handle)        
+        rc = lowlevel.call_accept(self.handle)
+        if rc:
+            raise AculabError(rc, 'call_accept')
 
     def disconnect(self, cause = 0):
         if self.handle:
-            causeparms = aculab.CAUSE_XPARMS()
+            causeparms = lowlevel.CAUSE_XPARMS()
             causeparms.handle = self.handle
             causeparms.cause = cause
-            aculab.call_disconnect(causeparms)
-
+            rc = lowlevel.call_disconnect(causeparms)
+            if rc:
+                raise AculabError(rc, 'call_disconnect')
+            
     def ev_incoming_call_det(self):
         self.get_details()
 
@@ -158,7 +173,7 @@ class Call:
 
     def ev_idle(self):
         dispatcher.remove(self)
-        cause = aculab.CAUSE_XPARMS()
+        cause = lowlevel.CAUSE_XPARMS()
         cause.handle = self.handle
 
         self.handle = None
@@ -169,4 +184,7 @@ class Call:
         if hasattr(self, 'number'):
             del self.number
 
-        aculab.call_release(cause)
+        rc = lowlevel.call_release(cause)
+        if rc:
+            raise AculabError(rc, 'call_release')
+        

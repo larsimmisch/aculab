@@ -1,8 +1,7 @@
 import sys
 import getopt
-import aculab
-import aculab_names as names
-from callcontrol import *
+from aculab.error import AculabError
+from aculab.callcontrol import *
 
 class OutgoingCallController:
 
@@ -39,6 +38,6 @@ if __name__ == '__main__':
     if not len(args):
         usage()
     
-    c = Call(controller, port, numberargs[0], 1)
+    c = Call(controller, port, args[0], 1)
 
     dispatcher.run()

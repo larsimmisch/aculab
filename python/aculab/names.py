@@ -1,15 +1,15 @@
 import re
-import aculab
+import lowlevel
 
 # build a map of EV_* constants
-event = {}
+event_names = {}
 _event_pattern = re.compile(r'EV_[A-Z_]+')
 
-error = {}
+error_names = {}
 _error_pattern = re.compile(r'ERR_[A-Z_]+')
 
-for k in aculab.__dict__.keys():
+for k in lowlevel.__dict__.keys():
     if _event_pattern.match(k):
-        event[aculab.__dict__[k]] = k
+        event_names[lowlevel.__dict__[k]] = k
     elif _error_pattern.match(k):
-        error[aculab.__dict__[k]] = k
+        error_names[lowlevel.__dict__[k]] = k
