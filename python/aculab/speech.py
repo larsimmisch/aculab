@@ -882,8 +882,8 @@ class SpeechChannel:
                 if other == self:
                     c.timeslots = [ bus.allocate() ]
                     print c.timeslots[0]
-                    c.connections = [self.listen_to(c.timeslots[0]),
-                                     self.speak_to(c.timeslots[0])]
+                    c.connections = [self.speak_to(c.timeslots[0]),
+                                     self.listen_to(c.timeslots[0])]
                 else:
                     # connect directly
                     c.connections = [self.listen_to((other.info.ost,
