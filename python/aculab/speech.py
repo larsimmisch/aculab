@@ -2,12 +2,20 @@ import sys
 import lowlevel
 from busses import CTBusConnection
 from error import AculabError
-import pywintypes
 import threading
-import win32api
-import win32event
+import os
+if os.name == 'nt':
+    import pywintypes
+    import win32api
+    import win32event
+else:
+    import select
 
-class DispatcherThread(threading.Thread):
+__all__ = ['SpeechEventDispatcher', 'PlayJob', 'RecordJob',
+           'DigitsJob', 'SpeechConnection', 'SpeechChannel']
+
+# this class is only needed on Windows
+class Win32DispatcherThread(threading.Thread):
     
     def __init__(self, handles = {}):
         """handles is a map from handles to method"""
@@ -27,20 +35,20 @@ class DispatcherThread(threading.Thread):
             self.handles[handle]()
         
 
-class SpeechEventDispatcher:
+class Win32SpeechEventDispatcher:
     def __init__(self):
         self.dispatchers = []
         self.handles = []
         
-    def add(self, channel, method):
+    def add(self, handle, method):
         if not self.dispatchers:
-            self.dispatchers.append(DispatcherThread({channel: method}))
+            self.dispatchers.append(Win32DispatcherThread({handle: method}))
         else:
             d = self.dispatchers[len(self.dispatchers) - 1]
             if len(d.handles) >= win32event.MAXIMUM_WAIT_OBJECTS:
-                self.dispatchers.append(DispatcherThread({channel: method}))
+                self.dispatchers.append(Win32DispatcherThread({handle: method}))
             else:
-                d.handles[channel] = method
+                d.handles[handle] = method
 
     def start(self):
         for d in self.dispatchers:
@@ -53,6 +61,30 @@ class SpeechEventDispatcher:
             d.start()
         self.dispatchers[-1].run()
         
+class PollSpeechEventDispatcher(threading.Thread):
+    def __init__(self):
+        self.handles = {}
+        threading.Thread.__init__(self)
+        self.setDaemon(1)
+        
+    def add(self, handle, method):
+        self.handles[handle.fileno()] =  method
+
+    def run(self):
+        p = select.poll()
+
+        for h in self.handles.keys():
+            p.register(h)
+
+        while 1:
+            active = p.poll()
+            for a in active:
+                self.handles[a[0]]()
+
+if os.name == 'nt':
+    SpeechEventDispatcher = Win32SpeechEventDispatcher
+else:
+    SpeechEventDispatcher = PollSpeechEventDispatcher
 
 class PlayJob:
     def __init__(self, filename, token):
@@ -107,6 +139,7 @@ class SpeechChannel:
         self.controller = controller
         self.dispatcher = dispatcher
         self.playjob = None
+        self.digitsjob = None
         self.recordjob = None
         self.signaljob = None
 
@@ -156,7 +189,7 @@ class SpeechChannel:
         self.dispatcher.add(self.event_read, self.on_read)
         self.dispatcher.add(self.event_recog, self.on_recog)
         self.dispatcher.add(self.event_write, self.on_write)
-
+            
     def __del__(self):
         lowlevel.smd_ev_free(self.event_read)
         lowlevel.smd_ev_free(self.event_recog)
@@ -172,25 +205,45 @@ class SpeechChannel:
     def __hash__(self):
         return self.channel
 
+    def create_event(self, event):
+        """event has type SM_CHANNEL_SET_EVENT_PARMS and is modified in place
+        The handle is returned"""
+        
+        if os.name == 'nt':
+            rc, event.handle = lowlevel.smd_ev_create(event.channel,
+                                                      event.event_type,
+                                                      event.issue_events)
+            if rc:
+                raise AculabError(rc, 'smd_ev_create')
+
+            return pywintypes.HANDLE(event.handle)
+        else:
+            event.handle = lowlevel.tSMEventId()
+            rc = lowlevel.smd_ev_create(event.handle,
+                                        event.channel,
+                                        event.event_type,
+                                        event.issue_events)
+
+            if rc:
+                raise AculabError(rc, 'smd_ev_create')
+            
+            return event.handle
+
     def set_event(self, type):
         event = lowlevel.SM_CHANNEL_SET_EVENT_PARMS()
 
         event.channel = self.channel;
         event.issue_events = lowlevel.kSMChannelSpecificEvent;
         event.event_type = type;
-
-        rc, event.handle = lowlevel.smd_ev_create(event.channel,
-                                                  event.event_type,
-                                                  event.issue_events)
-        if rc:
-            raise AculabError(rc, 'smd_ev_create')
-
+        
+        handle = self.create_event(event)
+        
         rc = lowlevel.sm_channel_set_event(event);
         if rc:
-            lowlevel.smd_ev_free(event.handle);
+            lowlevel.smd_ev_free(handle);
             raise AculabError(rc, 'sm_channel_set_event')
 
-        return pywintypes.HANDLE(event.handle);
+        return handle
 
     def listen_to(self, source):
         """source is a tuple (stream, timeslot"""
@@ -297,7 +350,7 @@ class SpeechChannel:
                     pos = self.playjob.length
 
                 try:
-                    self.controller.play_done(self, self.playjob.token, pos)
+                    self.controller.play_done(self, pos, self.playjob.token)
                 finally:
                     self.playjob = None
 
@@ -367,7 +420,6 @@ class SpeechChannel:
                 raise AculabError(rc, 'sm_replay_abort')
         
             self.playjob.position = stop.offset
-            print 'stop offset:', self.playjob.position
 
     def record(self, filename, max_octets = 0, max_elapsed_time = 0,
                max_silence = 0, elimination = 0, agc = 0, volume = 0,
