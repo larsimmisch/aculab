@@ -38,7 +38,10 @@ class CallEventDispatcher:
             # call the event handlers
             if event.handle:
                 call = self.calls[event.handle]
-                ev = event_names[event.state].lower()
+                if event.state == lowlevel.EV_EXTENDED:
+                    ev = event_names[event.extended_state].lower()
+                else:
+                    ev = event_names[event.state].lower()
                 # let the call handle events first
                 try:
                     m = getattr(call, ev)
@@ -75,8 +78,7 @@ class CallEventDispatcher:
 dispatcher = CallEventDispatcher()
 
 # The CallHandle class models a call handle, as defined by the Aculab lowlevel,
-# and common operations on it. Event handling is delegated to the controller,
-# in classical OO decomposition.
+# and common operations on it. Event handling is delegated to the controller.
 
 class Call:
 
@@ -137,7 +139,7 @@ class Call:
             raise AculabError(rc, 'call_send_overlap')
 
     def listen_to(self, sink, source):
-        """sink and source are tuples of timeslots.
+        """sink and source are tuples of (stream, timeslot).
            returns the tuple (switch, sink)."""
         output = lowlevel.OUTPUT_PARMS()
         output.ost = sink[0]
