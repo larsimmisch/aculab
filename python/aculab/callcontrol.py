@@ -140,13 +140,17 @@ class CallHandle:
         self.last_event = lowlevel.EV_IDLE
         self.last_extended_event = None
 
-    def openin(self, unique_xparms = None):
+    def openin(self, unique_xparms = None, cnf = None):
         inparms = lowlevel.IN_XPARMS()
         inparms.net = self.port
         inparms.ts = self.timeslot
-        inparms.cnf = lowlevel.CNF_REM_DISC
-        if self.timeslot != -1:
-             inparms.cnf |= lowlevel.CNF_TSPREFER
+        if cnf:
+            inparms.cnf = cnf
+        else:
+            inparms.cnf = lowlevel.CNF_REM_DISC
+            if self.timeslot != -1:
+                inparms.cnf |= lowlevel.CNF_TSPREFER
+                
         if unique_xparms:
             inparms.unique_xparms = unique_xparms
 
@@ -162,15 +166,20 @@ class CallHandle:
 
     def openout(self, destination_address, sending_complete = 1,
                 originating_address = '',
-                feature = None, feature_data = None):
+                feature = None, feature_data = None, cnf = None):
 
         if feature and feature_data:
             outparms = lowlevel.FEATURE_OUT_XPARMS()
             outparms.net = self.port
             outparms.ts = self.timeslot
-            outparms.cnf = lowlevel.CNF_REM_DISC
-            if self.timeslot != -1:
-                outparms.cnf |= lowlevel.CNF_TSPREFER
+
+            if cnf:
+                outparms.cnf = cnf
+            else:
+                outparms.cnf = lowlevel.CNF_REM_DISC
+                if self.timeslot != -1:
+                    outparms.cnf |= lowlevel.CNF_TSPREFER
+                
                 
             outparms.sending_complete = sending_complete
             outparms.originating_addr = originating_address

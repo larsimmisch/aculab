@@ -2,7 +2,7 @@ import sys
 import getopt
 from aculab.error import AculabError
 from aculab.callcontrol import *
-from aculab.lowlevel import FEATURE_UNION, FEATURE_REGISTER, FEATURE_RAW_DATA
+from aculab.lowlevel import *
 
 class OutgoingCallController:
 
@@ -10,7 +10,7 @@ class OutgoingCallController:
         call.disconnect()
 
 def usage():
-    print 'mwi.py [-p <port>]'
+    print 'mwi.py [-p <port>] <number>'
     sys.exit(-2)
 
 if __name__ == '__main__':
@@ -41,6 +41,7 @@ if __name__ == '__main__':
                                   '\x34\x32\x34\x0A\x01\x02')
     
     c.openout(args[0], feature = FEATURE_REGISTER + FEATURE_RAW_DATA,
-              feature_data = feature_data)
+              feature_data = feature_data, originating_address='41',
+              cnf = lowlevel.CNF_TSVIRTUAL)
 
     calldispatcher.run()
