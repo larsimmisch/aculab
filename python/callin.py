@@ -37,6 +37,8 @@ if __name__ == '__main__':
         else:
             usage()
                 
-    c = Call(controller, port)
+    calldispatcher = CallEventDispatcher()
+    
+    c = Call(controller, calldispatcher, port)
 
-    dispatcher.run()
+    calldispatcher.run()

@@ -1,6 +1,23 @@
 import lowlevel
 from error import AculabError
 
+class CTBusConnection:
+
+    def __init__(self, sw, ts):
+        self.sw = sw
+        self.ts = ts
+
+    def __del__(self):
+        output = lowlevel.OUTPUT_PARMS()
+        output.ost = self.ts[0]
+        output.ots = self.ts[1]
+        output.mode = lowlevel.DISABLE_MODE
+
+        rc = lowlevel.sw_set_output(self.sw, output)
+        if rc:
+            raise AculabError(rc, 'sw_set_output')
+        
+
 class CTBus:
 
     def allocate(self):
@@ -11,7 +28,10 @@ class CTBus:
 
     def listen_to(self, switch, sink, source):
         """sink and source are tuples of timeslots.
-           returns the tuple (switch, sink)."""
+           and returns a CTBusConnection.
+           Do not discard the return value - it will dissolve
+           the connection when it's garbage collected"""
+
         output = lowlevel.OUTPUT_PARMS()
         output.ost = sink[0]
         output.ots = sink[1]
@@ -19,24 +39,11 @@ class CTBus:
         output.ist = source[0]
         output.its = source[1]
 
-        print "%d: %d:%d := %d:%d" % (switch, sink[0], sink[1],
-                                      source[0], source[1])
-
         rc = lowlevel.sw_set_output(switch, output)
         if rc:
             raise AculabError(rc, 'sw_set_output')
 
-        return (switch, sink)
-
-    def disable(self, switch, source):
-        output = lowlevel.OUTPUT_PARMS()
-        output.ost = source[0]
-        output.ots = source[1]
-        output.mode = lowlevel.DISABLE_MODE
-
-        rc = lowlevel.sw_set_output(switch, output)
-        if rc:
-            raise AculabError(rc, 'sw_set_output')
+        return CTBusConnection(switch, sink)
 
 class MVIP(CTBus):
 

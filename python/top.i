@@ -16,6 +16,14 @@
 
 %import "smport.h"
 
+/* This allows to execute Python code during the function call. */
+%exception {
+	PyThreadState *tstate = PyEval_SaveThread();
+	$function
+	PyEval_RestoreThread(tstate);
+}
+
+
 %typemap(python,in) tSMEventId {
 	$1 = (tSMEventId)PyInt_AsLong($input);
 }

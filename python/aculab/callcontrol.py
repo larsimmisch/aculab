@@ -1,6 +1,7 @@
 import sys
 import getopt
 import lowlevel
+from busses import CTBusConnection
 from error import AculabError
 from names import event_names
 
@@ -42,32 +43,44 @@ class CallEventDispatcher:
                     ev = event_names[event.extended_state].lower()
                 else:
                     ev = event_names[event.state].lower()
-                # let the call handle events first
-                try:
-                    m = getattr(call, ev)
-                    m()
-                    handled = '(call'
-                except AttributeError:
-                    if hasattr(call, ev):
-                        raise
-                except:
-                    raise
 
-                # pass the event on to the controller
+                if hasattr(call.controller, 'mutex'):
+                    mutex = call.controller.mutex
+                    mutex.acquire()
+                else:
+                    mutex = None
+
                 try:
-                    m = getattr(call.controller, ev)
-                    m(call)
-                    if handled:
-                        handled += ', controller)'
-                    else:
-                        handled = '(controller)'
-                except AttributeError:
-                    if handled:
-                        handled += ')'
-                    if hasattr(call.controller, ev):
+                    # let the call handle events first
+                    try:
+                        m = getattr(call, ev)
+                        m()
+                        handled = '(call'
+                    except AttributeError:
+                        if hasattr(call, ev):
+                            raise
+                    except:
                         raise
-                except:
-                    raise
+
+                    # pass the event on to the controller
+                    try:
+                        m = getattr(call.controller, ev)
+                        m(call)
+                        if handled:
+                            handled += ', controller)'
+                        else:
+                            handled = '(controller)'
+                    except AttributeError:
+                        if handled:
+                            handled += ')'
+                        if hasattr(call.controller, ev):
+                            raise
+                    except:
+                        raise
+
+                finally:
+                    if mutex:
+                        mutex.release()
                 
                 if not handled:
                     handled = '(ignored)'
@@ -75,15 +88,17 @@ class CallEventDispatcher:
                 print hex(event.handle), ev, handled
 
 
-dispatcher = CallEventDispatcher()
-
 # The CallHandle class models a call handle, as defined by the Aculab lowlevel,
 # and common operations on it. Event handling is delegated to the controller.
 
 class Call:
 
-    def __init__(self, controller, port = 0, number = '', timeslot = -1):
+    def __init__(self, controller, dispatcher, token = None, port = 0,
+                 number = '', timeslot = -1):
+
+        self.token = token
         self.controller = controller
+        self.dispatcher = dispatcher
         self.port = port
         if number:
             self.number = number
@@ -109,9 +124,9 @@ class Call:
 
         self.handle = inparms.handle
 
-        dispatcher.add(self)
+        self.dispatcher.add(self)
 
-    def openout(self, originating_address = '3172542'):
+    def openout(self, originating_address = ''):
         outparms = lowlevel.OUT_XPARMS()
         outparms.net = self.port
         outparms.ts = self.timeslot
@@ -126,7 +141,7 @@ class Call:
 
         self.handle = outparms.handle
 
-        dispatcher.add(self)
+        self.dispatcher.add(self)
 
     def send_overlap(self, addr, complete = 0):
         overlap = lowlevel.OVERLAP_XPARMS()
@@ -138,39 +153,48 @@ class Call:
         if rc:
             raise AculabError(rc, 'call_send_overlap')
 
-    def listen_to(self, sink, source):
-        """sink and source are tuples of (stream, timeslot).
-           returns the tuple (switch, sink)."""
+    def listen_to(self, source):
+        """source is a tuple of (stream, timeslot).
+           Returns a CTBusConnection.
+           Do not discard the return value - it will dissolve
+           the connection when it's garbage collected"""
+
         output = lowlevel.OUTPUT_PARMS()
-        output.ost = sink[0]
-        output.ots = sink[1]
+        output.ost = self.details.stream
+        output.ots = self.details.ts
         output.mode = lowlevel.CONNECT_MODE
         output.ist = source[0]
         output.its = source[1]
 
         sw = lowlevel.call_port_2_swdrvr(self.port)
 
-        print "%d: %d:%d := %d:%d" % (sw, sink[0], sink[1],
-                                      source[0], source[1])
-        
         rc = lowlevel.sw_set_output(sw, output)
         if rc:
             raise AculabError(rc, 'sw_set_output')
 
-        return (sw, sink)
-    
-    def disable(self, source):
+        return CTBusConnection(sw, (self.details.stream, self.details.ts))
+
+    def speak_to(self, sink):
+        """source is a tuple of (stream, timeslot).
+           Returns a CTBusConnection.
+           Do not discard the return value - it will dissolve
+           the connection when it's garbage collected"""
+
         output = lowlevel.OUTPUT_PARMS()
-        output.ost = source[0]
-        output.ots = source[1]
-        output.mode = lowlevel.DISABLE_MODE
+        output.ost = sink[0]
+        output.ots = sink[1]
+        output.mode = lowlevel.CONNECT_MODE
+        output.ist = self.details.stream
+        output.its = self.details.ts
 
         sw = lowlevel.call_port_2_swdrvr(self.port)
 
         rc = lowlevel.sw_set_output(sw, output)
         if rc:
-            raise AculabError(rc, 'sw_set_output')        
+            raise AculabError(rc, 'sw_set_output')
 
+        return CTBusConnection(sw, sink)
+     
     def get_details(self):
         self.details = lowlevel.DETAIL_XPARMS()
         self.details.handle = self.handle
@@ -213,7 +237,7 @@ class Call:
         self.get_details()
 
     def ev_idle(self):
-        dispatcher.remove(self)
+        self.dispatcher.remove(self)
         cause = lowlevel.CAUSE_XPARMS()
         cause.handle = self.handle
 

@@ -4,23 +4,23 @@ CXX		:= cl /MD
 
 DEFINES := -DWIN32
 
-SWIGBIN := c:/swig-1.3.12
-SWIGLIB := c:/swig-1.3.12/Lib
+SWIGBIN := c:/swig-1.3.15
+SWIGLIB := c:/swig-1.3.15/Lib
 
-PYTHON_INCLUDES = c:/python21/include
-PYTHON_LIBS	= c:/python21/libs/python21.lib
+PYTHON_INCLUDES = c:/python22/include
+PYTHON_LIBS	= c:/python22/libs/python22.lib
 
 OBJS	:= acu_wrap.obj cllib.obj clnt.obj common.obj swlib.obj swnt.obj \
 			smnt.obj smbesp.obj smlib.obj smfwcaps.obj
 
-all: aculab/lowlevelc.dll aculab/lowlevel.py
+all: aculab/_lowlevel.dll aculab/lowlevel.py
 
-aculab/lowlevelc.dll: $(OBJS)
+aculab/_lowlevel.dll: $(OBJS)
 	$(CXX) $(LDFLAGS) /LD -o $@ $(OBJS) $(PYTHON_LIBS) \
-		 /link /EXPORT:initlowlevelc
+		 /link /EXPORT:init_lowlevel
 
 aculab/lowlevel.py: lowlevel.py
-	cp lowlevel.py aculab/lowlevel.py
+	mv lowlevel.py aculab/lowlevel.py
 
 acu.i: top.i ../include/mvcldrvr.h ../include/mvswdrvr.h ../include/smdrvr.h \
 	   ../include/smosintf.h makefile

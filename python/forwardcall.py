@@ -49,6 +49,7 @@ class ForwardCallController:
                 self.in_slot = (self.incall.details.stream,
                                 self.incall.details.ts)
 
+                # connect the call
                 c = [self.incall.listen_to(slot, self.in_slot),
                      mvip.listen_to(switch, self.saru_slot, mvip.invert(slot))]
 
@@ -75,7 +76,6 @@ class ForwardCallController:
 
     def disconnect(self):
         for c in self.connections:
-            mvip.disable(c[0], c[1])
             if c[1][0] < 16:
                 mvip.free(c[1])
 
@@ -144,7 +144,9 @@ if __name__ == '__main__':
         else:
             usage()
 
-    calls = [Call(ForwardCallController(), port, timeslot = 1),
-             Call(ForwardCallController(), port, timeslot = 2)]
+    dispatcher = CallEventDispatcher()
+
+    calls = [Call(ForwardCallController(), dispatcher, port, timeslot = 1),
+             Call(ForwardCallController(), dispatcher, port, timeslot = 2)]
              
     dispatcher.run()
