@@ -20,14 +20,14 @@ class MVIP(CTBus):
         else:
             return (slot[0] - 8, slot[1])
 
-class SCBus:
+class SCBus(CTBus):
 
     def __init__(self):
         self.slots = []
         for ts in range(1024):
             self.slots.append((24, ts))
 
-class H100:
+class H100(CTBus):
 
     def __init__(self):
         self.slots = []
