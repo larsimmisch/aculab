@@ -46,6 +46,9 @@ test:
 install:
 	python setup.py install
 
+installer:
+	python setup.py bdist_wininst
+
 clean:
 	rm -f *.dll *.exe *.obj *.lib *.exp *.pyc \
 		acu.i *_wrap.c *_wrap.doc
