@@ -3,6 +3,7 @@
 #include "mvcldrvr.h"
 #include "mvswdrvr.h"
 #include "smport.h"
+#include "smosintf.h"
 #include "smdrvr.h"
 #include "smbesp.h"
 #include "smfwcaps.h"
@@ -23,7 +24,7 @@
 	PyEval_RestoreThread(tstate);
 }
 
-
+#ifdef WIN32
 %typemap(python,in) tSMEventId {
 	$1 = (tSMEventId)PyInt_AsLong($input);
 }
@@ -51,6 +52,7 @@
 		Py_XDECREF(o);
 	}
 }
+#endif
 
 /*
 %typemap(python,except) int {
