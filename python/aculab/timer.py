@@ -81,8 +81,13 @@ if __name__ == '__main__':
 
     timer.start()
 
-    timer.add(1.0, _test, '1')
+    t = timer.add(1.0, _test, '1')
+    timer.cancel(t)
+    timer.add(1.0, _test, '1')    
+    t = timer.add(2.0, _test, '2')
+    timer.cancel(t)
     timer.add(2.0, _test, '2')
+    timer.add(3.0, _test, '3')
 
     for i in range(4):
         time.sleep(1.0)
