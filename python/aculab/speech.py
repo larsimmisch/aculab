@@ -1041,3 +1041,32 @@ class SpeechChannel:
             self.job.stop()
 
     
+class Conference:
+    def __init__(self, module = None, mutex = None):
+        self.module = module
+        self.listeners = 0
+        self.speakers = 0
+        self.mutex = mutex
+
+    def lock(self):
+        if self.mutex:
+            self.mutex.acquire()
+
+    def unlock(self):
+        if self.mutex:
+            self.mutex.release()
+
+    def add(self, channel, mode):
+        self.lock()
+        try:
+            pass
+        finally:
+            self.unlock()
+
+    def remove(self, channel):
+        self.lock()
+        try:
+            pass
+        finally:
+            self.unlock()
+
