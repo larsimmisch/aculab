@@ -7,8 +7,8 @@ import threading
 import logging
 import aculab
 from aculab.error import AculabError
-from aculab.callcontrol import Call, CallEventDispatcher
-from aculab.speech import SpeechChannel, SpeechEventDispatcher
+from aculab.callcontrol import Call, CallDispatcher
+from aculab.speech import SpeechChannel, SpeechDispatcher
 from aculab.busses import DefaultBus
 
 class AnsweringMachine:
@@ -33,7 +33,8 @@ class IncomingCallController:
         log.debug('%s stream: %d timeslot: %d',
                   call.name, call.details.stream, call.details.ts)
 
-        speech = SpeechChannel(self, speechdispatcher, 0)
+        global module
+        speech = SpeechChannel(self, module)
 
         call.user_data = AnsweringMachine(call, speech,
                                           call.connect(speech))
@@ -42,8 +43,6 @@ class IncomingCallController:
 
     def ev_call_connected(self, call, model):        
         model.speech.play('greeting.al')
-        # model.digits('123456')
-        # model.record('recording.al', 90000)
         
     def ev_remote_disconnect(self, call, model):
         call.disconnect()
@@ -52,11 +51,11 @@ class IncomingCallController:
         model.close()
         call.user_data = None
 
-    def play_done(self, channel, reason, position, model):
-        pass
+    def play_done(self, f, channel, reason, position, model):
+        model.record(os.tmpfile(), 90000)
 
-    def record_done(self, channel, reason, position, model):
-        pass
+    def record_done(self, f, channel, reason, position, model):
+        f.close()
     
     def digits_done(self, channel, model):
         pass
@@ -81,8 +80,6 @@ if __name__ == '__main__':
     module = 0
     controller = IncomingCallController()
 
-    bus = DefaultBus
-
     options, args = getopt.getopt(sys.argv[1:], 'p:rsm:')
 
     for o, a in options:
@@ -93,17 +90,11 @@ if __name__ == '__main__':
         elif o == '-r':
             controller = RepeatedIncomingCallController()
         elif o == '-s':
-            bus = SCBus()
+            DefaultBus = SCBus()
         else:
             usage()
 
-    if not bus:
-        bus = H100()
+    call = Call(controller, port)
 
-    speechdispatcher = SpeechEventDispatcher()
-    calldispatcher = CallEventDispatcher()
-
-    call = Call(controller, calldispatcher, port)
-
-    speechdispatcher.start()
-    calldispatcher.run()
+    SpeechDispatcher.start()
+    CallDispatcher.run()
