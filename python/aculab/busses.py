@@ -6,7 +6,7 @@ from error import AculabError
 log = logging.getLogger('switch')
 
 class Connection:
-    """A connection, potentially across a bus"""
+    """A connection across a bus"""
 
     def __init__(self, bus):
         """If bus is None, the default bus is used."""
@@ -18,6 +18,7 @@ class Connection:
         self.timeslots = []
 
     def close(self):
+        """Closes the endpoint connections and frees the timeslots."""
         for c in self.connections:
             c.close()
 
@@ -39,12 +40,11 @@ class CTBusConnection:
         self.ts = ts
 
     def close(self):
+        """Disables a timeslot."""
         output = lowlevel.OUTPUT_PARMS()
         output.ost = self.ts[0]
         output.ots = self.ts[1]
         output.mode = lowlevel.DISABLE_MODE
-
-        # print 'disabling', self.ts
 
         rc = lowlevel.sw_set_output(self.sw, output)
         if rc:
@@ -62,19 +62,22 @@ class CTBusConnection:
         return '<CTBusConnection [' + str(self.sw) + ', ' + str(self.ts) + ']>'
 
 class CTBus:
-    """Base class for a isochronous, multiplexed bus."""
+    """Base class for an isochronous, multiplexed bus.
+    An instance represents a collection of available timeslots."""
 
     def allocate(self):
+        """Allocate a timeslot."""
         return self.slots.pop(0)
 
     def free(self, slot):
+        """Free a timeslot"""
         self.slots.append(slot)
 
     def listen_to(self, switch, sink, source):
         """sink and source are tuples of timeslots.
            and returns a CTBusConnection.
            Do not discard the return value - it will dissolve
-           the connection when it's garbage collected"""
+           the connection when it's garbage collected."""
 
         output = lowlevel.OUTPUT_PARMS()
         output.ost = sink[0]
@@ -90,6 +93,8 @@ class CTBus:
         return CTBusConnection(switch, sink)
 
 class MVIP(CTBus):
+    """MVIP Bus.
+    An instance of this class represents a list of available timeslots."""
 
     def __init__(self):
         self.slots = []
@@ -104,6 +109,8 @@ class MVIP(CTBus):
             return (slot[0] - 8, slot[1])
 
 class SCBus(CTBus):
+    """SCBus, Dialogic's successor of PEB.
+    An instance of this class represents a list of available timeslots."""
 
     def __init__(self):
         self.slots = []
@@ -111,6 +118,9 @@ class SCBus(CTBus):
             self.slots.append((24, ts))
 
 class H100(CTBus):
+    """H.100, the ECTF defined bus standard.
+    This class also applies to H.110.
+    An instance of this class represents a list of available timeslots."""
 
     def __init__(self):
         self.slots = []
@@ -119,6 +129,10 @@ class H100(CTBus):
                 self.slots.append((st, ts))
 
 class ProsodyLocalBus(CTBus):
+    """An instance of this class represents the timeslots on
+    Aculab-specific streams for one Prosody DSP.
+    """
+
     def __init__(self, module):
         self.slots = []
         for st in range(48 + module * 2, 50 + module * 2):
@@ -127,7 +141,14 @@ class ProsodyLocalBus(CTBus):
 
 def _autodetect():
     """autodetects running (i.e. supported and clocked) busses and returns
-    the CTBus subclass deemed best"""
+    a CTBus subclass.
+
+    If multiple busses are supported, CTBus subclasses are returned in the
+    order:
+
+    - H100
+    - SCBus
+    - MVIP"""
 
     n = lowlevel.sw_get_drvrs()
 
