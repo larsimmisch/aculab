@@ -417,6 +417,7 @@ class RecordJob:
         self.agc = agc
         self.volume = volume
         self.job_data = job_data
+        self.reason = ''
 
     def start(self):
         'Do not call this method directly - call SpeechChannel.start instead'
@@ -451,25 +452,6 @@ class RecordJob:
         # remove the read event from the dispatcher
         self.channel.dispatcher.remove(self.channel.event_read)
 
-        how = lowlevel.SM_RECORD_HOW_TERMINATED_PARMS()
-        how.channel = self.channel.channel
-
-        rc = lowlevel.sm_record_how_terminated(how)
-        if rc:
-            raise AculabSpeechError(rc, 'sm_record_how_terminated')
-        
-        reason = ''
-        if how.termination_reason == lowlevel.kSMRecordHowTerminatedLength:
-            reason = 'timeout'
-        elif how.termination_reason == lowlevel.kSMRecordHowTerminatedMaxTime:
-            reason = 'timeout'
-        elif how.termination_reason == lowlevel.kSMRecordHowTerminatedSilence:
-            reason = 'silence'
-        elif how.termination_reason == lowlevel.kSMRecordHowTerminatedAborted:
-            reason = 'stopped'
-        elif how.termination_reason == lowlevel.kSMRecordHowTerminatedError:
-            reason = 'error'
-
         self.channel.lock()
         channel = self.channel
         f = self.file
@@ -491,7 +473,7 @@ class RecordJob:
         channel.lock()
         channel.job = None
         try:
-            channel.controller.record_done(self, f, reason, self.size,
+            channel.controller.record_done(self, f, self.reason, self.size,
                                            channel.user_data, self.job_data)
         finally:
             channel.job_done(self)
@@ -510,6 +492,30 @@ class RecordJob:
                 raise AculabSpeechError(rc, 'sm_record_status')
 
             if status.status == lowlevel.kSMRecordStatusComplete:
+                if version >= 2:
+                    term = status.termination_reason
+                else:
+                    how = lowlevel.SM_RECORD_HOW_TERMINATED_PARMS()
+                    how.channel = self.channel.channel
+
+                    rc = lowlevel.sm_record_how_terminated(how)
+                    if rc:
+                        raise AculabSpeechError(rc, 'sm_record_how_terminated')
+
+                    term = how.termination_reason
+        
+                self.reason = ''
+                if term == lowlevel.kSMRecordHowTerminatedLength:
+                    self.reason = 'timeout'
+                elif term == lowlevel.kSMRecordHowTerminatedMaxTime:
+                    self.reason = 'timeout'
+                elif how.term == lowlevel.kSMRecordHowTerminatedSilence:
+                    self.reason = 'silence'
+                elif how.term == lowlevel.kSMRecordHowTerminatedAborted:
+                    self.reason = 'stopped'
+                elif how.term == lowlevel.kSMRecordHowTerminatedError:
+                    self.reason = 'error'
+                    
                 self.done()
                 return
             elif status.status == lowlevel.kSMRecordStatusNoData:
