@@ -12,30 +12,48 @@ portmap = { '41': 8, '42': 8, '43': 8, '44': 8,
             '45': 9, '46': 9, '47': 9, '48': 9 }
 
 def routing_table(port, details):
-    "returns the tuple (wait, port, timeslot, destination_address)"
+    """Returns the tuple (cause, port, timeslot, destination_address)
+    If cause is not none, hangup"""
     
     if not details.destination_addr and details.sending_complete:
-        return (False, None, None, None)
+        return (lowlevel.LC_CALL_REJECTED, None, None, None)
 
     if port == 0:
         # only forward local calls
         if details.originating_addr in [str(i) for i in range(31, 39)]:
-            return (False, portmap[details.destination_addr], details.ts,
-                    details.destination_addr)
+            return (None, portmap[details.destination_addr],
+                    details.ts, details.destination_addr)
         else:
-            return (True, None, None, None)
+            return (None, None, None, None)
         
     elif port in [8, 9]:
-        return (False, 0, details.ts,
-                details.destination_addr)        
+        if not details.sending_complete:
+            return (None, None, None, None)
+        else:
+            if details.destination_addr[0] in ['8', '9']:
+                p = int(details.destination_addr[0])
+                ts = details.ts
+                # kludge to get call back on the same port working without
+                # glare
+                if p == port:
+                    if ts < 16:
+                        ts += 16
+                    else:
+                        ts -= 16
+                return (None, p, ts,  details.destination_addr)
+            else:
+                return (None, 0, details.ts,
+                        details.destination_addr)        
     else:
-        return (False, None, None, None)
+        return (lowlevel.LC_NUMBER_BUSY, None, None, None)
 
-def find_available_call(port, timeslot = None):
+def find_available_call(port, ts = None, exclude = None):
+    global calls
     for c in calls:
-        if c.port == port and (c.last_event == lowlevel.EV_WAIT_FOR_INCOMING 
-                               or c.last_event == lowlevel.EV_IDLE):
-            if timeslot == None or timeslot == c.timeslot:
+        if c.port == port and c != exclude \
+           and (c.last_event == lowlevel.EV_WAIT_FOR_INCOMING 
+                or c.last_event == lowlevel.EV_IDLE):
+            if ts is None or ts == c.timeslot:
                 return c
 
     return None
@@ -58,24 +76,24 @@ class Forward:
             self.outcall.send_overlap(d.destination_addr,
                                       d.sending_complete)
         else:
-            wait, port, timeslot, number = routing_table(self.incall.port,
-                                                         self.incall.details)
+            cause, port, timeslot, number = routing_table(self.incall.port,
+                                                          self.incall.details)
 
             if port != None and number:
-                print 'making outgoing call', port, timeslot, number
-                self.outcall = find_available_call(port, timeslot)
+                print hex(self.incall.handle), \
+                      'making outgoing call on port %d to %s' % (port,  number)
+                self.outcall = find_available_call(port, timeslot, self.incall)
                 if not self.outcall:
                     print hex(self.incall.handle), 'no call available'
-                    self.incall.disconnect()
+                    self.incall.disconnect(lowlevel.LC_NUMBER_BUSY)
                 else:
                     self.outcall.user_data = self
                     self.outcall.openout(number, originating_address)
-            elif not wait:
-                self.incall.disconnect()
+            elif cause:
+                self.incall.disconnect(cause)
             else:
                 print hex(self.incall.handle), \
                       'waiting - no destination address'
-
 
     def connect(self):
         if not self.connections:
@@ -102,7 +120,9 @@ class ForwardCallController:
         call.user_data = Forward(call)
 
     def ev_outgoing_ringing(self, call):
-        call.user_data.connect()
+        if call.user_data.incall and call.user_data.outcall:
+            call.user_data.connect()
+
         call.user_data.incall.incoming_ringing()
 
     def ev_call_connected(self, call):
@@ -166,10 +186,15 @@ if __name__ == '__main__':
     dispatcher = CallEventDispatcher()
     controller = ForwardCallController()
 
+    bri_ts = (1, 2)
+
+    e1_ts = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+             17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31)
+
     # we should also look at call_signal_info here, but this
-    # hasn't been wrapped properly
-    calls = [Call(controller, dispatcher, None, 0, t) for t in (1, 2)]
-    calls += [Call(controller, dispatcher, None, 8, t) for t in (1, 2)]
-    calls += [Call(controller, dispatcher, None, 9, t) for t in (1, 2)]
+    # hasn't been swigged properly yet
+    calls = [Call(controller, dispatcher, None, 0, t) for t in bri_ts]
+    calls += [Call(controller, dispatcher, None, 8, t) for t in e1_ts]
+    calls += [Call(controller, dispatcher, None, 9, t) for t in e1_ts]
     
     dispatcher.run()
