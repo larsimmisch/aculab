@@ -170,8 +170,8 @@ class CallHandle:
                 outparms.cnf |= lowlevel.CNF_TSPREFER
                 
             outparms.sending_complete = 1
-            outparms.originating_address = originating_address
-            outparms.destination_address = destination_address
+            outparms.originating_addr = originating_address
+            outparms.destination_addr = destination_address
             outparms.feature_information = feature
             outparms.feature = feature_data
 
@@ -187,8 +187,8 @@ class CallHandle:
                 outparms.cnf |= lowlevel.CNF_TSPREFER
                 
             outparms.sending_complete = 1
-            outparms.originating_address = originating_address
-            outparms.destination_address = destination_address
+            outparms.originating_addr = originating_address
+            outparms.destination_addr = destination_address
 
             rc = lowlevel.call_openout(outparms)
             if rc:
