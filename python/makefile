@@ -23,7 +23,7 @@ aculab/lowlevel.py: lowlevel.py
 	mv lowlevel.py aculab/lowlevel.py
 
 acu.i: top.i ../include/mvcldrvr.h ../include/mvswdrvr.h ../include/smdrvr.h \
-	   ../include/smosintf.h makefile
+	   ../include/smosintf.h bottom.i makefile
 	cat top.i >$@
 	cat ../include/mvswdrvr.h >> $@
 	cat ../include/mvcldrvr.h >> $@
@@ -31,7 +31,7 @@ acu.i: top.i ../include/mvcldrvr.h ../include/mvswdrvr.h ../include/smdrvr.h \
 	cat ../include/smdrvr.h >> $@
 	cat ../include/smbesp.h >> $@
 	cat ../include/smfwcaps.h >> $@
-	# cat bottom.i >>$@
+	cat bottom.i >>$@
 
 acu_wrap.c lowlevel.py: acu.i
 	$(SWIGBIN)/swig $(DEFINES) -I$(SWIGLIB) -I$(SWIGLIB)/Python -I../include \

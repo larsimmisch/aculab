@@ -13,11 +13,12 @@ class CTBusConnection:
         output.ots = self.ts[1]
         output.mode = lowlevel.DISABLE_MODE
 
+        # print 'disabling', self.ts
+
         rc = lowlevel.sw_set_output(self.sw, output)
         if rc:
             raise AculabError(rc, 'sw_set_output')
         
-
 class CTBus:
 
     def allocate(self):
@@ -73,3 +74,44 @@ class H100(CTBus):
         for st in range(32):
             for ts in range(128):
                 self.slots.append((st, ts))
+
+def autodetect():
+    """autodetects currently running clocked bus and returns
+    a suitable CTBus subclass"""
+    
+    n = lowlevel.sw_get_drvrs()
+
+
+##     # this would be nice, but doesn't work on my BRI4
+##     buses = 0xffffffff
+    
+##     # first, determine which busses are available on all cards
+##     for i in range(n):
+##         mode = lowlevel.SWMODE_PARMS()
+##         rc = lowlevel.sw_mode_switch(i, mode)
+##         if rc:
+##             raise AculabError(rc, 'sw_mode_switch')
+
+##         print mode.ct_buses
+##         buses &= (1 << mode.ct_buses)
+
+##     print buses
+
+    # check if any card is sourced from MVIP or SCBus or drives SCBus
+    for i in range(n):
+        clock = lowlevel.QUERY_CLKMODE_PARMS()
+        rc = lowlevel.sw_query_clock_control(i, clock)
+        if rc:
+            raise AculabError(rc, 'sw_query_clock_control')
+
+        if clock.last_clock_mode & lowlevel.CLOCK_REF_MVIP:
+            return MVIP()
+        elif clock.last_clock_mode & (lowlevel.CLOCK_REF_SCBUS
+                                      | lowlevel.DRIVE_SCBUS):
+            return SCBus()
+
+    return H100()
+    
+    
+        
+        

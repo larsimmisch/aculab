@@ -63,6 +63,8 @@ class RecordJob:
         self.filename = filename
         self.token = token
         self.file = open(filename, 'wb')
+        self.buffer = lowlevel.SM_TS_DATA_PARMS()
+        self.buffer.initrecordbuffer()
 
 class DigitsJob:
     def __init__(self, token):
@@ -315,7 +317,7 @@ class SpeechChannel:
         dp = lowlevel.SM_PLAY_DIGITS_PARMS()
         dp.channel = self.channel
         dp.digits.type = lowlevel.kSMDTMFDigits
-        dp.digits.digits = digits
+        dp.digits.digit_string = digits
         dp.digits.inter_digit_delay = inter_digit_delay
         dp.digits.digit_duration = digit_duration
 
@@ -323,11 +325,11 @@ class SpeechChannel:
         if rc:
             self.digitsjob = None
             raise AculabError(rc, 'sm_play_digits')
-                
+
     def on_write(self):
         if self.playjob:
             self.fill_play_buffer()
-        elif self.digitjob:
+        elif self.digitsjob:
             status = lowlevel.SM_PLAY_DIGITS_STATUS_PARMS()
             status.channel = self.channel
 
@@ -374,7 +376,7 @@ class SpeechChannel:
         record.agc = agc
         record.volume = 0
 
-        rc = sm_record_start(record)
+        rc = lowlevel.sm_record_start(record)
         if rc:
             self.recordjob = None
             raise AculabError(rc, 'sm_record_start')
@@ -382,7 +384,7 @@ class SpeechChannel:
     def on_read(self):
         status = lowlevel.SM_RECORD_STATUS_PARMS()
 
-        while True:
+        while self.recordjob:
             status.channel = self.channel
 
             rc = lowlevel.sm_record_status(status)
@@ -395,6 +397,7 @@ class SpeechChannel:
                     return
 
                 how = lowlevel.SM_RECORD_HOW_TERMINATED_PARMS()
+                how.channel = self.channel
 
                 rc = lowlevel.sm_record_how_terminated(how)
                 if rc:
@@ -419,14 +422,15 @@ class SpeechChannel:
             elif status.status == lowlevel.kSMRecordStatusNoData:
                 return
             else:
-                data = lowlevel.SM_TS_DATA_PARMS()
+                data = self.recordjob.buffer
                 data.channel = self.channel
+                data.length = lowlevel.kSMMaxRecordDataBufferSize
 
                 rc = lowlevel.sm_get_recorded_data(data)
                 if rc:
                     raise AculabError(rc, 'sm_get_recorded_data')
 
-                self.recordjob.file.write(data.data)
+                self.recordjob.file.write(data.getdata())
 
     def stop_record(self):
         if self.recordjob:
