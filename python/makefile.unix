@@ -7,13 +7,13 @@ CXX := gcc
 TiNGTYPE := LINUX
 DEFINES := -DACU_LINUX -DSM_POLL_UNIX -DTiNGTYPE_$(TiNGTYPE) -DTiNG_USE_V6
 
-DTK_INCLUDE = -I$(DTK)/include -I$(DTK)/TiNG/include
+DTK_INCLUDE = -I$(DTK)/include -I$(DTK)/ting/include
 
-C_DEFINES := -DNDEBUG -fPIC $(DEFINES) $(DTK_include)
+C_DEFINES := -DNDEBUG -fPIC $(DEFINES) $(DTK_INCLUDE)
 
 PYTHON_INCLUDE = -I/usr/local/include/python2.4
 PYTHON_LIBDIR	= -L/usr/local/lib/python2.4/config
-PYTHON_LIBS = -lpython2.3
+PYTHON_LIBS = -lpython2.4
 
 OBJS	:= acu_wrap.o
 
@@ -38,11 +38,8 @@ sized_struct.i: $(DTK)/include/cl_lib.h $(DTK)/include/sw_lib.h
 	python sized_struct.py acu_wrap.xml
 	rm acu_wrap.xml
 
-acu_wrap.xml: acu.i
-	swig $(DEFINES) $(DTK_INCLUDE) -xml $<
-
 acu_wrap.c aculab/lowlevel.py: acu.i
-	swig $(DEFINES) -python -modern -new_repr $<
+	swig $(DEFINES) $(DTK_INCLUDE) -python -modern -new_repr $<
 	mv lowlevel.py aculab
 
 %.o: %.c
@@ -69,5 +66,5 @@ patch: $(DTK)/include/cl_lib.h
 
 clean:
 	rm -f aculab/*.so *.o aculab/*.pyc \
-		lowlevel.py acu.i *_wrap.c *_wrap.doc
+		lowlevel.py *_wrap.c *_wrap.doc
 	rm -rf build dist

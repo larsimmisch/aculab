@@ -73,5 +73,5 @@ patch: $(DTK)/include/cl_lib.h
 
 clean:
 	rm -f aculab/*.dll *.obj aculab/*.lib aculab/*.exp aculab/*.pyc \
-		lowlevel.py acu.i *_wrap.c *_wrap.doc
+		lowlevel.py *_wrap.c *_wrap.doc
 	rm -rf build dist

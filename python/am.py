@@ -15,6 +15,7 @@ from email.MIMEText import MIMEText
 from email.MIMEAudio import MIMEAudio
 import aculab
 from aculab.error import AculabError
+from aculab.snapshot import Snapshot
 from aculab.callcontrol import Call, CallDispatcher
 from aculab.speech import SpeechChannel, SpeechDispatcher
 from aculab.busses import DefaultBus
@@ -162,13 +163,14 @@ class RepeatedIncomingCallController(IncomingCallController):
         call.openin()
 
 def usage():
-    print 'usage: am.py [-p <port>] [-m <module>] [-r]'
+    print 'usage: am.py [-c <card>] [-p <port>] [-m <module>] [-r]'
     sys.exit(-2)
 
 if __name__ == '__main__':
 
     log = aculab.defaultLogging(logging.DEBUG)
 
+    card = 0
     port = 0
     module = 0
     controller = IncomingCallController()
@@ -176,6 +178,8 @@ if __name__ == '__main__':
     options, args = getopt.getopt(sys.argv[1:], 'p:rsm:')
 
     for o, a in options:
+        if o == '-c':
+            card = int(a)
         if o == '-p':
             port = int(a)
         elif o == '-m':
@@ -187,10 +191,8 @@ if __name__ == '__main__':
         else:
             usage()
 
-    if aculab.callcontrol.version[0] >= 6:
-        from aculab.snapshot import Snapshot
-        snapshot = Snapshot()
-        port = snapshot.call[0].ports[0].open.port_id
+    snapshot = Snapshot()
+    port = snapshot.call[card].ports[port].open.port_id
 
     call = Call(controller, port=port)
 
