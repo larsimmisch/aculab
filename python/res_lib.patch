@@ -1,0 +1,12 @@
+--- /usr/local/aculab/v6/include/res_lib.h	2004-11-11 13:08:31.000000000 +0100
++++ res_lib.h2	2004-11-12 13:10:27.000000000 +0100
+@@ -12,6 +12,9 @@
+ 
+ #include "acu_type.h"
+ 
++#define ACU_PACK_DIRECTIVE
++#define ACU_EXPORT
++
+ #ifdef _WIN32
+ #pragma pack(push, 8)
+ #endif
