@@ -1,4 +1,7 @@
+#!/usr/bin/env python
+
 import sys
+import os
 import getopt
 import threading
 from aculab.error import AculabError
@@ -23,9 +26,9 @@ class IncomingCallController:
                              call.speak_to(call.timeslots[1]),
                              call.speech.listen_to(call.timeslots[1]) ]
         
-        call.speech.play('c:/tmp/startrek.al')
+        call.speech.play('startrek.al')
         # call.speech.digits('12345')
-        # call.speech.record('c:/tmp/recording.al', 90000)
+        # call.speech.record('recording.al', 90000)
         
     def ev_remote_disconnect(self, call):
         call.speech.stop()
@@ -54,11 +57,12 @@ def usage():
     sys.exit(-2)
 
 if __name__ == '__main__':
+
     port = 0
     controller = IncomingCallController()
 
     bus = autodetect()
-    print bus
+    # print bus
 
     options, args = getopt.getopt(sys.argv[1:], 'p:rs')
 
