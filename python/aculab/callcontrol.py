@@ -286,6 +286,17 @@ class CallHandle:
 
         return self.details
 
+    def get_feature_details(self, type):
+        self.feature_details = lowlevel.FEATURE_DETAIL_XPARMS()
+        self.feature_details.handle = self.handle
+        self.feature_details.feature_type = type
+
+        rc = lowlevel.call_feature_details(self.feature_details)
+        if rc:
+            raise AculabError(rc, 'call_feature_details')
+
+        return self.feature_details
+
     def accept(self):
         rc = lowlevel.call_accept(self.handle)
         if rc:
@@ -356,6 +367,8 @@ class CallHandle:
         self.get_details()
 
     def ev_idle(self):
+        self.get_feature_details(lowlevel.FEATURE_FACILITY)
+        self.get_details()
         self.release()
 
 class Call(CallHandle):
