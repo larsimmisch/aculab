@@ -24,6 +24,7 @@ driver_info = lowlevel.SM_DRIVER_INFO_PARMS()
 lowlevel.sm_get_driver_info(driver_info)
 version = (driver_info.major, driver_info.minor)
 
+# create prosody local streams for TiNG
 if version[0] >= 2:
     prosodystreams = []
 
@@ -46,7 +47,11 @@ def swig_value(s):
 
 # this class is only needed on Windows
 class Win32DispatcherThread(threading.Thread):
+    """Helper class for Win32SpeechEventDispatcher.
     
+    WaitForMultipleObjects is limited to 64 objects,
+    so multiple dispatcher threads are needed."""
+
     def __init__(self, mutex, handle = None, method = None):
         self.queue = []
         self.wakeup = win32event.CreateEvent(None, 0, 0, None)
@@ -104,6 +109,8 @@ class Win32DispatcherThread(threading.Thread):
         
 
 class Win32SpeechEventDispatcher:
+    """Prosody Event dispatcher for Windows."""
+
     def __init__(self):
         self.mutex = threading.Lock()
         self.dispatchers = []
@@ -160,6 +167,9 @@ class Win32SpeechEventDispatcher:
         self.dispatchers[0].run()
         
 class PollSpeechEventDispatcher(threading.Thread):
+    """Prosody Event dispatcher for Unix systems with poll(), most notably
+    Linux."""
+
     def __init__(self):
         threading.Thread.__init__(self)
         self.handles = {}
@@ -262,17 +272,18 @@ class PlayJob:
         self.channel = channel
         self.filename = filename
         self.user_data = user_data
+        self.position = 0
+        self.agc = agc
+        self.speed = speed
+        self.volume = volume
+
         # open the file and read the length
         self.file = open(filename, 'rb')
         self.file.seek(0, 2)
         self.buffer = lowlevel.SM_TS_DATA_PARMS()
         self.length = self.file.tell()
         self.file.seek(0, 0)
-        self.position = 0
-        self.agc = agc
-        self.speed = speed
-        self.volume = volume
-
+        
     def start(self):
         replay = lowlevel.SM_REPLAY_PARMS()
         replay.channel = self.channel.channel

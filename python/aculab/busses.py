@@ -94,7 +94,17 @@ class CTBus:
 
 class MVIP(CTBus):
     """MVIP Bus.
-    An instance of this class represents a list of available timeslots."""
+    An instance of this class represents 16 streams of 32 unidirectional
+    timeslots per stream.
+
+    This is in contrast to the original MVIP switching model that
+    exposes 8 streams with 32 bidirectional timelots.
+
+    The original MVIP switching model does this by treating 'trunk' and
+    'resource' cards differently with regards to the stream numbering.
+
+    Applications need to be aware of this difference. Caveat implementor.
+    """
 
     def __init__(self):
         self.slots = []
@@ -110,7 +120,8 @@ class MVIP(CTBus):
 
 class SCBus(CTBus):
     """SCBus, Dialogic's successor of PEB.
-    An instance of this class represents a list of available timeslots."""
+    An instance of this class represents 1024 unidirectional timelots on
+    stream 24 according to Aculab's stream numbering convention"""
 
     def __init__(self):
         self.slots = []
@@ -120,7 +131,8 @@ class SCBus(CTBus):
 class H100(CTBus):
     """H.100, the ECTF defined bus standard.
     This class also applies to H.110.
-    An instance of this class represents a list of available timeslots."""
+    An instance of this class represents 32 streams with 128 unidirectional
+    timeslots per stream."""
 
     def __init__(self):
         self.slots = []
@@ -140,7 +152,7 @@ class ProsodyLocalBus(CTBus):
                 self.slots.append((st, ts))
 
 def _autodetect():
-    """autodetects running (i.e. supported and clocked) busses and returns
+    """Autodetects running (i.e. supported and clocked) busses and returns
     a CTBus subclass.
 
     If multiple busses are supported, CTBus subclasses are returned in the
