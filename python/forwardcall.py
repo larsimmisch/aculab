@@ -52,7 +52,7 @@ class ForwardCallController:
                 c = [self.incall.listen_to(slot, self.in_slot),
                      mvip.listen_to(switch, self.saru_slot, mvip.invert(slot))]
 
-                self.connections.append(c)
+                self.connections.extend(c)
                 
             else:
                 self.outcall = Call(self, int(d.destination_addr[0]),
@@ -71,7 +71,7 @@ class ForwardCallController:
                  self.outcall.listen_to(slots[1], self.out_slot),
                  self.incall.listen_to(self.in_slot, mvip.invert(slots[1]))]
 
-            self.connections.append(c)
+            self.connections.extend(c)
 
     def disconnect(self):
         for c in self.connections:
@@ -135,9 +135,8 @@ def usage():
 
 if __name__ == '__main__':
     port = 2
-    controller = ForwardCallController()
 
-    options, args = getopt.getopt(sys.argv[1:], 'p:r')
+    options, args = getopt.getopt(sys.argv[1:], 'p:')
 
     for o, a in options:
         if o == '-p':
@@ -145,6 +144,7 @@ if __name__ == '__main__':
         else:
             usage()
 
-    c = Call(controller, port, timeslot = 1)
-
+    calls = [Call(ForwardCallController(), port, timeslot = 1),
+             Call(ForwardCallController(), port, timeslot = 2)]
+             
     dispatcher.run()
