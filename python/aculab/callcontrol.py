@@ -21,8 +21,9 @@ no_state_change_extended_events = [lowlevel.EV_EXT_FACILITY,
 
 class CallEventDispatcher:
 
-    def __init__(self):
-        self.calls = {}                               
+    def __init__(self, verbose = True):
+        self.calls = {}
+        self.verbose = verbose
 
     # add must only be called from a dispatched event
     # - not from a separate thread
@@ -54,11 +55,9 @@ class CallEventDispatcher:
             if event.handle:
                 call = self.calls[event.handle]
                 if event.state == lowlevel.EV_EXTENDED:
-                    e = event.extended_state
+                    ev = ext_event_names[event.extended_state].lower()
                 else:
-                    e = event.state
-
-                ev = event_names[e].lower()
+                    ev = event_names[event.state].lower()
                     
                 if hasattr(call.controller, 'mutex'):
                     mutex = call.controller.mutex
@@ -107,11 +106,11 @@ class CallEventDispatcher:
 
                     if mutex:
                         mutex.release()
-                
-                if not handled:
-                    handled = '(ignored)'
 
-                print hex(event.handle), ev, handled
+                if self.verbose:
+                    if not handled:
+                        handled = '(ignored)'
+                    print hex(event.handle), ev, handled
 
 
 # The CallHandle class models a call handle, as defined by the Aculab lowlevel,
@@ -198,7 +197,7 @@ class CallHandle:
             if self.timeslot != -1:
                 outparms.cnf |= lowlevel.CNF_TSPREFER
                 
-            outparms.sending_complete = 1
+            outparms.sending_complete = sending_complete
             outparms.originating_addr = originating_address
             outparms.destination_addr = destination_address
 
