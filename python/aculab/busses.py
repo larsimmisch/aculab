@@ -1,6 +1,9 @@
 import sys
 import lowlevel
+import logging
 from error import AculabError
+
+log = logging.getLogger('switch')
 
 class Connection:
     """A connection, potentially across a bus"""
@@ -46,6 +49,8 @@ class CTBusConnection:
         rc = lowlevel.sw_set_output(self.sw, output)
         if rc:
             raise AculabError(rc, 'sw_set_output')
+
+        log.debug('%02d:%02d disabled' % self.ts)
 
         self.sw = None
 
@@ -120,10 +125,10 @@ class ProsodyLocalBus(CTBus):
             for ts in range(32):
                 self.slots.append((st, ts))
 
-def autodetect():
+def _autodetect():
     """autodetects running (i.e. supported and clocked) busses and returns
     the CTBus subclass deemed best"""
-    
+
     n = lowlevel.sw_get_drvrs()
 
     buses = 0
@@ -161,5 +166,5 @@ def autodetect():
     
     return None    
     
-DefaultBus = autodetect()
+DefaultBus = _autodetect()
         

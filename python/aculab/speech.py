@@ -649,7 +649,8 @@ class SpeechChannel:
             self._ting_connect()
             # don't do sm_listen_for for TiNG
             # Todo: why not?
-            # self._listen()
+        else:
+            self._listen()
 
     def __del__(self):
         self._close()
@@ -868,6 +869,10 @@ class SpeechChannel:
                               (self.info.card, output.ost, output.ots,
                                output.ist, output.its))
 
+        log_switch.debug('%s %d:%d := %d:%d', self.name,
+                         output.ost, output.ots,
+                         output.ist, output.its)
+
         return CTBusConnection(self.info.card, sink)
 
     def connect(self, other, bus = DefaultBus):
@@ -875,8 +880,10 @@ class SpeechChannel:
             c = Connection(bus)
             if self.info.card == other.info.card:
                 if other == self:
-                    c.connections = [self.listen_to((self.info.ost,
-                                                     self.info.ots))]
+                    c.timeslots = [ bus.allocate() ]
+                    print c.timeslots[0]
+                    c.connections = [self.listen_to(c.timeslots[0]),
+                                     self.speak_to(c.timeslots[0])]
                 else:
                     # connect directly
                     c.connections = [self.listen_to((other.info.ost,
