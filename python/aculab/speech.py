@@ -9,6 +9,7 @@ if os.name == 'nt':
     import win32api
     import win32event
 else:
+    import marshal
     import select
 
 __all__ = ['SpeechEventDispatcher', 'PlayJob', 'RecordJob',
@@ -63,23 +64,61 @@ class Win32SpeechEventDispatcher:
         
 class PollSpeechEventDispatcher(threading.Thread):
     def __init__(self):
-        self.handles = {}
         threading.Thread.__init__(self)
+        self.handles = {}
+        self.mutex = threading.Lock()
+
+        # create a pipe to add/remove fds
+        pfds = os.pipe()
+        self.pipe = (os.fdopen(pfds[0], 'rb'), os.fdopen(pfds[1], 'wb'))
         self.setDaemon(1)
         
     def add(self, handle, method):
-        self.handles[handle.fileno()] =  method
+        h = handle.fileno()
+        # function 1 is add
+        self.mutex.acquire()
+        self.handles[h] =  method
+        self.mutex.release()
+        marshal.dump((1, h), self.pipe[1])
+        # we must flush, otherwise the reading end will block
+        self.pipe[1].flush()
+
+    def remove(self, handle):
+        h = handle.fileno()
+        self.mutex.acquire()
+        del self.handles[h]
+        self.mutex.release()
+        # function 0 is remove
+        marshal.dump((0, h), self.pipe[1])
+        # we must flush, otherwise the reading end will block
+        self.pipe[1].flush()
 
     def run(self):
         p = select.poll()
 
-        for h in self.handles.keys():
-            p.register(h)
+        # listen to the read fd of our pipe
+        p.register(self.pipe[0], select.POLLIN)
 
         while 1:
             active = p.poll()
-            for a in active:
-                self.handles[a[0]]()
+            print active
+            for a, mode in active:
+                if a == self.pipe[0].fileno():
+                    add, fd = marshal.load(self.pipe[0])
+                    if add:
+                        p.register(fd)
+                    else:
+                        p.unregister(fd)
+                else:
+                    self.mutex.acquire()
+                    try:
+                        m = self.handles.get(a, None)
+                    finally:
+                        self.mutex.release()
+
+                    # ignore method not found
+                    if m:
+                        m()
 
 if os.name == 'nt':
     SpeechEventDispatcher = Win32SpeechEventDispatcher
@@ -185,9 +224,7 @@ class SpeechChannel:
         self.event_write = self.set_event(lowlevel.kSMEventTypeWriteData);
         self.event_recog = self.set_event(lowlevel.kSMEventTypeRecog)
 
-        # add them to the dispatcher
-        self.dispatcher.add(self.event_read, self.on_read)
-        self.dispatcher.add(self.event_write, self.on_write)
+        # add the recog event to the dispatcher
         self.dispatcher.add(self.event_recog, self.on_recog)
 
         # switch to local timeslots for TiNG
@@ -384,6 +421,9 @@ class SpeechChannel:
             self.playjob = None
             raise AculabSpeechError(rc, 'sm_replay_start')
 
+        # add the write event to the dispatcher
+        self.dispatcher.add(self.event_write, self.on_write)
+
         self.fill_play_buffer()
 
     def fill_play_buffer(self):
@@ -400,6 +440,9 @@ class SpeechChannel:
                 return
             elif status.status == lowlevel.kSMReplayStatusComplete:
 
+                # remove the write event from the dispatcher
+                self.dispatcher.remove(self.event_write)
+                
                 if hasattr(self.controller, 'mutex'):
                     self.controller.mutex.acquire()
 
@@ -447,6 +490,9 @@ class SpeechChannel:
             self.digitsjob = None
             raise AculabSpeechError(rc, 'sm_play_digits')
 
+        # add the write event to the dispatcher
+        self.dispatcher.add(self.event_write, self.on_write)
+
     def on_write(self):
 
         if self.playjob:
@@ -460,6 +506,9 @@ class SpeechChannel:
                 raise AculabSpeechError(rc, 'sm_play_digits_status')
 
             if status.status == lowlevel.kSMPlayDigitsStatusComplete:
+                
+                # remove the write event from to the dispatcher
+                self.dispatcher.remove(self.event_write)
 
                 if hasattr(self.controller, 'mutex'):
                     self.controller.mutex.acquire()
@@ -503,7 +552,10 @@ class SpeechChannel:
         if rc:
             self.recordjob = None
             raise AculabSpeechError(rc, 'sm_record_start')
-    
+
+        # add the read event to the dispatcher
+        self.dispatcher.add(self.event_read, self.on_read)
+
     def on_read(self):
         status = lowlevel.SM_RECORD_STATUS_PARMS()
 
@@ -518,6 +570,9 @@ class SpeechChannel:
                 
                 if not self.recordjob:
                     return
+
+                # remove the read event from the dispatcher
+                self.dispatcher.add(self.event_read, self.on_read)
 
                 how = lowlevel.SM_RECORD_HOW_TERMINATED_PARMS()
                 how.channel = self.channel

@@ -20,7 +20,7 @@ EXTRA_OBJS=$(DTK)/call/lib/cllib.o $(DTK)/call/lib/clunix.o \
            $(DTK)/switch/lib/swunix.o \
            $(DTK)/ting/apilib/gen-${TiNGTYPE}/TiNGlib.o
 
-all: aculab/_lowlevel.so aculab/lowlevel.py
+all: aculab/_lowlevel.so aculab/lowlevel.py info
 
 aculab/_lowlevel.so: $(OBJS)
 	$(CXX) -shared -o $@ $(OBJS) $(EXTRA_OBJS) $(PYTHON_LIBDIR) $(PYTHON_LIBS)
@@ -41,6 +41,9 @@ acu_wrap.c aculab/lowlevel.py: acu.i
 
 %.o: %.c
 	$(CXX) -c $(C_DEFINES) -I$(PYTHON_INCLUDES) -Iaculib $< -o $@ 
+
+info: info.o
+	$(CXX) -o $@ info.o $(DTK)/ting/apilib/gen-${TiNGTYPE}/TiNGlib.o -lm -lpthread
 
 test:
 	python test_swig.py
