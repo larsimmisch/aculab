@@ -3,131 +3,137 @@ import getopt
 from aculab.error import AculabError
 from aculab.callcontrol import *
 from aculab.busses import MVIP
+from aculab.names import event_names
 import aculab.lowlevel as lowlevel
 
 mvip = MVIP()
 
-class ForwardCallController:
-    "controls a single incoming call and its corresponding outgoing call"
+def routing_table(port, details):
+    "returns the tuple (wait, port, timeslot, destination_address)"
+    
+    if not details.destination_addr and details.sending_complete:
+        return (False, None, None, None)
 
-    def __init__(self):
-        self.incall = None
+    if port == 0:
+        return (False, 1, 1, '1')
+    else:
+        return (False, 0, 1, '1')
+    
+    # return (False, None, None, None)
+
+def find_available_call(port, timeslot = None):
+    for c in calls:
+        if c.port == port and (c.last_event == lowlevel.EV_WAIT_FOR_INCOMING 
+                               or c.last_event == lowlevel.EV_IDLE):
+            if timeslot == None or timeslot == c.timeslot:
+                return c
+
+    return None
+
+class Forward:
+
+    def __init__(self, incall):
+        self.incall = incall
         self.outcall = None
-        self.in_slot = None
-        self.out_slot = None
-        self.saru_slot = None
         self.connections = []
 
-    def on_details(self):
-        d = self.incall.details
-        # hang up if no destination address and sending complete
-        if not d.destination_addr:
-            if d.sending_complete:
-                print hex(self.incall.handle), \
-                      'error: no destination address but sending_complete'
-                self.incall.disconnect()
-                return
-            else:
-                print hex(self.incall.handle), \
-                      'waiting - no destination address'
-                return
+        self.route()
+
+    def route(self):
+        self.incall.token = self
 
         if self.outcall:
+            # warning: untested (and probably flawed)
             print hex(self.outcall.handle), 'sending:', d.destination_addr
             self.outcall.send_overlap(d.destination_addr,
                                       d.sending_complete)
         else:
-            if d.destination_addr[0] == '9':
-                # special case for SARU simulator
-                self.incall.accept()
-                self.saru_slot = (lowlevel.call_port_2_stream(1), 1)
+            wait, port, timeslot, number = routing_table(self.incall.port,
+                                                         self.incall.details)
 
-                switch = lowlevel.call_port_2_swdrvr(1)
-
-                slot = mvip.allocate()
-                
-                self.in_slot = (self.incall.details.stream,
-                                self.incall.details.ts)
-
-                # connect the call
-                c = [self.incall.listen_to(slot, self.in_slot),
-                     mvip.listen_to(switch, self.saru_slot, mvip.invert(slot))]
-
-                self.connections.extend(c)
-                
+            if port != None and number:
+                print 'making outgoing call', port, timeslot
+                self.outcall = find_available_call(port, timeslot)
+                if not self.outcall:
+                    print hex(self.incall.handle), 'no call available'
+                    self.incall.disconnect()
+                else:
+                    self.outcall.token = self
+                    self.outcall.openout(number)
+            elif not wait:
+                self.incall.disconnect()
             else:
-                self.outcall = Call(self, int(d.destination_addr[0]),
-                                    d.destination_addr)
+                print hex(self.incall.handle), \
+                      'waiting - no destination address'
+
 
     def connect(self):
-        if not self.saru_slot:
+        if not self.connections:
             slots = [mvip.allocate(), mvip.allocate()]
 
-            self.in_slot = (self.incall.details.stream, self.incall.details.ts)
-            self.out_slot = (self.outcall.details.stream,
-                             self.outcall.details.ts)
-
-            c = [self.incall.listen_to(slots[0], self.in_slot),
-                 self.outcall.listen_to(self.out_slot, mvip.invert(slots[0])),
-                 self.outcall.listen_to(slots[1], self.out_slot),
-                 self.incall.listen_to(self.in_slot, mvip.invert(slots[1]))]
+            c = [self.incall.speak_to(slots[0]),
+                 self.outcall.listen_to(mvip.invert(slots[0])),
+                 self.outcall.speak_to(slots[1]),
+                 self.incall.listen_to(mvip.invert(slots[1]))]
 
             self.connections.extend(c)
 
     def disconnect(self):
         for c in self.connections:
-            if c[1][0] < 16:
-                mvip.free(c[1])
+            if c.ts[0] < 16:
+                mvip.free(c.ts)
 
         self.connections = []
-        self.in_slot = None
-        self.out_slot = None
-        self.saru_slot = None
+        
+class ForwardCallController:
+    "controls a single incoming call and its corresponding outgoing call"
 
     def ev_incoming_call_det(self, call):
-        self.incall = call
-        self.on_details()
-
-    def ev_ext_hold_request(self, call):
-        self.on_details()
+        call.token = Forward(call)
 
     def ev_outgoing_ringing(self, call):
-        if self.incall:
-            self.incall.incoming_ringing()
+        call.token.connect()
+        call.token.incall.incoming_ringing()
 
     def ev_call_connected(self, call):
-        if call == self.incall:
-            self.connect()
+        if call == call.token.incall:
+            call.token.connect()
         else:
-            self.incall.accept()
+            call.token.incall.accept()
 
     def ev_remote_disconnect(self, call):
         # if both calls hang up at the same time, disconnect will be called
         # twice, because the calls are set to None only in ev_idle.
         # This should not matter, however.
-        if call == self.incall:
-            if self.outcall:
-                self.outcall.disconnect()
-        elif call == self.outcall:
-            if self.incall:
-                self.incall.disconnect()
+        if call == call.token.incall:
+            if call.token.outcall:
+                call.token.outcall.disconnect()
+        elif call == call.token.outcall:
+            if call.token.incall:
+                call.token.incall.disconnect()
 
         call.disconnect()
 
     def ev_idle(self, call):
-        self.disconnect()
+        if call.token:
+            call.token.disconnect()
         
-        if call == self.incall:
-            self.incall = None
-            if self.outcall:
-                print hex(self.outcall.handle), "disconnecting outgoing call"
-                self.outcall.disconnect()
-            call.restart()
-        elif call == self.outcall:
-            self.outcall = None
-            if self.incall:
-                print hex(self.incall.handle), "disconnecting incoming call"
-                self.incall.disconnect()
+            if call == call.token.incall:
+                if call.token.outcall:
+                    print hex(call.token.outcall.handle), \
+                          "disconnecting outgoing call"
+                    call.token.outcall.disconnect()            
+            elif call == call.token.outcall:
+                if call.token.incall:
+                    print hex(call.token.incall.handle), \
+                          "disconnecting incoming call"
+                    call.token.incall.disconnect()
+                
+            call.token = None
+
+        if not call.handle:
+            call.openin()
+
 
 def usage():
     print 'forwardcall.py [-p <port>]'
@@ -145,8 +151,11 @@ if __name__ == '__main__':
             usage()
 
     dispatcher = CallEventDispatcher()
+    controller = ForwardCallController()
 
-    calls = [Call(ForwardCallController(), dispatcher, port, timeslot = 1),
-             Call(ForwardCallController(), dispatcher, port, timeslot = 2)]
-             
+    # we should also look at call_signal_info here, but this
+    # hasn't been wrapped properly
+    calls = [Call(controller, dispatcher, None, p, t) for p in (0, 1)
+             for t in (1, 2)]
+    
     dispatcher.run()

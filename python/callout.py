@@ -15,7 +15,7 @@ class OutgoingCallController:
 class RepeatedOutgoingCallController:
 
     def ev_idle(self, call):
-        call.restart()
+        call.openout(call.destination_address)
 
 def usage():
     print 'callout.py [-p <port>] [-r] number'
@@ -37,7 +37,12 @@ if __name__ == '__main__':
 
     if not len(args):
         usage()
+
+    calldispatcher = CallEventDispatcher()
     
-    c = Call(controller, port, args[0], 1)
+    c = Call(controller, calldispatcher, port=port, timeslot=1)
+
+    c.destination_address = args[0]
+    c.openout(args[0])
 
     calldispatcher.run()

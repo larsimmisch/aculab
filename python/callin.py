@@ -17,7 +17,7 @@ class IncomingCallController:
 class RepeatedIncomingCallController(IncomingCallController):
 
     def ev_idle(self, call):
-        call.restart()
+        call.openin()
 
 def usage():
     print 'usage: callin.py [-p <port>] [-r]'
@@ -39,6 +39,6 @@ if __name__ == '__main__':
                 
     calldispatcher = CallEventDispatcher()
     
-    c = Call(controller, calldispatcher, port)
+    c = Call(controller, calldispatcher, port=port)
 
     calldispatcher.run()
