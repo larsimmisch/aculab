@@ -4,11 +4,11 @@ CXX		:= cl /MD
 
 DEFINES := -DWIN32
 
-SWIGBIN := c:/swig-1.3.17
-SWIGLIB := c:/swig-1.3.17/Lib
+SWIG    := c:/swig-1.3.19
+SWIGLIB := $(SWIG)/Lib
 
 PYTHON_INCLUDES = c:/python22/include
-PYTHON_LIBS	= c:/python22/libs/python22.lib
+PYTHON_LIBS	= c:/python22/libs/python22.lib advapi32.lib
 
 OBJS	:= acu_wrap.obj cllib.obj clnt.obj common.obj swlib.obj swnt.obj \
 			smnt.obj smbesp.obj smlib.obj smfwcaps.obj
@@ -34,7 +34,7 @@ acu.i: top.i ../include/mvcldrvr.h ../include/mvswdrvr.h ../include/smdrvr.h \
 	cat bottom.i >>$@
 
 acu_wrap.c lowlevel.py: acu.i
-	$(SWIGBIN)/swig $(DEFINES) -I$(SWIGLIB) -I$(SWIGLIB)/Python -I../include \
+	$(SWIG)/swig $(DEFINES) -I$(SWIGLIB) -I$(SWIGLIB)/Python -I../include \
 					-shadow -python $<
 
 %.obj: ../src/%.c
