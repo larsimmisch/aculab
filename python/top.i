@@ -16,6 +16,10 @@
 
 %}
 
+#ifndef HAVE_TiNG
+%include "smport.h"
+#endif
+
 /* Allows to execute Python code during function calls */
 %define BLOCKING(name) 
 %exception name {

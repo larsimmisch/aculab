@@ -2,13 +2,40 @@ import sys
 import lowlevel
 from error import AculabError
 
+class Connection:
+    """A connection, potentially across a bus"""
+
+    def __init__(self, bus):
+        """If bus is None, the default bus is used."""
+        if not bus:
+            self.bus = DefaultBus
+        else:
+            self.bus = bus
+        self.connections = []
+        self.timeslots = []
+
+    def close(self):
+        for c in self.connections:
+            c.close()
+
+        self.connections = []
+
+        for t in self.timeslots:
+            self.bus.free(t)
+
+        self.timeslots = []
+
+    def __del__(self):
+        if self.connections or self.timeslots:
+            self.close()
+
 class CTBusConnection:
 
     def __init__(self, sw, ts):
         self.sw = sw
         self.ts = ts
 
-    def __del__(self):
+    def close(self):
         output = lowlevel.OUTPUT_PARMS()
         output.ost = self.ts[0]
         output.ots = self.ts[1]
@@ -20,10 +47,17 @@ class CTBusConnection:
         if rc:
             raise AculabError(rc, 'sw_set_output')
 
+        self.sw = None
+
+    def __del__(self):
+        if self.sw:
+            self.close()
+
     def __repr__(self):
         return '<CTBusConnection [' + str(self.sw) + ', ' + str(self.ts) + ']>'
-        
+
 class CTBus:
+    """Base class for a isochronous, multiplexed bus."""
 
     def allocate(self):
         return self.slots.pop(0)
@@ -79,7 +113,7 @@ class H100(CTBus):
             for ts in range(128):
                 self.slots.append((st, ts))
 
-class ProsodyLocal(CTBus):
+class ProsodyLocalBus(CTBus):
     def __init__(self, module):
         self.slots = []
         for st in range(48 + module * 2, 50 + module * 2):
@@ -87,8 +121,8 @@ class ProsodyLocal(CTBus):
                 self.slots.append((st, ts))
 
 def autodetect():
-    """autodetects currently running clocked bus and returns
-    a suitable CTBus subclass"""
+    """autodetects running (i.e. supported and clocked) busses and returns
+    the CTBus subclass deemed best"""
     
     n = lowlevel.sw_get_drvrs()
 
@@ -119,14 +153,13 @@ def autodetect():
     if buses & (1 << lowlevel.SWMODE_CTBUS_H100):
         return H100()
 
-    if buses & (1 << lowlevel.SWMODE_CTBUS_MVIP):
-        return MVIP()
-
     if buses & (1 << lowlevel.SWMODE_CTBUS_SCBUS):
         return SCBus()
+
+    if buses & (1 << lowlevel.SWMODE_CTBUS_MVIP):
+        return MVIP()
     
-    return None
+    return None    
     
-    
-        
+DefaultBus = autodetect()
         

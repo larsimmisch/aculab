@@ -1,6 +1,6 @@
 import sys
 import lowlevel
-from busses import CTBusConnection, ProsodyLocal
+from busses import CTBusConnection, ProsodyLocalBus, DefaultBus
 from error import AculabError, AculabSpeechError
 import threading
 import os
@@ -15,52 +15,125 @@ else:
 __all__ = ['SpeechEventDispatcher', 'PlayJob', 'RecordJob',
            'DigitsJob', 'SpeechConnection', 'SpeechChannel', 'version']
 
+# check driver info and create prosody streams if TiNG detected
+driver_info = lowlevel.SM_DRIVER_INFO_PARMS()
+lowlevel.sm_get_driver_info(driver_info)
+version = (driver_info.major, driver_info.minor)
+
+if version[0] >= 2:
+    prosodystreams = []
+
+    cards = lowlevel.sm_get_cards()
+    for i in range(cards):
+        card_info = lowlevel.SM_CARD_INFO_PARMS()
+        card_info.card = i
+        lowlevel.sm_get_card_info(card_info)
+        for j in range(card_info.module_count):
+            prosodystreams.append(ProsodyLocalBus(j))
+
 # this class is only needed on Windows
 class Win32DispatcherThread(threading.Thread):
     
-    def __init__(self, handles = {}):
-        """handles is a map from handles to method"""
-        self.handles = handles
+    def __init__(self, mutex, handle = None, method = None):
+        self.queue = []
+        self.wakeup = win32event.CreateEvent(None, 0, 0, None)
+        self.mutex = mutex
+        # handles is a map from handles to method
+        if handle:
+            self.handles = { self.wakeup: None, handle: method }
+        else:
+            self.handles = { self.wakeup: None }
+        
         threading.Thread.__init__(self)
 
     def run(self):
         handles = self.handles.keys()
 
-        while 1:
+        while handles:
             rc = win32event.WaitForMultipleObjects(handles, 0, -1)
             if rc == win32event.WAIT_FAILED:
                 raise "WaitForMultipleObjects failed"
-            
-            handle = handles[rc - win32event.WAIT_OBJECT_0]
-            
-            self.handles[handle]()
+
+            if rc == win32event.WAIT_OBJECT_0:
+                self.mutex.acquire()
+                try:
+                    while self.queue:
+                        add, handle, method = self.queue.pop(0)
+                        if add:
+                            self.handles[handle] = method
+                        else:
+                            del self.handles[handle]
+
+                    handles = self.handles.keys()
+                finally:
+                    self.mutex.release()
+                
+            else:
+                m = None
+                self.mutex.acquire()
+                try:
+                    m = self.handles[handles[rc - win32event.WAIT_OBJECT_0]]
+                finally:
+                    self.mutex.release()
+
+                m()
         
 
 class Win32SpeechEventDispatcher:
     def __init__(self):
+        self.mutex = threading.Lock()
         self.dispatchers = []
-        self.handles = []
+        self.running = False
         
     def add(self, handle, method):
-        if not self.dispatchers:
-            self.dispatchers.append(Win32DispatcherThread({handle: method}))
-        else:
-            d = self.dispatchers[len(self.dispatchers) - 1]
-            if len(d.handles) >= win32event.MAXIMUM_WAIT_OBJECTS:
-                self.dispatchers.append(Win32DispatcherThread({handle: method}))
-            else:
-                d.handles[handle] = method
+        self.mutex.acquire()
+        try:
+            for d in self.dispatchers:
+                if len(d.handles) < win32event.MAXIMUM_WAIT_OBJECTS:
+                    d.queue.append((1, handle, method))
+                    win32event.SetEvent(d.wakeup)
+                    
+                    return
+
+            # if no dispatcher has a spare slot, create a new one
+            d = Win32DispatcherThread(self.mutex, handle, method)
+            if self.running:
+                d.setDaemon(1)
+                d.start()
+            self.dispatchers.append(d)
+        finally:
+            self.mutex.release()
+
+    def remove(self, handle):
+        self.mutex.acquire()
+        try:
+            for d in self.dispatchers:
+                if d.handles.has_key(handle):
+                    d.queue.append((0, handle, None))
+                    win32event.SetEvent(d.wakeup)
+        finally:
+            self.mutex.release()
 
     def start(self):
+        if not self.dispatchers:
+            self.dispatchers.append(Win32DispatcherThread(self.mutex))
+
+        self.running = True
+        
         for d in self.dispatchers:
             d.setDaemon(1)
             d.start()
 
     def run(self):
-        for d in self.dispatchers[:-1]:
+        if not self.dispatchers:
+            self.dispatchers.append(Win32DispatcherThread(self.mutex))
+
+        self.running = True
+
+        for d in self.dispatchers[1:]:
             d.setDaemon(1)
             d.start()
-        self.dispatchers[-1].run()
+        self.dispatchers[0].run()
         
 class PollSpeechEventDispatcher(threading.Thread):
     def __init__(self):
@@ -126,9 +199,9 @@ else:
     SpeechEventDispatcher = PollSpeechEventDispatcher
 
 class PlayJob:
-    def __init__(self, filename, token):
+    def __init__(self, filename, user_data):
         self.filename = filename
-        self.token = token
+        self.user_data = user_data
         # open the file and read the length
         self.file = open(filename, 'rb')
         self.file.seek(0, 2)
@@ -138,9 +211,9 @@ class PlayJob:
         self.position = 0        
 
 class RecordJob:
-    def __init__(self, filename, token):
+    def __init__(self, filename, user_data):
         self.filename = filename
-        self.token = token
+        self.user_data = user_data
         self.file = open(filename, 'wb')
         self.buffer = lowlevel.SM_TS_DATA_PARMS()
         self.buffer.allocrecordbuffer()
@@ -152,15 +225,15 @@ class RecordJob:
         
 
 class DigitsJob:
-    def __init__(self, token):
-        self.token = token
+    def __init__(self, user_data):
+        self.user_data = user_data
 
 class SpeechConnection:    
     def __init__(self, channel):
         self.channel = channel
 
-    def __del__(self):
-        print "disabling", self.channel
+    def close(self):
+        # print "disabling", self.channel
         input = lowlevel.SM_SWITCH_CHANNEL_PARMS()
 
         input.channel = self.channel
@@ -171,12 +244,15 @@ class SpeechConnection:
         if (rc):
             raise AculabSpeechError(rc, 'sm_switch_channel_input')
 
+    def __del__(self):
+        self.close()
+
 class SpeechChannel:
         
     def __init__(self, controller, dispatcher, module = -1):
-        """Controllers must implement play_done(channel, position, token),
-        dtmf(channel, digit), record_done(channel, how, size, token) and
-        digits_done(channel, token)
+        """Controllers must implement play_done(channel, position, user_data),
+        dtmf(channel, digit), record_done(channel, how, size, user_data) and
+        digits_done(channel, user_data)
         If they have a mutex attribute, the mutex will be acquired
         before any method is invoked and release as soon as it returns"""
 
@@ -216,7 +292,8 @@ class SpeechChannel:
             raise AculabSpeechError(rc, 'sm_channel_info')
 
         # workaround for bug in TiNG
-        if version >= 2:
+        global version
+        if version[0] >= 2:
             self.info.card = 0
 
         # initialise our events
@@ -227,39 +304,41 @@ class SpeechChannel:
         # add the recog event to the dispatcher
         self.dispatcher.add(self.event_recog, self.on_recog)
 
-        # switch to local timeslots for TiNG
-        if self.info.ost == -1:
-            self.out_ts = prosodystreams[module].allocate()
-            self.info.ost, self.info.ots = self.out_ts
+        if version[0] >= 2:
+            # switch to local timeslots for TiNG
+            if self.info.ost == -1:
+                self.out_ts = prosodystreams[module].allocate()
+                self.info.ost, self.info.ots = self.out_ts
 
-            output = lowlevel.SM_SWITCH_CHANNEL_PARMS()
+                output = lowlevel.SM_SWITCH_CHANNEL_PARMS()
 
-            output.channel = self.channel
-            output.st, output.ts = self.out_ts
+                output.channel = self.channel
+                output.st, output.ts = self.out_ts
 
-            rc = lowlevel.sm_switch_channel_output(output)
-            if (rc):
-                raise AculabSpeechError(rc, 'sm_switch_channel_output')
+                rc = lowlevel.sm_switch_channel_output(output)
+                if (rc):
+                    raise AculabSpeechError(rc, 'sm_switch_channel_output')
 
-            self.out_connection = SpeechConnection(self.channel)
+                self.out_connection = SpeechConnection(self.channel)
 
 
-        if self.info.ist == -1:
-            self.in_ts = prosodystreams[module].allocate()
-            self.info.ist, self.info.its = self.in_ts
+            if self.info.ist == -1:
+                self.in_ts = prosodystreams[module].allocate()
+                self.info.ist, self.info.its = self.in_ts
 
-            input = lowlevel.SM_SWITCH_CHANNEL_PARMS()
+                input = lowlevel.SM_SWITCH_CHANNEL_PARMS()
 
-            input.channel = self.channel
-            input.st, input.ts = self.in_ts
+                input.channel = self.channel
+                input.st, input.ts = self.in_ts
 
-            rc = lowlevel.sm_switch_channel_input(input)
-            if (rc):
-                raise AculabSpeechError(rc, 'sm_switch_channel_input')
+                rc = lowlevel.sm_switch_channel_input(input)
+                if (rc):
+                    raise AculabSpeechError(rc, 'sm_switch_channel_input')
 
-            self.in_connection = SpeechConnection(self.channel)
+                self.in_connection = SpeechConnection(self.channel)
 
         # don't do sm_listen_for for TiNG
+        # Todo: why not?
         if version[0] < 2:
             listen_for = lowlevel.SM_LISTEN_FOR_PARMS()
             listen_for.channel = self.channel
@@ -402,11 +481,35 @@ class SpeechChannel:
 
         return CTBusConnection(self.info.card, sink)
 
-    def play(self, filename, volume = 0, agc = 0, speed = 0, token = None):
-        """only plays alaw (asynchronously)
-        token is passed back in play_done"""
+    def connect(self, other, bus = DefaultBus):
+        if isinstance(other, SpeechChannel):
+            c = Connection(bus)
+            if self.info.card == other.info.card:
+                # connect directly
+                c.connections = [self.listen_to((other.info.ost,
+                                                 other.info.ots)),
+                                 other.listen_to((self.info.ost,
+                                                  self.info.ots))]
+            else:
+                # allocate two timeslots
+                c.timeslots = [ bus.allocate(), bus.allocate() ]
+                # make connections
+                c.connections = [ other.speak_to(c.timeslots[0]),
+                                  self.listen_to(c.timeslots[0]),
+                                  self.speak_to(c.timeslots[1]),
+                                  other.listen_to(c.timeslots[1]) ]
 
-        self.playjob = PlayJob(filename, token)
+            return c
+        
+        else:
+            # assume other is a CallHandle subclass and delegate to it
+            return other.connect(self)
+    
+    def play(self, filename, volume = 0, agc = 0, speed = 0, user_data = None):
+        """only plays alaw (asynchronously)
+        user_data is passed back in play_done"""
+
+        self.playjob = PlayJob(filename, user_data)
 
         replay = lowlevel.SM_REPLAY_PARMS()
         replay.channel = self.channel
@@ -453,7 +556,7 @@ class SpeechChannel:
                     pos = self.playjob.length
 
                 try:
-                    self.controller.play_done(self, pos, self.playjob.token)
+                    self.controller.play_done(self, pos, self.playjob.user_data)
                 finally:
                     self.playjob = None
 
@@ -474,9 +577,9 @@ class SpeechChannel:
                     raise AculabSpeechError(rc, 'sm_put_replay_data')
 
     def digits(self, digits, inter_digit_delay = 32, digit_duration = 64,
-               token = None):
+               user_data = None):
 
-        self.digitsjob = DigitsJob(digits)
+        self.digitsjob = DigitsJob(user_data)
 
         dp = lowlevel.SM_PLAY_DIGITS_PARMS()
         dp.channel = self.channel
@@ -494,7 +597,7 @@ class SpeechChannel:
         self.dispatcher.add(self.event_write, self.on_write)
 
     def on_write(self):
-
+        print "on_write"
         if self.playjob:
             self.fill_play_buffer()
         elif self.digitsjob:
@@ -514,7 +617,7 @@ class SpeechChannel:
                     self.controller.mutex.acquire()
 
                 try:
-                    self.controller.digits_done(self, self.digitsjob.token)
+                    self.controller.digits_done(self, self.digitsjob.user_data)
                 finally:
                     self.digitsjob = None
 
@@ -534,9 +637,9 @@ class SpeechChannel:
 
     def record(self, filename, max_octets = 0, max_elapsed_time = 0,
                max_silence = 0, elimination = 0, agc = 0, volume = 0,
-               token = None):
+               user_data = None):
         
-        self.recordjob = RecordJob(filename, token)
+        self.recordjob = RecordJob(filename, user_data)
 
         record = lowlevel.SM_RECORD_PARMS()
         record.channel = self.channel
@@ -587,7 +690,7 @@ class SpeechChannel:
                 try:
                     self.controller.record_done(self, how.termination_reason,
                                                 self.recordjob.size,
-                                                self.recordjob.token)
+                                                self.recordjob.user_data)
                 finally:
                     self.recordjob = None
 
@@ -647,19 +750,4 @@ class SpeechChannel:
     def stop(self):
         self.stop_play()
         self.stop_record()
-
-driver_info = lowlevel.SM_DRIVER_INFO_PARMS()
-lowlevel.sm_get_driver_info(driver_info)
-version = (driver_info.major, driver_info.minor)
-
-if version[0] >= 2:
-    prosodystreams = []
-
-    cards = lowlevel.sm_get_cards()
-    for i in range(cards):
-        card_info = lowlevel.SM_CARD_INFO_PARMS()
-        card_info.card = i
-        lowlevel.sm_get_card_info(card_info)
-        for j in range(card_info.module_count):
-            prosodystreams.append(ProsodyLocal(j))
     

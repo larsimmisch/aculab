@@ -17,7 +17,8 @@ setup (name = "aculab",
                                                      "../src/smlib.c",
                                                      "../src/smbesp.c",
                                                      "../src/smfwcaps.c"],
-                                    include_dirs = ['../include'],
-                                    define_macros = [('WIN32', None)])],
+                                include_dirs = ['../include'],
+                                libraries = ['advapi32'],
+                                define_macros = [('WIN32', None)])],
        packages = ["aculab"])
 

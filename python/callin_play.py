@@ -21,18 +21,17 @@ class IncomingCallController:
         call.accept()
 
     def ev_call_connected(self, call):
-        call.connections = [ call.listen_to(call.timeslots[0]),
-                             call.speech.speak_to(call.timeslots[0]),
-                             call.speak_to(call.timeslots[1]),
-                             call.speech.listen_to(call.timeslots[1]) ]
+        call.speech = SpeechChannel(self, speechdispatcher, 0)
+        call.connection = call.connect(call.speech)
         
-        call.speech.play('../../menu.al')
-        # call.speech.digits('123456')
+        # call.speech.play('../../menu.al')
+        call.speech.digits('123456')
         # call.speech.record('recording.al', 90000)
         
     def ev_remote_disconnect(self, call):
         call.speech.stop()
-        call.connections = None
+        call.connection = None
+        call.speech = None
         call.disconnect()
 
     def play_done(self, channel, position, user_data):
@@ -85,8 +84,6 @@ if __name__ == '__main__':
     calldispatcher = CallEventDispatcher()
 
     call = Call(controller, calldispatcher, port)
-    call.speech = SpeechChannel(controller, speechdispatcher, 0)
-    call.timeslots = (bus.allocate(), bus.allocate())
 
     speechdispatcher.start()
     calldispatcher.run()

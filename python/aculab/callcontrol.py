@@ -1,7 +1,8 @@
 import sys
 import getopt
 import lowlevel
-from busses import CTBusConnection
+import aculab
+from busses import Connection, CTBusConnection, DefaultBus
 from error import AculabError
 from names import event_names
 
@@ -18,6 +19,9 @@ no_state_change_extended_events = [lowlevel.EV_EXT_FACILITY,
                                    lowlevel.EV_EXT_UUI_UNCONGESTED,
                                    lowlevel.EV_EXT_UUS_SERVICE_REQUEST,
                                    lowlevel.EV_EXT_TRANSFER_INFORMATION]
+
+def foo():
+    print aculab.Bus
 
 class CallEventDispatcher:
 
@@ -131,6 +135,11 @@ class CallHandle:
             self.timeslot = -1
         else:
             self.timeslot = timeslot
+
+        self.switch = lowlevel.call_port_2_swdrvr(self.port)
+        if self.switch < 0:
+            raise AculabError(self.switch, 'call_port_2_swdrvr')
+            
         self.handle = None
         self.details = lowlevel.DETAIL_XPARMS()
         # The dispatcher sets the last state changing event after dispatching
@@ -250,6 +259,15 @@ class CallHandle:
 
         self.dispatcher.add(self)
 
+    def transfer(self, call):
+        transfer = TRANSFER_XPARMS()
+        transfer.handlea = self.handle
+        transfer.handlec = call.handle
+        
+        rc = lowlevel.call_transfer(transfer)
+        if rc:
+            raise AculabError(rc, 'call_transfer')
+
     def hold(self):
         rc = lowlevel.call_hold(self.handle)
         if rc:
@@ -283,13 +301,12 @@ class CallHandle:
         output.ist = source[0]
         output.its = source[1]
 
-        sw = lowlevel.call_port_2_swdrvr(self.port)
-
-        rc = lowlevel.sw_set_output(sw, output)
+        rc = lowlevel.sw_set_output(self.switch, output)
         if rc:
             raise AculabError(rc, 'sw_set_output')
 
-        return CTBusConnection(sw, (self.details.stream, self.details.ts))
+        return CTBusConnection(self.switch,
+                               (self.details.stream, self.details.ts))
 
     def speak_to(self, sink):
         """source is a tuple of (stream, timeslot).
@@ -304,13 +321,49 @@ class CallHandle:
         output.ist = self.details.stream
         output.its = self.details.ts
 
-        sw = lowlevel.call_port_2_swdrvr(self.port)
-
-        rc = lowlevel.sw_set_output(sw, output)
+        rc = lowlevel.sw_set_output(self.switch, output)
         if rc:
             raise AculabError(rc, 'sw_set_output')
 
-        return CTBusConnection(sw, sink)
+        return CTBusConnection(self.switch, sink)
+
+    def connect(self, other, bus = DefaultBus):
+        c = Connection(bus)
+        if isinstance(other, CallHandle):
+            # other is a CallHandle (or subclass)
+            if self.switch == other.switch:
+                # connect directly
+                c.connections = [self.listen_to((other.details.stream,
+                                                 other.details.ts)),
+                                 other.listen_to((self.details.stream,
+                                                  self.details.ts))]
+            else:
+                # allocate two timeslots
+                c.timeslots = [ bus.allocate(), bus.allocate() ]
+                # make connections
+                c.connections = [ other.speak_to(c.timeslots[0]),
+                                  self.listen_to(c.timeslots[0]),
+                                  self.speak_to(c.timeslots[1]),
+                                  other.listen_to(c.timeslots[1]) ]
+        
+        else:
+            # other is a SpeechChannel (or subclass)
+            if self.switch == other.info.card:
+                # connect directly
+                c.connections = [self.listen_to((other.info.ost,
+                                                 other.info.ots)),
+                                 other.listen_to((self.details.stream,
+                                                  self.details.ts))]
+            else:
+                # allocate two timeslots
+                c.timeslots = [ bus.allocate(), bus.allocate() ]
+                # make connections
+                c.connections = [ other.speak_to(c.timeslots[0]),
+                                  self.listen_to(c.timeslots[0]),
+                                  self.speak_to(c.timeslots[1]),
+                                  other.listen_to(c.timeslots[1]) ]
+
+        return c
 
     def get_cause(self):
         cause = lowlevel.CAUSE_XPARMS()
