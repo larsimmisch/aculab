@@ -21,6 +21,20 @@
 
 %include "typemaps.i"
 
+/* Fake an ACTIFF_PAGE_HANDLE (which is just a typedef for void - nasty!) */
+typedef struct {
+} ACTIFF_PAGE_HANDLE;
+
+%extend ACTIFF_PAGE_HANDLE {
+	ACTIFF_PAGE_HANDLE() {
+		return (ACTIFF_PAGE_HANDLE*) calloc(1,sizeof(ACTIFF_PAGE_HANDLE*));
+	}
+
+	~ACTIFF_PAGE_HANDLE() {
+		if (self) free(self);
+	}
+}
+
 %apply int { ACU_ERR, ACU_UINT, ACU_ULONG, ACU_INT, ACU_LONG, ACU_PORT_ID, 
 			 ACU_CALL_HANDLE, ACU_CARD_ID, tSMCardId, ACU_RESOURCE_ID,
 			 tSM_INT, tSM_UT32 };
@@ -268,6 +282,16 @@ GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 #endif
 
 %{
+
+/*
+ACTIFF_PAGE_HANDLE *new_ACTIFF_PAGE_HANDLE(){
+  return (ACTIFF_PAGE_HANDLE *) calloc(1,sizeof(ACTIFF_PAGE_HANDLE*));
+}
+void delete_ACTIFF_PAGE_HANDLE(ACTIFF_PAGE_HANDLE *self){
+  if (self) free(self);
+}
+*/
+
 PyObject *add_result(PyObject *result, PyObject *o)
 {
 	if ((!result) || (result == Py_None)) 

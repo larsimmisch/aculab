@@ -58,6 +58,9 @@ class AculabFAXError(AculabError):
 
 # See also StopIteration for precedent.
 
+class AculabCompleted(Exception):
+    pass
+
 class AculabStop(Exception):
     pass
 

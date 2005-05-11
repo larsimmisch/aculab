@@ -28,7 +28,7 @@ class IncomingCallController:
         call.accept()
 
     def ev_call_connected(self, call, user_data):
-        user_data.speech.faxrx('test.tif', '853117300')
+        user_data.speech.faxrx('test.tif', '0403172541')
         
     def ev_remote_disconnect(self, call, user_data):
         call.disconnect()

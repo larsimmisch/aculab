@@ -3,6 +3,7 @@
 import sys
 import getopt
 from aculab.error import AculabError
+from aculab.snapshot import Snapshot
 from aculab.callcontrol import *
 
 class OutgoingCallController:
@@ -26,6 +27,7 @@ def usage():
 
 if __name__ == '__main__':
     port = 0
+    card = 0
     timeslot = None
 
     log = aculab.defaultLogging(logging.DEBUG)
@@ -46,6 +48,9 @@ if __name__ == '__main__':
 
     if not len(args):
         usage()
+
+    snapshot = Snapshot()
+    port = snapshot.call[card].ports[port].open.port_id
     
     c = Call(controller,  port=port, timeslot=timeslot)
     c.user_data = '41'

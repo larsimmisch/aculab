@@ -237,7 +237,7 @@ class CallHandle:
 
         # it is permissible to do an openout after an openin
         # we save the handle from openin in this case
-        if self.handle and (self.handle & lowlevel.INCH):
+        if self.handle:
             self.in_handle = self.handle
 
         self.handle = outparms.handle
