@@ -796,7 +796,7 @@ class FaxRxJob(FaxJob, threading.Thread):
                 return
 
             rc2 = lowlevel.smfax_close_page(process.page_handle)
-            if rc2 != lowlevel.kSMFaxPageOK:
+            if rc2:
                 self.stop()
                 self.done(AculabFAXError(rc2, 'smfax_close_page'))
                 return
@@ -876,21 +876,21 @@ class FaxTxJob(FaxJob, threading.Thread):
             process = lowlevel.SMFAX_PAGE_PROCESS_PARMS()
             process.fax_session = self.session
             process.page_handle = access.page_handle
-            process.is_last_page = 0
+            process.is_last_page = lowlevel.kSMFaxNotLastPage
             if index + 1 >= self.page_count:
-                process.is_last_page = 1
+                process.is_last_page = lowlevel.kSMFaxLastPage
             rc = lowlevel.smfax_tx_page(process)
 
             log.debug('%s faxtx page %d sent %s', self.channel.name, index + 1,
                       names.fax_error_names[rc])
             
             rc2 = lowlevel.smfax_close_page(process.page_handle)
-            if rc2 != lowlevel.kSMFaxPageOK:
+            if rc2:
                 self.stop()
                 self.done(AculabFAXError(rc2, 'smfax_close_page'))
                 return
 
-        if rc == lowlevel.kSMFaxPageOK:
+        if rc == lowlevel.kSMFaxStateMachineRunning:
             self.done()
         else:
             self.done(AculabFAXError(rc, 'FaxRxJob'))
