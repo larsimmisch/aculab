@@ -19,7 +19,7 @@
 
 %}
 
-%include "typemaps.i"
+// %include "typemaps.i"
 
 /* Fake an ACTIFF_PAGE_HANDLE (which is just a typedef for void - nasty!) */
 typedef struct {

@@ -52,7 +52,7 @@ sized_struct.i: $(DTK)/include/cl_lib.h $(DTK)/include/sw_lib.h
 
 acu.i: cl_lib.h2 $(DTK)/include/sw_lib.h res_lib.h2 bfile.h2
 
-acu_wrap.c aculab/lowlevel.py: acu.i
+acu_wrap.c aculab/lowlevel.py: acu.i sized_struct.i
 	swig $(DEFINES) $(DTK_INCLUDE) -python -modern -new_repr $<
 	mv lowlevel.py aculab
 
