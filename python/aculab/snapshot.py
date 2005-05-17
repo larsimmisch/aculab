@@ -89,7 +89,6 @@ class Module(object):
 class ProsodyCard(Card):
     """An Aculab Prosody (speech processing) card."""
     def __init__(self, card, info):
-        print 'ProsodyCard.__init__'
         Card.__init__(self, card, info)
     
         open_prosp = lowlevel.ACU_OPEN_PROSODY_PARMS()
@@ -113,13 +112,11 @@ count = 0
 class SingletonMixin(object):
     def __new__(cls, *args, **kwargs):
         if cls in _singletons:
-            print '__new__ (found)'
             return _singletons[cls]
         
         self = object.__new__(cls)
         cls.__init__(self, *args, **kwargs)
         _singletons[cls] = self
-        print '__new__ (not found)'
         return self
 
 class Snapshot(object):
