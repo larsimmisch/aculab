@@ -1,0 +1,24 @@
+--- /usr/local/aculab/v6/ting/include/bfile.h	2005-01-11 13:56:13.000000000 +0100
++++ bfile.h2	2005-03-23 15:36:26.000000000 +0100
+@@ -36,7 +36,11 @@
+  * when performing a sequence of small reads, writes, and seeks.
+  */
+ 
+-typedef struct BFILE BFILE;
++#ifdef SWIG
++typedef struct {} BFILE;
++#else
++typedef void BFILE;
++#endif
+ 
+ #include <stddef.h>
+ #include <sys/types.h>
+@@ -46,7 +50,7 @@
+  * be destroyed by calling bfile_dtor(). If this function indicates an
+  * error, no object has been created.
+  */
+-ACUAPI int ACUTiNG_WINAPI bfile(BFILE **bfilepp);
++ACUAPI int ACUTiNG_WINAPI bfile(BFILE **OUTPUT);
+ 
+ /*
+  * Make a BFILE object refer to some underlying representation. The
