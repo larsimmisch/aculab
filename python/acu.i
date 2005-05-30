@@ -35,9 +35,9 @@ typedef struct {
 	}
 }
 
-%apply int { ACU_ERR, ACU_UINT, ACU_ULONG, ACU_INT, ACU_LONG, ACU_PORT_ID, 
-			 ACU_CALL_HANDLE, ACU_CARD_ID, tSMCardId, ACU_RESOURCE_ID,
-			 tSM_INT, tSM_UT32 };
+%apply int { ACU_ERR, ACU_UINT, ACU_UCHAR, ACU_ULONG, ACU_INT, ACU_LONG, 
+			 ACU_PORT_ID, ACU_CALL_HANDLE, ACU_CARD_ID, tSMCardId, 
+             ACU_RESOURCE_ID, tSM_INT, tSM_UT32 };
 
 %apply char[ANY] { ACU_CHAR[ANY] };
 
