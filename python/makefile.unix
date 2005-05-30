@@ -12,8 +12,12 @@ DTK_INCLUDE = -I$(DTK)/include -I$(DTK)/ting/include -I$(DTK)/$(FAX)/include
 
 C_DEFINES := -DNDEBUG -fPIC $(DEFINES) $(DTK_INCLUDE)
 
-PYTHON_INCLUDE = -I/usr/local/include/python2.4
-PYTHON_LIBDIR	= -L/usr/local/lib/python2.4/config
+PYTHON_INCLUDE := $(strip $(wildcard /usr/local/include/python2.4) \
+                           $(wildcard /usr/include/python2.4))
+
+PYTHON_LIBDIR := $(strip $(wildcard /usr/local/lib/python2.4/config/) \
+                       $(wildcard /usr/lib/python2.4/config/))
+
 PYTHON_LIBS = -lpython2.4
 
 OBJS	:= acu_wrap.o
@@ -30,7 +34,7 @@ EXTRA_OBJS = -Xlinker -R$(DTK)/lib -L$(DTK)/lib \
 all: aculab/_lowlevel.so aculab/lowlevel.py info rxfax3
 
 aculab/_lowlevel.so: $(OBJS)
-	$(CXX) -shared -o $@ $(OBJS) $(EXTRA_OBJS) $(PYTHON_LIBDIR) $(PYTHON_LIBS)
+	$(CXX) -shared -o $@ $(OBJS) $(EXTRA_OBJS) -L$(PYTHON_LIBDIR) $(PYTHON_LIBS)
 
 cl_lib.h2: $(DTK)/include/cl_lib.h cl_lib.patch
 	patch -o $@ $(DTK)/include/cl_lib.h cl_lib.patch
@@ -57,7 +61,7 @@ acu_wrap.c aculab/lowlevel.py: acu.i sized_struct.i
 	mv lowlevel.py aculab
 
 %.o: %.c
-	$(CXX) -g -c $(DEFINES) $(C_DEFINES) $(PYTHON_INCLUDE) -Iaculib $< -o $@ 
+	$(CXX) -g -c $(DEFINES) $(C_DEFINES) -I$(PYTHON_INCLUDE) -Iaculib $< -o $@ 
 
 info: info.o
 	$(CXX) -o $@ info.o $(DTK)/ting/apilib/gen-${TiNGTYPE}_V6/TiNGlib.o -lm -lpthread
