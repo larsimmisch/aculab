@@ -16,8 +16,9 @@ if os.name == 'nt':
 else:
     import select
 
-__all__ = ['SpeechDispatcher', 'PlayJob', 'RecordJob',
-           'DigitsJob', 'SpeechConnection', 'SpeechChannel', 'version']
+__all__ = ['SpeechDispatcher', 'PlayJob', 'RecordJob', 'DigitsJob',
+           'FaxRxJob', 'FaxTxJob', 'SpeechConnection', 'SpeechChannel',
+           'version']
 
 log = logging.getLogger('speech')
 log_switch = logging.getLogger('switch')
@@ -1262,6 +1263,38 @@ class SpeechChannel:
             # assume other is a CallHandle subclass and delegate to it
             return other.connect(self)
 
+    def dc_config(self, protocol, pconf, encoding, econf):
+        'Configure the channel for data communications'
+        config = lowlevel.SMDC_CHANNEL_CONFIG_PARMS()
+        config.channel = self.channel
+        config.protocol = protocol
+        config.config_length = 0
+        if pconf:
+            config.config_length = len(pconf)
+        config.config_data = pconf
+        config.encoding = encoding
+        config.encoding_config_length = 0
+        if econf:
+            config.encoding_config_length = len(econf)
+        config.encoding_config_data = econf
+
+        rc = lowlevel.smdc_channel_config(config)
+        if rc:
+            raise AculabSpeechError(rc, 'smdc_channel_config')
+
+    def dc_rx_control(self, cmd, min_to_collect, min_idle = 0, blocking = 0):
+        control = lowlevel.SMDC_RX_CONTROL_PARMS()
+
+        control.channel = self.channel
+        control.cmd = cmd
+        control.min_to_collect = min_to_collect
+        control.min_idle = min_idle
+        control.blocking = 0
+
+        rc = lowlevel.smdc_rx_control(control)
+        if rc:
+            raise AculabSpeechError(rc, 'smdc_rx_control')
+        
     def start(self, job):
         if self.job:
             raise RuntimeError('Already executing job')
@@ -1346,25 +1379,6 @@ class SpeechChannel:
     def stop(self):
         if self.job:
             self.job.stop()
-
-    def dc_config(self, protocol, pconf, encoding, econf):
-        'Configure the channel for data communications'
-        config = lowlevel.SMDC_CHANNEL_CONFIG_PARMS()
-        config.channel = self.channel
-        config.protocol = protocol
-        config.config_length = 0
-        if pconf:
-            config.config_length = len(pconf)
-        config.config_data = pconf
-        config.encoding = encoding
-        config.encoding_config_length = 0
-        if econf:
-            config.encoding_config_length = len(econf)
-        config.encoding_config_data = econf
-
-        rc = lowlevel.smdc_channel_config(config)
-        if rc:
-            raise AculabSpeechError(rc, 'smdc_channel_config')
 
     def job_done(self, job, fn, reason, *args, **kwargs):
         args += (self.user_data, job.job_data)

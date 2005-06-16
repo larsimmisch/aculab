@@ -2,6 +2,7 @@
 
 import sys
 import getopt
+import struct
 from aculab.error import AculabError
 from aculab.snapshot import Snapshot
 from aculab.callcontrol import *
@@ -51,9 +52,27 @@ if __name__ == '__main__':
 
     snapshot = Snapshot()
     port = snapshot.call[card].ports[port].open.port_id
+
+    fd = lowlevel.FEATURE_UNION()
+
+    fd.uui.command = lowlevel.UU_DATA_CMD
+    fd.uui.request = lowlevel.UUS_1_IMPLICITLY_PREFERRED
+    fd.uui.control = lowlevel.CONTROL_NEXT_CC_MESSAGE
+    fd.uui.protocol = lowlevel.UUI_PROTOCOL_USER_SPECIFIC
+    fd.uui.data = 'Hallo Hauke'
+    fd.uui.length = len(fd.uui.data) + 1
     
     c = Call(controller,  port=port, timeslot=timeslot)
     c.user_data = '41'
-    c.openout(args[0], 1, c.user_data)
+    c.openout(args[0], 1, c.user_data, feature = lowlevel.FEATURE_USER_USER,
+              feature_data = fd)
+
+    fd.raw_data.length = 6
+    fd.raw_data.data = struct.pack('BBBBBB',
+                                   2, # See Appendix M, Aculab Call Control
+                                   0x9f, 0x01, 0x02, 0, 0)
+
+    c.feature_send(lowlevel.FEATURE_RAW_DATA,
+                   lowlevel.CONTROL_LAST_INFO_SETUP, fd)
 
     CallDispatcher.run()

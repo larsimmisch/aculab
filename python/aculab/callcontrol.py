@@ -248,6 +248,24 @@ class CallHandle:
         log.debug('%s openout(%s, %d, %s)', self.name, destination_address,
                   sending_complete, originating_address)
 
+
+
+    def feature_send(self, feature_type, message_control, feature):
+
+        fp = lowlevel.FEATURE_DETAIL_XPARMS()
+        fp.handle = self.handle
+        fp.net = self.port
+        fp.feature_type = feature_type
+        fp.message_control = message_control
+        fp.feature = feature
+
+        rc = lowlevel.call_feature_send(fp)
+        if rc:
+            raise AculabError(rc, 'call_feature_send')
+
+        log.debug('%s call_feature_send(%d, %d)',
+                  self.name, feature_type, message_control)
+
     def enquiry(self, destination_address, sending_complete = 1,
                 originating_address = '',
                 feature = None, feature_data = None, cnf = None):

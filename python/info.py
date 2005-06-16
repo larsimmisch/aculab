@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from pprint import PrettyPrinter
 from aculab.snapshot import Snapshot
 
 snapshot = Snapshot()
@@ -11,3 +12,7 @@ for c in snapshot.call:
 print '%d prosody card' % len(snapshot.prosody)
 for c in snapshot.prosody:
     print '    %s: %d modules' % (c.card.serial_no, len(c.modules))
+
+pp = PrettyPrinter()
+
+snapshot.pprint()

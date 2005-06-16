@@ -1,3 +1,4 @@
+from pprint import PrettyPrinter
 import lowlevel
 from busses import ProsodyLocalBus
 from error import AculabError
@@ -23,6 +24,9 @@ class SwitchCard(Card):
             raise AculabError(rc, 'acu_open_switch()')
 
         self.open = switchp
+
+    def __repr__(self):
+        return 'SwitchCard(%s)' % self.card.serial_no
 
 class Port(object):
     """A port on an Aculab call control card."""
@@ -64,6 +68,9 @@ class CallControlCard(Card):
             raise AculabError(rc, 'call_get_card_info()')
 
         self.ports = [Port(card, i) for i in range(infop.ports)]
+
+    def __repr__(self):
+        return 'CallControlCard(%s)' % self.card.serial_no
             
 class Module(object):
     """A DSP module on an Aculab Prosody (speech processing) card."""
@@ -105,6 +112,9 @@ class ProsodyCard(Card):
             raise AculabError(rc, 'sm_get_card_info()')
 
         self.modules = [Module(card, i) for i in range(sm_infop.module_count)]
+
+    def __repr__(self):
+        return 'ProsodyCard(%s)' % self.card.serial_no
 
 count = 0
 
@@ -174,4 +184,11 @@ class Snapshot(object):
                 self.prosody.append(ProsodyCard(openp, infop))
 
 
-                
+    def pprint(self, **kwargs):
+        pp = PrettyPrinter(*kwargs)
+
+        pp.pprint(self.switch)
+        pp.pprint(self.call)
+        pp.pprint(self.prosody)
+
+        
