@@ -3,9 +3,45 @@
 import sys
 import getopt
 import struct
+import time
 from aculab.error import AculabError
 from aculab.snapshot import Snapshot
 from aculab.callcontrol import *
+
+OAD = '0403172541'
+
+class Statistics:
+    def __init__(self):
+        self.min = None
+        self.max = None
+        self.average = 0.0
+        self.count = 0
+
+    def add(self, value):
+        if self.min is None or value < self.min:
+            self.min = value
+        if self.max is None or value > self.max:
+            self.max = value
+        self.count = self.count + 1
+        self.average = self.average + value
+
+    def __repr__(self):
+        return 'min: %f max: %f average: %f count: %d' % \
+               (self.min, self.max, self.average / self.count, self.count)
+
+
+statistics = Statistics()
+
+class CallData:
+    def __init__(self, number):
+        self.number = number
+        self.start = time.time()
+
+    def start(self):
+        self.start = time.time()
+
+    def stop(self):
+        statistics.add(time.time() - self.start)
 
 class OutgoingCallController:
 
@@ -13,22 +49,27 @@ class OutgoingCallController:
         log.debug('%s stream: %d timeslot: %d', call.name,
                   call.details.stream, call.details.ts)
 
+    def ev_call_connected(self, call, model):
+        model.stop()
+        log.info(statistics)
+
     def ev_remote_disconnect(self, call, model):
         call.disconnect()
 
 class RepeatedOutgoingCallController:
 
     def ev_idle(self, call, model):
-        call.user_data = model
-        call.openout(model, 1, model)
+        call.user_data = CallData(model.number)
+        call.openout(model.number, 1, OAD)
 
 def usage():
-    print 'callout.py [-n <number of calls>] [-p <port>] [-r] number'
+    print 'callout.py [-n <number of calls>] [-p <port>] [-c <card>] [-r] number'
     sys.exit(-2)
 
 if __name__ == '__main__':
     port = 0
     card = 0
+    numcalls = 1
     timeslot = None
 
     log = aculab.defaultLogging(logging.DEBUG)
@@ -40,10 +81,14 @@ if __name__ == '__main__':
     for o, a in options:
         if o == '-p':
             port = int(a)
+        if o == '-c':
+            card = int(a)
         elif o == '-r':
             controller = RepeatedOutgoingCallController()
         elif o == '-t':
             timeslot = int(a)
+        elif o == '-n':
+            numcalls = int(a)
         else:
             usage()
 
@@ -61,18 +106,24 @@ if __name__ == '__main__':
     fd.uui.protocol = lowlevel.UUI_PROTOCOL_USER_SPECIFIC
     fd.uui.data = 'Hallo Hauke'
     fd.uui.length = len(fd.uui.data) + 1
-    
-    c = Call(controller,  port=port, timeslot=timeslot)
-    c.user_data = '41'
-    c.openout(args[0], 1, c.user_data, feature = lowlevel.FEATURE_USER_USER,
-              feature_data = fd)
 
-    fd.raw_data.length = 6
-    fd.raw_data.data = struct.pack('BBBBBB',
-                                   2, # See Appendix M, Aculab Call Control
-                                   0x9f, 0x01, 0x02, 0, 0)
+    for i in range(numcalls):
+        c = Call(controller,  port=port, timeslot=timeslot)
+        c.user_data = CallData(args[0])
+        c.openout(args[0], 1, OAD,
+                  feature = lowlevel.FEATURE_USER_USER,
+                  feature_data = fd)
 
-    c.feature_send(lowlevel.FEATURE_RAW_DATA,
-                   lowlevel.CONTROL_LAST_INFO_SETUP, fd)
+        fd.raw_data.length = 6
+        fd.raw_data.data = struct.pack('BBBBBB',
+                                       2, # See Appendix M, Aculab Call Control
+                                       0x9f, 0x01, 0x02, 0, 0)
 
-    CallDispatcher.run()
+        c.feature_send(lowlevel.FEATURE_RAW_DATA,
+                       lowlevel.CONTROL_LAST_INFO_SETUP, fd)
+
+    try:
+        CallDispatcher.run()
+    except KeyboardInterrupt:
+        log.info(statistics)
+        raise
