@@ -25,7 +25,7 @@ class RepeatedIncomingCallController(IncomingCallController):
         call.openin()
 
 def usage():
-    print 'usage: callin.py [-c <card> ] [-p <port>] [-t <timeslot>] [-r]'
+    print 'usage: callin.py [-n <numcalls>] [-c <card> ] [-p <port>] [-t <timeslot>] [-r]'
     sys.exit(-2)
 
 if __name__ == '__main__':
@@ -34,16 +34,19 @@ if __name__ == '__main__':
 
     card = 0
     port = 0
-    timeslot = 1
+    timeslot = None
+    numcalls = 1
     controller = IncomingCallController()
 
-    options, args = getopt.getopt(sys.argv[1:], 'p:t:r?')
+    options, args = getopt.getopt(sys.argv[1:], 'n:c:p:t:r?')
 
     for o, a in options:
         if o == '-c':
             card = int(a)
-        if o == '-p':
+        elif o == '-p':
             port = int(a)
+        elif o == '-n':
+            numcalls = int(a)
         elif o == '-t':
             timeslot = int(a)
         elif o == '-r':
@@ -52,8 +55,13 @@ if __name__ == '__main__':
             usage()
 
     snapshot = Snapshot()
-    port = snapshot.call[card].ports[port].open.port_id
+
+    print snapshot.call[card].ports[port].info.sig_sys
+    print snapshot.call[card].ports[port].info.fw_desc
                 
-    c = Call(controller, port=port, timeslot=timeslot)
+    port = snapshot.call[card].ports[port].open.port_id
+
+    for i in range(numcalls):
+        c = Call(controller, port=port, timeslot=timeslot)
 
     CallDispatcher.run()
