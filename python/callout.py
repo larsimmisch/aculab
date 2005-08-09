@@ -56,11 +56,11 @@ class OutgoingCallController:
     def ev_remote_disconnect(self, call, model):
         call.disconnect()
 
-class RepeatedOutgoingCallController:
+class RepeatedOutgoingCallController(OutgoingCallController):
 
     def ev_idle(self, call, model):
         call.user_data = CallData(model.number)
-        call.openout(model.number, 1, OAD)
+        call.openout(model.number, True, OAD)
 
 def usage():
     print 'callout.py [-n <number of calls>] [-p <port>] [-c <card>] [-r] number'
@@ -72,16 +72,16 @@ if __name__ == '__main__':
     numcalls = 1
     timeslot = None
 
-    log = aculab.defaultLogging(logging.DEBUG)
+    log = aculab.defaultLogging(logging.INFO)
 
     controller = OutgoingCallController()
 
-    options, args = getopt.getopt(sys.argv[1:], 'p:rt:')
+    options, args = getopt.getopt(sys.argv[1:], 'c:p:rt:n:')
 
     for o, a in options:
         if o == '-p':
             port = int(a)
-        if o == '-c':
+        elif o == '-c':
             card = int(a)
         elif o == '-r':
             controller = RepeatedOutgoingCallController()
@@ -110,17 +110,18 @@ if __name__ == '__main__':
     for i in range(numcalls):
         c = Call(controller,  port=port, timeslot=timeslot)
         c.user_data = CallData(args[0])
-        c.openout(args[0], 1, OAD,
-                  feature = lowlevel.FEATURE_USER_USER,
-                  feature_data = fd)
+        c.openout(args[0], True, OAD)
+##         c.openout(args[0], 1, OAD, 
+##                   feature = lowlevel.FEATURE_USER_USER,
+##                   feature_data = fd)
 
-        fd.raw_data.length = 6
-        fd.raw_data.data = struct.pack('BBBBBB',
-                                       2, # See Appendix M, Aculab Call Control
-                                       0x9f, 0x01, 0x02, 0, 0)
+##         fd.raw_data.length = 6
+##         fd.raw_data.data = struct.pack('BBBBBB',
+##                                        2, # See Appendix M, Aculab Call Control
+##                                        0x9f, 0x01, 0x02, 0, 0)
 
-        c.feature_send(lowlevel.FEATURE_RAW_DATA,
-                       lowlevel.CONTROL_LAST_INFO_SETUP, fd)
+##         c.feature_send(lowlevel.FEATURE_RAW_DATA,
+##                        lowlevel.CONTROL_LAST_INFO_SETUP, fd)
 
     try:
         CallDispatcher.run()

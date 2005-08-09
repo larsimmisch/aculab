@@ -12,11 +12,13 @@ DTK_INCLUDE = -I$(DTK)/include -I$(DTK)/ting/include -I$(DTK)/$(FAX)/include
 
 C_DEFINES := -DNDEBUG -fPIC $(DEFINES) $(DTK_INCLUDE)
 
-PYTHON_INCLUDE := $(strip $(wildcard /usr/local/include/python2.4) \
-                           $(wildcard /usr/include/python2.4))
+PYTHON_INCLUDE := $(firstword $(strip \
+						   	$(wildcard /usr/local/include/python2.4) \
+                            $(wildcard /usr/include/python2.4)))
 
-PYTHON_LIBDIR := $(strip $(wildcard /usr/local/lib/python2.4/config/) \
-                       $(wildcard /usr/lib/python2.4/config/))
+PYTHON_LIBDIR := $(firstword $(strip \
+                       $(wildcard /usr/local/lib/python2.4/config/) \
+                       $(wildcard /usr/lib/python2.4/config/)))
 
 PYTHON_LIBS = -lpython2.4
 
