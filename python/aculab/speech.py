@@ -53,9 +53,12 @@ class Glue:
     
     def __init__(self, controller, module, call):
         self.call = call
+        # initialize to None in case an exception is raised
+        self.speech = None
+        self.connection = None
+        call.user_data = self
         self.speech = SpeechChannel(controller, module, user_data = self)
         self.connection = call.connect(self.speech)
-        call.user_data = self
 
     def __del__(self):
         self.close()
@@ -630,6 +633,36 @@ class DigitsJob:
         self.stopped = True
         log.debug('%s disgits_stop()', self.channel.name)
 
+        # remove the write event from the dispatcher
+        self.channel.dispatcher.remove(self.channel.event_write)
+
+        # Position is only nonzero when play was stopped.
+        channel = self.channel
+        # break cyclic reference
+        self.channel = None
+        
+        # Compute reason.
+        reason = None
+        if self.position:
+            reason = AculabStopped()
+            pos = self.position
+        else:
+            pos = self.length
+
+        f = self.file
+
+        if hasattr(self, 'filename'):
+            self.file.close()
+            self.file = None
+            f = self.filename
+
+        # no locks held - maybe too cautious
+        log.debug('%s play_done(reason=\'%s\', pos=%d)',
+                  channel.name, reason, pos)
+
+        # channel.user_data, self.job_data)
+        channel.job_done(self, 'play_done', f, reason, pos)
+
 class FaxJob:
 
     def __init__(self, channel, file, subscriber_id, job_data):
@@ -895,6 +928,65 @@ class FaxTxJob(FaxJob, threading.Thread):
             self.done()
         else:
             self.done(AculabFAXError(rc, 'FaxRxJob'))
+
+class DCReadJob:
+    
+    def __init__(self, channel, cmd, min_to_collect, min_idle = 0,
+                 blocking = 0, job_data = None):
+
+        '''Arguments are mostly from dc_rx_control'''
+        self.channel = channel
+        self.cmd = cmd
+        self.min_to_collect = min_to_collect
+        self.min_idle = idle
+        self.blocking = blocking
+        self.job_data = job_data
+
+    def start(self):
+        'Do not call this method directly - call SpeechChannel.start instead'
+
+        control = lowlevel.SMDC_RX_CONTROL_PARMS()
+
+        control.channel = self.channel
+        control.cmd = cmd
+        control.min_to_collect = min_to_collect
+        control.min_idle = min_idle
+        control.blocking = 0
+
+        # add the read event to the dispatcher
+        self.channel.dispatcher.add(self.channel.event_read, self.on_read)
+
+        rc = lowlevel.smdc_rx_control(control)
+        if rc:
+            raise AculabSpeechError(rc, 'smdc_rx_control')
+        
+        log.debug('%s dc_rx_control(%s, cmd=%d, min_to_collect=%d, ' \
+                  'min_idle=%d, blocking=%d)',
+                  self.channel.name, self.cmd, self.min_to_collect,
+                  self.min_idle)
+
+    def on_read(self):
+        self.channel.controller.dc_read(channel)
+
+    def stop(self):
+        rc = lowlevel.smdc_stop(self.channel.channel)
+        if rc:
+            raise AculabSpeechError(rc, 'smdc_stop')
+
+        # remove the write event from the dispatcher
+        self.channel.dispatcher.remove(self.channel.event_read)
+
+        # Position is only nonzero when play was stopped.
+        channel = self.channel
+        # break cyclic reference
+        self.channel = None
+        
+        # no locks held - maybe too cautious
+        log.debug('%s dc_read stopped',
+                  channel.name)
+
+        # channel.user_data, self.job_data)
+        channel.job_done(self, 'dc_read_done', f, reason, pos)
 
 class SpeechConnection:    
     def __init__(self, channel, direction):
@@ -1282,19 +1374,6 @@ class SpeechChannel:
         if rc:
             raise AculabSpeechError(rc, 'smdc_channel_config')
 
-    def dc_rx_control(self, cmd, min_to_collect, min_idle = 0, blocking = 0):
-        control = lowlevel.SMDC_RX_CONTROL_PARMS()
-
-        control.channel = self.channel
-        control.cmd = cmd
-        control.min_to_collect = min_to_collect
-        control.min_idle = min_idle
-        control.blocking = 0
-
-        rc = lowlevel.smdc_rx_control(control)
-        if rc:
-            raise AculabSpeechError(rc, 'smdc_rx_control')
-        
     def start(self, job):
         if self.job:
             raise RuntimeError('Already executing job')

@@ -218,7 +218,7 @@ class CallHandle:
 
         return outparms
 
-    def openout(self, destination_address, sending_complete = 1,
+    def openout(self, destination_address, sending_complete = True,
                 originating_address = '',
                 feature = None, feature_data = None, cnf = None):
 

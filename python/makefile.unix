@@ -31,9 +31,9 @@ EXTRA_OBJS = -Xlinker -R$(DTK)/lib -L$(DTK)/lib \
 			$(DTK)/ting/libutil/gen-$(TiNGTYPE)_V6/vseprintf.o \
 			$(DTK)/ting/libutil/gen-$(TiNGTYPE)_V6/bfile.o \
 			$(DTK)/ting/libutil/gen-$(TiNGTYPE)_V6/bfopen.o \
-			-lacu_cl -lacu_sw -lacu_res -lacu_common -lTiNG
+			-lacu_cl -lacu_sw -lacu_res -lacu_common -lTiNG -lstdc++
 
-all: aculab/_lowlevel.so aculab/lowlevel.py info rxfax3
+all: aculab/_lowlevel.so aculab/lowlevel.py info rxfax3 dcraw
 
 aculab/_lowlevel.so: $(OBJS)
 	$(CXX) -shared -o $@ $(OBJS) $(EXTRA_OBJS) -L$(PYTHON_LIBDIR) $(PYTHON_LIBS)
@@ -68,8 +68,11 @@ acu_wrap.c aculab/lowlevel.py: acu.i sized_struct.i
 info: info.o
 	$(CXX) -o $@ info.o $(DTK)/ting/apilib/gen-${TiNGTYPE}_V6/TiNGlib.o -lm -lpthread
 
+dcraw: dcraw.o
+	$(CXX) -o $@ dcraw.o -L$(DTK)/lib -lm -lpthread -lacu_sw -lacu_res -lacu_common -lTiNG
+
 rxfax3: rxfax3.o
-	$(CXX) -g -o $@ rxfax3.o $(EXTRA_OBJS) -lm -lpthread -lstdc++
+	$(CXX) -g -o $@ rxfax3.o $(EXTRA_OBJS) -lm -lpthread 
 
 test:
 	python test_swig.py
@@ -91,5 +94,5 @@ patch: cl_lib.h2 res_lib.h2 bfile.h2 # actiff.h2
 
 clean:
 	rm -f aculab/*.so *.o aculab/*.pyc \
-		lowlevel.py *_wrap.c *_wrap.doc
+		lowlevel.py *_wrap.c *_wrap.doc info dcraw
 	rm -rf build dist

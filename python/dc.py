@@ -10,23 +10,58 @@ import aculab
 import aculab.lowlevel as lowlevel
 from aculab.error import AculabError
 from aculab.snapshot import Snapshot
-from aculab.speech import SpeechChannel, SpeechDispatcher, Glue
+from aculab.speech import SpeechChannel, SpeechDispatcher, DCReadJob
 from aculab.busses import DefaultBus
 
-data = lowlevel.SMDC_DATA_PARMS()
-data.allocbuffer(320)
 
 f = open('raw.al', 'w')
 
+class Model:
+    def __init__(self, controller, card, module):
+
+        self.controller = controller
+        self.card = card
+        self.module = module
+        
+        self.data = lowlevel.SMDC_DATA_PARMS()
+        self.data.allocbuffer(320)
+
+        self.channels = [SpeechChannel(controller, card, module,
+                                       user_data=self),
+                         SpeechChannel(controller, card, module,
+                                       user_data=self)]
+
+        self.connection = self.channels[0].connect(self.channels[1])
+
+    def reinit(self):
+        del self.connection
+        del self.channels
+            
+        self.channels = [SpeechChannel(controller, card, module),
+                         SpeechChannel(controller, card, module)]
+
+        self.connection = self.channels[0].connect(self.channels[1])
+
+    def start(self):
+        self.dc_read = DCReadJob(lowlevel.kSMDCRxCtlNotifyOnData, 160, 0, 0)
+        
+        self.channels[1].play('greeting.al')
+
+        self.channels[0].dc_config(lowlevel.kSMDCProtocolRawRx, None,
+                                   lowlevel.kSMDCConfigEncodingSync, None)
+
+
+        self.channels[0].start(self.dc_read)
+
+    
 class DCController:
 
-    def dc_read(self):
-        global channels
-        global data
-        global f
+    def dc_read(self, channel):
+
+        model = channel_user_data
 
         status = lowlevel.SMDC_RX_STATUS_PARMS()
-        status.channel = channels[0].channel
+        status.channel = channel.channel
 
         rc = lowlevel.smdc_rx_status(status)
         if rc:
@@ -34,15 +69,11 @@ class DCController:
 
         # print 'status: %d, %d' % (status.status, status.available_octets)
                 
-        data.channel = channels[0].channel
+        data.channel = channel.channel
 
         rc = lowlevel.smdc_rx_data(data)
         if rc:
             raise AculabError(rc, 'smdc_rx_data')
-
-        d = data.getdata_bitrev()
-
-        f.write(d)
 
     def play_done(self, channel, f, reason, position, user_data, job_data):
         print "play_done"
@@ -73,21 +104,8 @@ if __name__ == '__main__':
 
     snapshot = Snapshot()
 
-    channels = [SpeechChannel(controller, card, module),
-                SpeechChannel(controller, card, module)]
 
-    connection = channels[0].connect(channels[1])
 
-    for i in (0, 1):
-        print "[%d] %d:%d" % (i, channels[i].info.ost, channels[i].info.ots)
-
-    channels[1].play('greeting.al')
-
-    channels[0].dc_config(lowlevel.kSMDCProtocolRawRx, None,
-                          lowlevel.kSMDCConfigEncodingSync, None)
-
-    channels[0].dispatcher.add(channels[0].event_read, controller.dc_read)
-    channels[0].dc_rx_control(lowlevel.kSMDCRxCtlNotifyOnData, 160, 0, 0)
-    
+    m = Model(controller, card, module)
     
     SpeechDispatcher.run()
