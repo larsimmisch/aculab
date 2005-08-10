@@ -33,7 +33,7 @@ EXTRA_OBJS = -Xlinker -R$(DTK)/lib -L$(DTK)/lib \
 			$(DTK)/ting/libutil/gen-$(TiNGTYPE)_V6/bfopen.o \
 			-lacu_cl -lacu_sw -lacu_res -lacu_common -lTiNG -lstdc++
 
-all: aculab/_lowlevel.so aculab/lowlevel.py info rxfax3 dcraw
+all: aculab/_lowlevel.so aculab/lowlevel.py info
 
 aculab/_lowlevel.so: $(OBJS)
 	$(CXX) -shared -o $@ $(OBJS) $(EXTRA_OBJS) -L$(PYTHON_LIBDIR) $(PYTHON_LIBS)
