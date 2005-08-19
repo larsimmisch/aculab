@@ -118,17 +118,6 @@ class ProsodyCard(Card):
 
 count = 0
 
-# from Jeremy Bowers - http://c2.com/cgi/wiki?PythonSingleton
-class SingletonMixin(object):
-    def __new__(cls, *args, **kwargs):
-        if cls in _singletons:
-            return _singletons[cls]
-        
-        self = object.__new__(cls)
-        cls.__init__(self, *args, **kwargs)
-        _singletons[cls] = self
-        return self
-
 class Snapshot(object):
 
     # This class is a singleton

@@ -2,19 +2,28 @@ from names import error_names, sm_error_names, fax_error_names
 
 class AculabError(Exception):
 
-    def __init__(self, rc, function = ''):
-        if rc in error_names.keys():
-            self.value = rc
-            if function:
-                self.desc = function + ' failed: ' + error_names[rc]
+    def __init__(self, rc, function = '', handle = None):
+        self.handle = handle
+        self.value = rc
+
+        if function:
+            if handle:
+                desc = '[0x%x] %s failed: ' % (handle, function)
             else:
-                self.desc = error_names[rc]
+                desc = ' %s() failed: ' % (function)
         else:
-            if function:
-                self.desc = function + ' failed: ' + str(rc)
+            if handle:
+                desc = '[0x%x]: ' % handle
             else:
-                self.desc = 'unknown error: ' + str(rc)
+                desc = ''
+
+        if rc in error_names.keys():
+            desc = desc + error_names[rc]
+        else:
+            desc = desc + str(rc)
             
+        self.desc = desc
+        
     def __str__(self):
         return self.desc
 

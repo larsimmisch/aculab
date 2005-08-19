@@ -303,21 +303,21 @@ class CallHandle:
         
         rc = lowlevel.call_transfer(transfer)
         if rc:
-            raise AculabError(rc, 'call_transfer')
+            raise AculabError(rc, 'call_transfer', self.handle)
         
         log.debug('%s transfer(%s)', self.name, call.name)
 
     def hold(self):
         rc = lowlevel.call_hold(self.handle)
         if rc:
-            raise AculabError(rc, 'call_hold')
+            raise AculabError(rc, 'call_hold', self.handle)
 
         log.debug('%s hold()', self.name)
 
     def reconnect(self):
         rc = lowlevel.call_reconnect(self.handle)
         if rc:
-            raise AculabError(rc, 'call_reconnect')
+            raise AculabError(rc, 'call_reconnect', self.handle)
 
         log.debug('%s reconnect()', self.name)
 
@@ -329,7 +329,7 @@ class CallHandle:
 
         rc = lowlevel.call_send_overlap(overlap)
         if rc:
-            raise AculabError(rc, 'call_send_overlap')
+            raise AculabError(rc, 'call_send_overlap', self.handle)
 
         log.debug('%s send_overlap(%s, %d)', self.name, addr, complete)
 
@@ -348,7 +348,7 @@ class CallHandle:
 
         rc = lowlevel.sw_set_output(self.switch, output)
         if rc:
-            raise AculabError(rc, 'sw_set_output')
+            raise AculabError(rc, 'sw_set_output', self.handle)
 
         log_switch.debug('%s %d:%d := %d:%d', self.name,
                          output.ost, output.ots,
@@ -372,7 +372,7 @@ class CallHandle:
 
         rc = lowlevel.sw_set_output(self.switch, output)
         if rc:
-            raise AculabError(rc, 'sw_set_output')
+            raise AculabError(rc, 'sw_set_output', self.handle)
 
         log_switch.debug('%s %d:%d := %d:%d', self.name,
                          output.ost, output.ots,
@@ -423,7 +423,7 @@ class CallHandle:
         cause.handle = self.handle
         rc = lowlevel.call_getcause(cause)
         if rc:
-            raise AculabError(rc, 'call_details')
+            raise AculabError(rc, 'call_details', self.handle)
 
         return cause
     
@@ -433,7 +433,7 @@ class CallHandle:
 
         rc = lowlevel.call_details(self.details)
         if rc:
-            raise AculabError(rc, 'call_details')
+            raise AculabError(rc, 'call_details', self.handle)
 
         return self.details
 
@@ -444,14 +444,14 @@ class CallHandle:
 
         rc = lowlevel.call_feature_details(self.feature_details)
         if rc:
-            raise AculabError(rc, 'call_feature_details')
+            raise AculabError(rc, 'call_feature_details', self.handle)
 
         return self.feature_details
 
     def accept(self):
         rc = lowlevel.call_accept(self.handle)
         if rc:
-            raise AculabError(rc, 'call_accept')
+            raise AculabError(rc, 'call_accept', self.handle)
 
         log.debug('%s accept()', self.name)
 

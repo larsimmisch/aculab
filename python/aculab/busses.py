@@ -61,7 +61,7 @@ class CTBusConnection:
     def __repr__(self):
         return '<CTBusConnection [' + str(self.sw) + ', ' + str(self.ts) + ']>'
 
-class CTBus:
+class CTBus(object):
     """Base class for an isochronous, multiplexed bus.
     An instance represents a collection of available timeslots."""
 
