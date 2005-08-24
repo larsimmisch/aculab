@@ -21,7 +21,7 @@ class SwitchCard(Card):
         switchp.card_id = card.card_id
         rc = lowlevel.acu_open_switch(switchp)
         if rc:
-            raise AculabError(rc, 'acu_open_switch()')
+            raise AculabError(rc, 'acu_open_switch')
 
         self.open = switchp
 
@@ -38,14 +38,14 @@ class Port(object):
 
         rc = lowlevel.call_open_port(open_portp)
         if rc:
-            raise AculabError(rc, 'call_open_port()')
+            raise AculabError(rc, 'call_open_port')
 
         info_portp = lowlevel.PORT_INFO_PARMS()
         info_portp.port_id = open_portp.port_id
 
         rc = lowlevel.call_port_info(info_portp)
         if rc:
-            raise AculabError(rc, 'call_port_info()')
+            raise AculabError(rc, 'call_port_info')
 
         self.open = open_portp
         self.info = info_portp
@@ -59,13 +59,13 @@ class CallControlCard(Card):
         callp.card_id = card.card_id
         rc = lowlevel.acu_open_call(callp)
         if rc:
-            raise AculabError(rc, 'acu_open_call()')
+            raise AculabError(rc, 'acu_open_call')
 
         infop = lowlevel.CARD_INFO_PARMS()
         infop.card_id = card.card_id
         rc = lowlevel.call_get_card_info(infop)
         if rc:
-            raise AculabError(rc, 'call_get_card_info()')
+            raise AculabError(rc, 'call_get_card_info')
 
         self.ports = [Port(card, i) for i in range(infop.ports)]
 
@@ -81,7 +81,7 @@ class Module(object):
         sm_openp.module_ix = index
         rc = lowlevel.sm_open_module(sm_openp)
         if rc:
-            raise AculabError(rc, 'sm_open_module()')
+            raise AculabError(rc, 'sm_open_module')
 
         self.open = sm_openp
 
@@ -89,7 +89,7 @@ class Module(object):
         self.info.module = sm_openp.module_id
         rc = lowlevel.sm_get_module_info(self.info)
         if rc:
-            raise AculabError(rc, 'sm_get_module_info()')
+            raise AculabError(rc, 'sm_get_module_info')
 
         self.timeslots = ProsodyLocalBus(self.info.min_stream)
 
@@ -103,13 +103,13 @@ class ProsodyCard(Card):
         open_prosp.card_id = card.card_id
         rc = lowlevel.acu_open_prosody(open_prosp)
         if rc:
-            raise AculabError(rc, 'acu_open_prosody()')
+            raise AculabError(rc, 'acu_open_prosody')
 
         sm_infop = lowlevel.SM_CARD_INFO_PARMS()
         sm_infop.card = card.card_id
         rc = lowlevel.sm_get_card_info(sm_infop)
         if rc:
-            raise AculabError(rc, 'sm_get_card_info()')
+            raise AculabError(rc, 'sm_get_card_info')
 
         self.modules = [Module(card, i) for i in range(sm_infop.module_count)]
 
@@ -146,7 +146,7 @@ class Snapshot(object):
     
         rc = lowlevel.acu_get_system_snapshot(snapshotp)
         if rc:
-            raise AculabError(rc, 'acu_get_snapshot_parms()')
+            raise AculabError(rc, 'acu_get_snapshot_parms')
     
         for i in range(snapshotp.count):
             openp = lowlevel.ACU_OPEN_CARD_PARMS()
@@ -155,13 +155,13 @@ class Snapshot(object):
             openp.notification_queue = notification_queue
             rc = lowlevel.acu_open_card(openp)
             if rc:
-                raise AculabError(rc, 'acu_open_card()')
+                raise AculabError(rc, 'acu_open_card')
 
             infop = lowlevel.ACU_CARD_INFO_PARMS()
             infop.card_id = openp.card_id
             rc = lowlevel.acu_get_card_info(infop)
             if rc:
-                raise AculabError(rc, 'acu_get_card_info()')
+                raise AculabError(rc, 'acu_get_card_info')
 
             if infop.resources_available & lowlevel.ACU_RESOURCE_SWITCH:
                 self.switch.append(SwitchCard(openp, infop))

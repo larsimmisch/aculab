@@ -37,7 +37,6 @@ all: aculab/_lowlevel.so aculab/lowlevel.py info
 
 aculab/_lowlevel.so: $(OBJS)
 	$(CXX) -shared -o $@ $(OBJS) $(EXTRA_OBJS) -L$(PYTHON_LIBDIR) $(PYTHON_LIBS)
-
 cl_lib.h2: $(DTK)/include/cl_lib.h cl_lib.patch
 	patch -o $@ $(DTK)/include/cl_lib.h cl_lib.patch
 

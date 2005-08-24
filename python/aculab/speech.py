@@ -135,7 +135,7 @@ class Win32DispatcherThread(threading.Thread):
                     if m:
                         m()
                 except StopIteration:
-                    raise
+                    return
                 except KeyboardInterrupt:
                     raise
                 except:
@@ -289,7 +289,7 @@ class PollSpeechEventDispatcher(threading.Thread):
                         if m:
                             m()
             except StopIteration:
-                raise
+                return
             except KeyboardInterrupt:
                 raise
             except:
@@ -622,10 +622,10 @@ class DigitsJob:
                 reason = AculabStopped()
 
             # remove the write event from to the dispatcher
-            channel.dispatcher.remove(self.channel.event_write)
+            channel.dispatcher.remove(channel.event_write)
 
             log.debug('%s digits_done(reason=\'%s\')',
-                      self.channel.name, reason)
+                      channel.name, reason)
 
             channel.job_done(self, 'digits_done', reason)
                 
@@ -1031,7 +1031,7 @@ class SpeechChannel:
         Controllers must implement:
         - play_done(channel, file, reason, position,
                     user_data, job_data)
-        - dtmf(channel, digit)
+        - dtmf(channel, digit, user_data)
         - record_done(channel, file, reason, size, user_data, job_data)
         - digits_done(channel, reason, user_data, job_data).
         
@@ -1050,6 +1050,14 @@ class SpeechChannel:
         self.user_data = user_data
         self.job = None
         self.close_pending = None
+        # initialize arly before any exception is thrown
+        self.event_read = None
+        self.event_write = None
+        self.event_recog = None
+        self.in_ts = None
+        self.out_ts = None
+        self.channel = None
+        self.name = None
 
         s = Snapshot()
 
@@ -1090,37 +1098,38 @@ class SpeechChannel:
         log.debug('%s out: %d:%d, in: %d:%d', self.name, self.info.ost,
                   self.info.ots, self.info.ist, self.info.its)
 
+        self._listen()
+
     def __del__(self):
         self._close()
-        if hasattr(self, 'name'):
+        if self.name:
             log.debug('%s deleted', self.name)
 
     def _close(self):
         self.lock()
         try:
-            if hasattr(self, 'event_read') and self.event_read:
+            if self.event_read:
                 lowlevel.smd_ev_free(self.event_read)
                 self.event_read = None
-            if hasattr(self, 'event_write') and self.event_write:
+            if self.event_write:
                 lowlevel.smd_ev_free(self.event_write)
                 self.event_write = None
-
-            if hasattr(self, 'out_ts') and self.out_ts:
-                # attribute out_ts implies attribute module
-                self.module.timeslots.free(self.out_ts)
-                self.out_ts = None
-
-            if hasattr(self, 'in_ts') and self.in_ts:
-                # attribute in_ts implies attribute module
-                self.module.timeslots.free(self.in_ts)
-                self.in_ts = None
-
-            if hasattr(self, 'event_recog') and self.event_recog:
+            if self.event_recog:
                 lowlevel.smd_ev_free(self.event_recog)
                 self.dispatcher.remove(self.event_recog)
                 self.event_recog = None
 
-            if hasattr(self, 'channel') and self.channel:
+            if self.out_ts:
+                # attribute out_ts implies attribute module
+                self.module.timeslots.free(self.out_ts)
+                self.out_ts = None
+
+            if self.in_ts:
+                # attribute in_ts implies attribute module
+                self.module.timeslots.free(self.in_ts)
+                self.in_ts = None
+
+            if self.channel:
                 rc = lowlevel.sm_channel_release(self.channel)
                 if rc:
                     raise AculabSpeechError(rc, 'sm_channel_release')
@@ -1203,24 +1212,22 @@ class SpeechChannel:
         The handle is returned"""
         
         if os.name == 'nt':
-            rc, event.handle = lowlevel.smd_ev_create(event.channel,
-                                                      event.event_type,
-                                                      event.issue_events)
+            rc, event.event = lowlevel.smd_ev_create(event.channel,
+                                                     event.event_type,
+                                                     event.issue_events)
             if rc:
                 raise AculabSpeechError(rc, 'smd_ev_create')
 
-            return pywintypes.HANDLE(event.handle)
-        else:
-            event.handle = lowlevel.tSMEventId()
-            rc = lowlevel.smd_ev_create(event.handle,
-                                        event.channel,
-                                        event.event_type,
-                                        event.issue_events)
+            return pywintypes.HANDLE(event.event)
 
-            if rc:
-                raise AculabSpeechError(rc, 'smd_ev_create')
-            
-            return event.handle
+        rc = lowlevel.smd_ev_create(event.event,
+                                    event.channel,
+                                    event.event_type,
+                                    event.issue_events)
+        if rc:
+            raise AculabSpeechError(rc, 'smd_ev_create')
+
+        return event.event.copy()
 
     def set_event(self, type):
         event = lowlevel.SM_CHANNEL_SET_EVENT_PARMS()
@@ -1228,12 +1235,11 @@ class SpeechChannel:
         event.channel = self.channel
         event.issue_events = lowlevel.kSMChannelSpecificEvent
         event.event_type = type
-        
         handle = self.create_event(event)
-        
+
         rc = lowlevel.sm_channel_set_event(event)
         if rc:
-            lowlevel.smd_ev_free(handle)
+            lowlevel.smd_ev_free(event.handle)
             raise AculabSpeechError(rc, 'sm_channel_set_event')
 
         return handle
@@ -1378,8 +1384,9 @@ class SpeechChannel:
         if self.job:
             raise RuntimeError('Already executing job')
 
-        self.job = job
-        job.start()
+        if not self.close_pending:
+            self.job = job
+            job.start()
     
     def play(self, file, volume = 0, agc = 0, speed = 0, job_data = None):
         """Play an alaw file asynchronously. The token job_data is passed
@@ -1451,7 +1458,8 @@ class SpeechChannel:
 
                 self.lock()
                 try:
-                    self.controller.dtmf(self, chr(recog.param0))
+                    self.controller.dtmf(self, chr(recog.param0),
+                                         self.user_data)
                 finally:
                     self.unlock()
             
@@ -1462,18 +1470,17 @@ class SpeechChannel:
     def job_done(self, job, fn, reason, *args, **kwargs):
         args += (self.user_data, job.job_data)
 
-        try:
-            f = getattr(self.controller, fn)
-            f(self, reason, *args, **kwargs)
-            m = getattr(self.controller, 'job_done', None)
-            if m:
-                m(job)
-        except:
-            self.lock()
-            self.job = None
-            if self.close_pending:
-                self.close()
-            self.unlock()
+        self.lock()
+        self.job = None
+        if self.close_pending:
+            self.close()
+        self.unlock()
+
+        f = getattr(self.controller, fn)
+        f(self, reason, *args, **kwargs)
+        m = getattr(self.controller, 'job_done', None)
+        if m:
+            m(job)
 
 class Conference:
     def __init__(self, module = None, mutex = None):

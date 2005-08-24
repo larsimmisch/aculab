@@ -144,23 +144,7 @@ BLOCKING(smfax_tx_page)
 }
 
 %typemap(python,argout) tSMEventId * {
-	PyObject *o = PyInt_FromLong((unsigned)*$1);
-	if ((!$result) || ($result == Py_None)) 
-	{
-		$result = o;
-    } 
-	else 
-	{
-		if (!PyList_Check($result)) 
-		{
-			PyObject *o2 = $result;
-			$result = PyList_New(0);
-			PyList_Append($result,o2);
-			Py_XDECREF(o2);
-		}
-		PyList_Append($result,o);
-		Py_XDECREF(o);
-	}
+	$result = add_result($result, PyInt_FromLong((unsigned)*$1));
 }
 #endif
 
@@ -179,6 +163,13 @@ BLOCKING(smfax_tx_page)
 %extend tSMEventId {
 	int fileno() {
 		return self->fd;
+	}
+
+	PyObject *copy() {
+		tSMEventId *temp = (tSMEventId *)calloc(1, sizeof(tSMEventId));
+		memcpy(temp, self, sizeof(tSMEventId));
+    
+		return SWIG_NewPointerObj((void*)temp, SWIGTYPE_p_tSMEventId, 1);
 	}
 };
 #endif

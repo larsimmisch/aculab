@@ -121,7 +121,7 @@ class IncomingCallController:
 
     def play_done(self, channel, f, reason, position, user_data, job_data):
         t = os.tmpfile()
-        channel.record(t, 90000, max_silence = 2000)
+        channel.record(t, max_silence = 2000)
 
     def record_done(self, channel, f, reason, position, user_data, job_data):
         f.seek(0)        
@@ -134,7 +134,7 @@ class IncomingCallController:
         pass
     
     def dtmf(self, channel, digit, user_data):
-        print 'got DTMF:', digit
+        log.info('got DTMF: %s', digit)
 
 class RepeatedIncomingCallController(IncomingCallController):
 
