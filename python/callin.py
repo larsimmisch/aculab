@@ -12,14 +12,14 @@ import aculab.lowlevel as ll
 class IncomingCallController:
 
     def ev_incoming_call_det(self, call, model):
-        log.debug('%s stream: %d timeslot: %d: features',
+        log.debug('%s stream: %d timeslot: %d: features: %d',
                   call.name, call.details.stream, call.details.ts,
                   call.details.feature_information)
 
-        if call.details.feature_information & ll.ll.FEATURE_RAW_DATA:
+        if call.details.feature_information & ll.FEATURE_RAW_DATA:
             call.get_feature_details(ll.FEATURE_RAW_DATA)
             log.debug('raw data: %s',
-                      repr(call.feature_details.feature.uui.getdata()))
+                      repr(call.feature_details.feature.raw_data.getdata()))
         
         call.accept()
 
