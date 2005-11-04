@@ -17,9 +17,11 @@ elif os.name == 'posix':
     extra_objects = [dtk + '/ting/libutil/gen-LINUX_V6/aculog.o',
                      dtk + '/ting/libutil/gen-LINUX_V6/vseprintf.o',   
                      dtk + '/ting/libutil/gen-LINUX_V6/bfile.o',   
-                     dtk + '/ting/libutil/gen-LINUX_V6/bfopen.o' ]
-    lib_dirs = [dtk + '/lib', dtk + fax + '/lib']
-    libs = ['acu_cl', 'acu_res', 'TiNG', 'acu_common', 'acufax']
+                     dtk + '/ting/libutil/gen-LINUX_V6/bfopen.o',
+                     dtk + fax + '/lib/actiff.o',
+                     dtk + fax + '/lib/faxlib.o' ]
+    lib_dirs = [dtk + '/lib']
+    libs = ['acu_cl', 'acu_res', 'TiNG', 'acu_common']
     sources = ["acu.i"]
     swig_opts = ['-modern', '-new_repr'] + \
                 ['-D%s' % d[0] for d in define_macros] + \
