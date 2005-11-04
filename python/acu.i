@@ -116,8 +116,6 @@ BLOCKING(smfax_tx_page)
 %ignore chknet_port;
 %ignore chknet;
 %ignore call_assoc_net;
-%ignore call_l1_stats;
-%ignore call_l2_state;
 %ignore call_br_l1_stats;
 %ignore call_br_l2_state;
 %ignore dpns_l2_state;
