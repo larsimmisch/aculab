@@ -3,38 +3,32 @@
 import os
 
 if os.name == 'nt':
-    define_macros = [('WIN32', None)]
-    include_dirs = ['../include']
-    lib_dirs = []
-    libs = ['advapi32']
-    sources = ['acu_wrap.c',
-               '../src/clnt.c',
-               '../src/cllib.c',
-               '../src/common.c',
-               '../src/swnt.c',
-               '../src/swlib.c',
-               '../src/smnt.c',
-               '../src/smlib.c',
-               '../src/smbesp.c',
-               '../src/smfwcaps.c' ]
-
-elif os.name == 'unix':
-    dtk = '../dtk111'
-    define_macros = [('UNIX_SYSTEM', None),
-                     ('SM_POLL_UNIX', None)]
-    includes = [dtk + '/call/include',
-                dtk + '/switch/include',
-                dtk + '/speech/include']
-    lib_dirs = [dtk + '/call/lib',
-                dtk + '/switch/lib',
-                dtk + '/speech/lib'],
-    libs = ['mvcl', 'mvsw', 'mvsm']
+    raise RuntimeError('Windows not supported yet')
+elif os.name == 'posix':
+    dtk = os.getenv('ACULAB_ROOT')
+    fax = '/ProsodyLibraries/Group3fax_LINUX_V6_rel321/API'
+    define_macros = [('ACU_LINUX', None),
+                     ('SM_POLL_UNIX', None),
+                     ('TiNGTYPE_LINUX', None),
+                     ('TiNG_USE_V6', None)]
+    include_dirs = [dtk + '/include',
+                    dtk + '/ting/include',
+                    dtk + fax + '/include' ]
+    extra_objects = [dtk + '/ting/libutil/gen-LINUX_V6/aculog.o',
+                     dtk + '/ting/libutil/gen-LINUX_V6/vseprintf.o',   
+                     dtk + '/ting/libutil/gen-LINUX_V6/bfile.o',   
+                     dtk + '/ting/libutil/gen-LINUX_V6/bfopen.o' ]
+    lib_dirs = [dtk + '/lib', dtk + fax + '/lib']
+    libs = ['acu_cl', 'acu_res', 'TiNG', 'acu_common', 'acufax']
     sources = ["acu.i"]
+    swig_opts = ['-modern', '-new_repr'] + \
+                ['-D%s' % d[0] for d in define_macros] + \
+                ['-I%s' % i for i in include_dirs] \
 
 from distutils.core import setup,Extension
 
 setup (name = "aculab",
-	   version = "1.3",
+	   version = "2.0",
 	   description = "Aculab Python wrapper",
 	   author = "Lars Immisch",
 	   author_email = "lars@ibp.de",
@@ -42,6 +36,8 @@ setup (name = "aculab",
                                 include_dirs = include_dirs,
                                 library_dirs = lib_dirs,
                                 libraries = libs,
-                                define_macros = define_macros)],
+                                extra_objects = extra_objects,
+                                define_macros = define_macros,
+                                swig_opts = swig_opts)],
        packages = ["aculab"])
 
