@@ -23,6 +23,9 @@ class Model:
         self.card = card
         self.module = module
         
+        self.size = 0
+        self.reconnected = False
+        
         self.data = lowlevel.SMDC_DATA_PARMS()
         self.data.allocbuffer(320)
 
@@ -42,14 +45,19 @@ class Model:
 
         self.connection = self.channels[0].connect(self.channels[1])
 
+    def reconnect(self):
+        self.reconnected = True
+        del self.connection
+        self.connection = self.channels[0].connect(self.channels[1])
+
     def start(self):
-        self.dc_read = DCReadJob(lowlevel.kSMDCRxCtlNotifyOnData, 160, 0, 0)
+        self.dc_read = DCReadJob(self.channels[0],
+                                 lowlevel.kSMDCRxCtlNotifyOnData, 160, 0, 0)
         
         self.channels[1].play('greeting.al')
 
         self.channels[0].dc_config(lowlevel.kSMDCProtocolRawRx, None,
                                    lowlevel.kSMDCConfigEncodingSync, None)
-
 
         self.channels[0].start(self.dc_read)
 
@@ -58,27 +66,34 @@ class DCController:
 
     def dc_read(self, channel):
 
-        model = channel_user_data
+        model = channel.user_data
 
         status = lowlevel.SMDC_RX_STATUS_PARMS()
         status.channel = channel.channel
+        status.status = 1
 
-        rc = lowlevel.smdc_rx_status(status)
-        if rc:
-            raise AculabError(rc, 'smdc_line_status')
+        while status.status in [1, 2]:
+        
+            rc = lowlevel.smdc_rx_status(status)
+            if rc:
+                raise AculabError(rc, 'smdc_line_status')
 
-        # print 'status: %d, %d' % (status.status, status.available_octets)
+            log.debug('status: %d, %d', status.status,
+                      status.available_octets)
+
+            model.data.channel = channel.channel
+            model.size = model.size + status.available_octets
+
+            if model.size > 1000 and not model.reconnected:
+                model.reconnect()
+
                 
-        data.channel = channel.channel
-
-        rc = lowlevel.smdc_rx_data(data)
-        if rc:
-            raise AculabError(rc, 'smdc_rx_data')
+            rc = lowlevel.smdc_rx_data(model.data)
+            if rc:
+                raise AculabError(rc, 'smdc_rx_data')
 
     def play_done(self, channel, f, reason, position, user_data, job_data):
-        print "play_done"
-        f.close()
-        sys.exit(2)
+        raise StopIteration
 
 def usage():
     print 'usage: dc.py [-c <card>] [-m <module>]'
@@ -104,8 +119,8 @@ if __name__ == '__main__':
 
     snapshot = Snapshot()
 
-
-
     m = Model(controller, card, module)
+
+    m.start()
     
     SpeechDispatcher.run()
