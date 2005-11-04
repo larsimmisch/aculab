@@ -938,7 +938,7 @@ class DCReadJob:
         self.channel = channel
         self.cmd = cmd
         self.min_to_collect = min_to_collect
-        self.min_idle = idle
+        self.min_idle = min_idle
         self.blocking = blocking
         self.job_data = job_data
 
@@ -947,11 +947,11 @@ class DCReadJob:
 
         control = lowlevel.SMDC_RX_CONTROL_PARMS()
 
-        control.channel = self.channel
-        control.cmd = cmd
-        control.min_to_collect = min_to_collect
-        control.min_idle = min_idle
-        control.blocking = 0
+        control.channel = self.channel.channel
+        control.cmd = self.cmd
+        control.min_to_collect = self.min_to_collect
+        control.min_idle = self.min_idle
+        control.blocking = self.blocking
 
         # add the read event to the dispatcher
         self.channel.dispatcher.add(self.channel.event_read, self.on_read)
@@ -959,14 +959,14 @@ class DCReadJob:
         rc = lowlevel.smdc_rx_control(control)
         if rc:
             raise AculabSpeechError(rc, 'smdc_rx_control')
-        
-        log.debug('%s dc_rx_control(%s, cmd=%d, min_to_collect=%d, ' \
+
+        log.debug('%s dc_rx_control(cmd=%d, min_to_collect=%d, ' \
                   'min_idle=%d, blocking=%d)',
                   self.channel.name, self.cmd, self.min_to_collect,
-                  self.min_idle)
+                  self.min_idle, self.blocking)
 
     def on_read(self):
-        self.channel.controller.dc_read(channel)
+        self.channel.controller.dc_read(self.channel)
 
     def stop(self):
         rc = lowlevel.smdc_stop(self.channel.channel)
@@ -1373,7 +1373,7 @@ class SpeechChannel:
         config.encoding = encoding
         config.encoding_config_length = 0
         if econf:
-            config.encoding_config_length = len(econf)
+            config.encoding_config_length = 8 # len(econf)
         config.encoding_config_data = econf
 
         rc = lowlevel.smdc_channel_config(config)
