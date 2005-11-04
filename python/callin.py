@@ -7,13 +7,20 @@ import aculab
 from aculab.snapshot import Snapshot
 from aculab.error import AculabError
 from aculab.callcontrol import *
+import aculab.lowlevel as ll
 
 class IncomingCallController:
 
     def ev_incoming_call_det(self, call, model):
-        log.debug('%s stream: %d timeslot: %d',
-                  call.name, call.details.stream, call.details.ts)
+        log.debug('%s stream: %d timeslot: %d: features',
+                  call.name, call.details.stream, call.details.ts,
+                  call.details.feature_information)
 
+        if call.details.feature_information & ll.ll.FEATURE_RAW_DATA:
+            call.get_feature_details(ll.FEATURE_RAW_DATA)
+            log.debug('raw data: %s',
+                      repr(call.feature_details.feature.uui.getdata()))
+        
         call.accept()
 
     def ev_remote_disconnect(self, call, model):
