@@ -131,6 +131,9 @@ BLOCKING(smfax_tx_page)
 %ignore sm_get_cards;
 
 %ignore BFILE;
+%ignore TiNG_PRINTF_MODULE;
+%ignore FORMAT_EVENT;
+%ignore FORMAT_SOCKADDR_IN;
 
 %apply char[ANY] { ACU_UCHAR[ANY] };
 
@@ -335,6 +338,13 @@ GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 		v->size = sizeof(name);
 		return v;
     }
+	
+	void clear()
+	{
+		memset(self, 0, sizeof(name));
+		self->size = sizeof(name);
+	}
+
     ~name() {
 		free(self);
     }
