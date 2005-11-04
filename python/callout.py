@@ -72,7 +72,7 @@ if __name__ == '__main__':
     numcalls = 1
     timeslot = None
 
-    log = aculab.defaultLogging(logging.INFO)
+    log = aculab.defaultLogging(logging.DEBUG)
 
     controller = OutgoingCallController()
 
@@ -104,16 +104,20 @@ if __name__ == '__main__':
     fd.uui.request = lowlevel.UUS_1_IMPLICITLY_PREFERRED
     fd.uui.control = lowlevel.CONTROL_NEXT_CC_MESSAGE
     fd.uui.protocol = lowlevel.UUI_PROTOCOL_USER_SPECIFIC
-    fd.uui.data = 'Hallo Hauke'
-    fd.uui.length = len(fd.uui.data) + 1
+    fd.uui.setdata('Hallo Hauke, dies ist ein langer und entsetzliche langweiliger Text, den ich nur zum Testen von UUI benutze')
+
+    fd.raw_data.length = 6
+    fd.raw_data.data = struct.pack('BBBBBB',
+                                   2, # See Appendix M, Aculab Call Control
+                                   0x9f, 0x01, 0x02, 0x0a, 0x0b)
 
     for i in range(numcalls):
         c = Call(controller,  port=port, timeslot=timeslot)
         c.user_data = CallData(args[0])
-        c.openout(args[0], True, OAD)
-##         c.openout(args[0], 1, OAD, 
-##                   feature = lowlevel.FEATURE_USER_USER,
-##                   feature_data = fd)
+##        c.openout(args[0], True, OAD)
+        c.openout(args[0], 1, OAD, 
+                   feature = lowlevel.FEATURE_RAW_DATA,
+                   feature_data = fd)
 
 ##         fd.raw_data.length = 6
 ##         fd.raw_data.data = struct.pack('BBBBBB',
