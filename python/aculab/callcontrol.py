@@ -261,7 +261,7 @@ class CallHandle:
 
         rc = lowlevel.call_feature_send(fp)
         if rc:
-            raise AculabError(rc, 'call_feature_send')
+            raise AculabError(rc, 'call_feature_send', self.handle)
 
         log.debug('%s call_feature_send(%d, %d)',
                   self.name, feature_type, message_control)
@@ -277,11 +277,11 @@ class CallHandle:
         if feature and feature_data:
             rc = lowlevel.call_feature_enquiry(outparms)
             if rc:
-                raise AculabError(rc, 'call_feature_enquiry')
+                raise AculabError(rc, 'call_feature_enquiry', self.handle)
         else:
             rc = lowlevel.call_enquiry(outparms)
             if rc:
-                raise AculabError(rc, 'call_enquiry')
+                raise AculabError(rc, 'call_enquiry', self.handle)
 
         # it is permissible to do an openout after an openin
         # we save the handle from openin in this case
@@ -458,7 +458,7 @@ class CallHandle:
     def incoming_ringing(self):
         rc = lowlevel.call_incoming_ringing(self.handle)
         if rc:
-            raise AculabError(rc, 'call_incoming_ringing')
+            raise AculabError(rc, 'call_incoming_ringing', self.handle)
 
         log.debug('%s incoming_ringing()', self.name)
 
@@ -475,10 +475,10 @@ class CallHandle:
 
         if self.handle:
             xcause.handle = self.handle
-            
+
             rc = lowlevel.call_disconnect(xcause)
             if rc:
-                raise AculabError(rc, 'call_disconnect')
+                raise AculabError(rc, 'call_disconnect', self.handle)
 
         log.debug('%s disconnect(%d)', self.name, xcause.cause)
 
@@ -503,7 +503,7 @@ class CallHandle:
             
             rc = lowlevel.call_release(xcause)
             if rc:
-                raise AculabError(rc, 'call_release')
+                raise AculabError(rc, 'call_release', self.handle)
 
         log.debug('%s release(%d)', self.name, xcause.cause)
 
