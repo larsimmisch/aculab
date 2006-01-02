@@ -1,6 +1,7 @@
 import sys
 import os
 import time
+import threading
 import logging
 import lowlevel
 import names
@@ -492,7 +493,7 @@ class RecordJob:
                 return
 
             if status.status == lowlevel.kSMRecordStatusComplete:
-                if version >= 2:
+                if version[0] >= 2:
                     term = status.termination_reason
                     # Todo check
                     rc = status.param0
@@ -767,7 +768,7 @@ class SpeechChannel:
         self.user_data = user_data
         self.job = None
         self.close_pending = None
-        # initialize arly before any exception is thrown
+        # initialize early before any exception is thrown
         self.event_read = None
         self.event_write = None
         self.event_recog = None
@@ -811,10 +812,10 @@ class SpeechChannel:
         # add the recog event to the dispatcher
         self.dispatcher.add(self.event_recog, self.on_recog)
 
-        self._ting_connect()
-        log.debug('%s out: %d:%d, in: %d:%d', self.name, self.info.ost,
-                  self.info.ots, self.info.ist, self.info.its)
-
+        if version[0] >= 2:
+            self._ting_connect()
+            log.debug('%s out: %d:%d, in: %d:%d', self.name, self.info.ost,
+                      self.info.ots, self.info.ist, self.info.its)
         self._listen()
 
     def __del__(self):
@@ -1060,7 +1061,6 @@ class SpeechChannel:
                     # connect directly
                     c.connections = [self.listen_to((other.info.ost,
                                                      other.info.ots)),
-                                     
                                      other.listen_to((self.info.ost,
                                                       self.info.ots))]
             else:
