@@ -1,5 +1,6 @@
 %module lowlevel
 %{
+#ifdef TiNG_USE_V6
 #include "cl_lib.h"
 #include "res_lib.h"
 #include "sw_lib.h"
@@ -11,6 +12,14 @@
 #include "smdc_raw.h"
 #include "smdc_sync.h"
 #include "smdc_hdlc.h"
+#else
+#include "mvswdrvr.h"
+#include "mvcldrvr.h"
+#include "smport.h"
+#include "smdrvr.h"
+#include "smosintf.h"
+#include "smbesp.h"
+#endif
 
 /*
   Macro to create a SWIG-compatible pointer-type string from a base type
@@ -46,6 +55,7 @@ unsigned char bitrev[] = {
 
 // %include "typemaps.i"
 
+#ifdef TiNG_USE_V6
 /* Fake an ACTIFF_PAGE_HANDLE (which is just a typedef for void - nasty!) */
 typedef struct {
 } ACTIFF_PAGE_HANDLE;
@@ -59,6 +69,7 @@ typedef struct {
 		if (self) free(self);
 	}
 }
+#endif 
 
 %apply int { ACU_ERR, ACU_UINT, ACU_UCHAR, ACU_ULONG, ACU_INT, ACU_LONG, 
 			 ACU_PORT_ID, ACU_CALL_HANDLE, ACU_CARD_ID, tSMCardId, 
@@ -186,6 +197,7 @@ BLOCKING(smfax_tx_page)
 		$result, SWIG_NewPointerObj(*$1, SWIGTYPE_p_BFILE, 1));
 }
 
+#ifdef TiNG_USE_V6
 %include "cl_lib.h2"
 %include "res_lib.h2"
 %include "sw_lib.h"
@@ -199,9 +211,15 @@ BLOCKING(smfax_tx_page)
 %include "bfile.h2"
 %include "bfopen.h"
 %include "smfaxapi.h"
+#else
+%include "mvswdrvr.h"
+%include "mvcldrvr.h"
+%include "smosintf.h"
+%include "smdrvr.h"
+%include "smbesp.h"
+#endif
 
-
-/* Use macro this for structures with data and length members, where data must
+/* Use this macro for structures with data and length members, where data must
    be copied into the structure (as opposed to: the data pointer must be set) 
 */
 %define GET_SET_DATA(name, maxsize) 
@@ -231,7 +249,9 @@ BLOCKING(smfax_tx_page)
 GET_SET_DATA(RAW_DATA_STRUCT, MAXRAWDATA)
 GET_SET_DATA(FACILITY_XPARMS, MAXFACILITY_INFO)
 GET_SET_DATA(UUI_XPARMS, MAXUUI_INFO)
+#ifdef TiNG_USE_V6
 GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
+#endif
 
 %extend SM_TS_DATA_PARMS {
 	~SM_TS_DATA_PARMS()
@@ -276,6 +296,7 @@ GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 	}
 }
 
+#ifdef TiNG_USE_V6
 %extend ACU_SNAPSHOT_PARMS {
     ACU_SNAPSHOT_PARMS() {
 		ACU_SNAPSHOT_PARMS *v = 
@@ -326,8 +347,8 @@ GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 		}
 		return PyBuffer_FromMemory(self->data, self->done_length);
 	}
-
 }
+#endif
 
 %define SIZED_STRUCT(name) 
 %extend name {

@@ -22,7 +22,7 @@ PYTHON_LIBDIR := $(firstword $(strip \
 
 PYTHON_LIBS = -lpython2.4
 
-OBJS	:= acu_wrap.o
+OBJS	:= lowlevel_wrap.o
 
 #
 EXTRA_OBJS = -Xlinker -R$(DTK)/lib -L$(DTK)/lib \
@@ -51,13 +51,13 @@ bfile.h2: $(DTK)/ting/include/bfile.h bfile.patch
 
 # builds are very slow - only rebuild if cl_lib.h changes
 sized_struct.i: $(DTK)/include/cl_lib.h $(DTK)/include/sw_lib.h
-	swig $(DEFINES) $(DTK_INCLUDE) -xml -xmllite acu.i
-	python sized_struct.py acu_wrap.xml
-	rm acu_wrap.xml
+	swig $(DEFINES) $(DTK_INCLUDE) -xml -xmllite lowlevel.i
+	python sized_struct.py lowlevel_wrap.xml
+	rm lowlevel_wrap.xml
 
-acu.i: cl_lib.h2 $(DTK)/include/sw_lib.h res_lib.h2 bfile.h2
+lowlevel.i: cl_lib.h2 $(DTK)/include/sw_lib.h res_lib.h2 bfile.h2
 
-acu_wrap.c aculab/lowlevel.py: acu.i sized_struct.i
+lowlevel_wrap.c aculab/lowlevel.py: lowlevel.i sized_struct.i
 	swig $(DEFINES) $(DTK_INCLUDE) -python -modern -new_repr $<
 	mv lowlevel.py aculab
 
