@@ -184,13 +184,11 @@ class CallHandle:
         log.debug('%s openin()', self.name)
 
     def _outparms(self, destination_address, sending_complete = 1,
-                  originating_address = '',
+                  originating_address = '', unique = None,
                   feature = None, feature_data = None, cnf = None):
         
         if feature and feature_data:
             outparms = lowlevel.FEATURE_OUT_XPARMS()
-            outparms.net = self.port
-            outparms.ts = self.timeslot
 
             if cnf:
                 outparms.cnf = cnf
@@ -198,33 +196,33 @@ class CallHandle:
                 outparms.cnf = lowlevel.CNF_REM_DISC
                 if self.timeslot != -1:
                     outparms.cnf |= lowlevel.CNF_TSPREFER
-                
-            outparms.sending_complete = sending_complete
-            outparms.originating_addr = originating_address
-            outparms.destination_addr = destination_address
+
             outparms.feature_information = feature
             outparms.feature = feature_data
         else:
             outparms = lowlevel.OUT_XPARMS()
-            outparms.net = self.port
-            outparms.ts = self.timeslot
             outparms.cnf = lowlevel.CNF_REM_DISC
             if self.timeslot != -1:
                 outparms.cnf |= lowlevel.CNF_TSPREFER
                 
-            outparms.sending_complete = sending_complete
-            outparms.originating_addr = originating_address
-            outparms.destination_addr = destination_address
+        outparms.net = self.port
+        outparms.ts = self.timeslot
+        outparms.sending_complete = sending_complete
+        outparms.originating_addr = originating_address
+        outparms.destination_addr = destination_address
 
+        if unique:
+            outparms.unique_xparms = unique
+                
         return outparms
 
     def openout(self, destination_address, sending_complete = True,
-                originating_address = '',
+                originating_address = '', unique = None,
                 feature = None, feature_data = None, cnf = None):
 
         outparms = self._outparms(destination_address, sending_complete,
-                                  originating_address, feature, feature_data,
-                                  cnf)
+                                  originating_address, unique,
+                                  feature, feature_data, cnf)
         
         if feature and feature_data:
             rc = lowlevel.call_feature_openout(outparms)
