@@ -7,7 +7,6 @@ import lowlevel
 import names
 from busses import Connection, CTBusConnection, DefaultBus
 from error import *
-from snapshot import Snapshot
 
 if os.name == 'nt':
     import pywintypes
@@ -777,17 +776,18 @@ class SpeechChannel:
         self.channel = None
         self.name = None
 
-        s = Snapshot()
+        if version[0] >= 2:
+            import snapshot
+            s = snapshot.Snapshot()
 
-        if type(module) == type(0):
-            module = s.prosody[card].modules[module]
+            if type(module) == type(0):
+                module = s.prosody[card].modules[module].open.module_id
 
         self.module = module
-        self.module_id = module.open.module_id
 
         alloc = lowlevel.SM_CHANNEL_ALLOC_PLACED_PARMS()
         alloc.type = lowlevel.kSMChannelTypeFullDuplex
-        alloc.module = self.module_id
+        alloc.module = self.module
         
         rc = lowlevel.sm_channel_alloc_placed(alloc)
         if rc:
