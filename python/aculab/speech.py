@@ -417,8 +417,13 @@ class RecordJob:
         else:
             self.file = f
 
-        self.buffer = lowlevel.SM_TS_DATA_PARMS()
-        self.buffer.allocrecordbuffer()
+        self.data = lowlevel.SM_TS_DATA_PARMS()
+        # tell buffer to use our Python-buffer to store data
+        # it's dangerous and looks awkward, but it avoids a copy
+        # of the data
+        self.buffer = lowlevel.buffer_alloc(
+            lowlevel.kSMMaxRecordDataBufferSize)
+        self.data.usebuffer(self.buffer)
         # size in bytes
         self.size = 0
         self.max_octets = max_octets
@@ -456,9 +461,6 @@ class RecordJob:
                   
         # add the read event to the dispatcher
         self.channel.dispatcher.add(self.channel.event_read, self.on_read)
-
-    def __del__(self):
-        self.buffer.freerecordbuffer()
 
     def done(self):                
         # remove the read event from the dispatcher
@@ -525,7 +527,7 @@ class RecordJob:
             elif status.status == lowlevel.kSMRecordStatusNoData:
                 return
             else:
-                data = self.buffer
+                data = self.data
                 data.channel = self.channel.channel
                 data.length = lowlevel.kSMMaxRecordDataBufferSize
 
@@ -538,10 +540,10 @@ class RecordJob:
                                                         'sm_get_recorded_data')
                     self.done()
 
-                d = data.getdata()
-                self.size += len(d)
-
-                self.file.write(d)
+                l = data.length
+                self.size += l
+                
+                self.file.write(self.buffer[:l])
 
     def stop(self):
         abort = lowlevel.SM_RECORD_ABORT_PARMS()

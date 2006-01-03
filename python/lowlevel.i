@@ -260,28 +260,21 @@ GET_SET_DATA(UUI_XPARMS, MAXUUI_INFO)
 GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 #endif
 
+PyObject *buffer_alloc(int size = kSMMaxRecordDataBufferSize)
+{
+	return PyBuffer_New(size);
+}
+
 %extend SM_TS_DATA_PARMS {
-	~SM_TS_DATA_PARMS()
-	 {
-		if (self->data)
-		{
-			free(self->data);
-		}
-	 }	
 
-	void allocrecordbuffer()
+	void usebuffer(PyObject *b)
 	{
-		self->data = (char*)malloc(kSMMaxRecordDataBufferSize);
-		self->length = kSMMaxRecordDataBufferSize;
-	}
-
-	void freerecordbuffer()
-	{
-		if (self->data)
-		{
-			free(self->data);
+		if (!PyBuffer_Check(b)) {
+	    	PyErr_SetString(PyExc_TypeError,"Expected a buffer");
+			return;
 		}
-		self->data = NULL;
+		self->length = b->ob_type->tp_as_buffer->
+			bf_getwritebuffer(b, 0, (void**)&self->data);
 	}
 
 	void setdata(PyObject *s) {
