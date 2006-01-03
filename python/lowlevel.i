@@ -281,6 +281,7 @@ GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 		{
 			free(self->data);
 		}
+		self->data = NULL;
 	}
 
 	void setdata(PyObject *s) {
