@@ -15,13 +15,12 @@ from email.MIMEText import MIMEText
 from email.MIMEAudio import MIMEAudio
 import aculab
 from aculab.error import AculabError
-from aculab.snapshot import Snapshot
 from aculab.callcontrol import Call, CallDispatcher
 from aculab.speech import SpeechChannel, SpeechDispatcher, Glue
 from aculab.busses import DefaultBus
 
-smtp_server = 'mail.basis-audionet.de'
-smtp_to = 'martiniuc@basis-audionet.de'
+smtp_server = 'mail.ibp.de'
+smtp_to = 'lars@ibp.de'
 smtp_from = 'am@ibp.de'
 
 # ripped from wave.py, which is just a teensy little bit too unflexible
@@ -142,7 +141,7 @@ class RepeatedIncomingCallController(IncomingCallController):
         call.openin()
 
 def usage():
-    print 'usage: am.py [-c <card>] [-p <port>] [-m <module>] [-r]'
+    print 'usage: am.py [-c <card>] [-p <port>] [-m <module>]'
     sys.exit(-2)
 
 if __name__ == '__main__':
@@ -152,9 +151,9 @@ if __name__ == '__main__':
     card = 0
     port = 0
     module = 0
-    controller = IncomingCallController()
+    controller = RepeatedIncomingCallController()
 
-    options, args = getopt.getopt(sys.argv[1:], 'p:rsm:')
+    options, args = getopt.getopt(sys.argv[1:], 'p:sm:')
 
     for o, a in options:
         if o == '-c':
@@ -163,17 +162,12 @@ if __name__ == '__main__':
             port = int(a)
         elif o == '-m':
             module = int(a)
-        elif o == '-r':
-            controller = RepeatedIncomingCallController()
         elif o == '-s':
             DefaultBus = SCBus()
         else:
             usage()
 
-    snapshot = Snapshot()
-    port = snapshot.call[card].ports[port].open.port_id
-
-    call = Call(controller, port=port)
+    call = Call(controller, card=card, port=port)
 
     SpeechDispatcher.start()
     CallDispatcher.run()

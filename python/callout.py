@@ -5,7 +5,6 @@ import getopt
 import struct
 import time
 from aculab.error import AculabError
-from aculab.snapshot import Snapshot
 from aculab.callcontrol import *
 
 OAD = '0403172541'
@@ -94,9 +93,6 @@ if __name__ == '__main__':
 
     if not len(args):
         usage()
-
-    snapshot = Snapshot()
-    port = snapshot.call[card].ports[port].open.port_id
 
     fd = lowlevel.FEATURE_UNION()
 

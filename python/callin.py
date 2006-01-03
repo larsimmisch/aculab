@@ -4,7 +4,6 @@ import sys
 import getopt
 import logging
 import aculab
-from aculab.snapshot import Snapshot
 from aculab.error import AculabError
 from aculab.callcontrol import *
 import aculab.lowlevel as ll
@@ -61,14 +60,7 @@ if __name__ == '__main__':
         else:
             usage()
 
-    snapshot = Snapshot()
-
-    print snapshot.call[card].ports[port].info.sig_sys
-    print snapshot.call[card].ports[port].info.fw_desc
-                
-    port = snapshot.call[card].ports[port].open.port_id
-
     for i in range(numcalls):
-        c = Call(controller, port=port, timeslot=timeslot)
+        c = Call(controller, card=card, port=port, timeslot=timeslot)
 
     CallDispatcher.run()

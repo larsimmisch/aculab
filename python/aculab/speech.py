@@ -22,9 +22,10 @@ log = logging.getLogger('speech')
 log_switch = logging.getLogger('switch')
 
 # check driver info and create prosody streams if TiNG detected
-driver_info = lowlevel.SM_DRIVER_INFO_PARMS()
-lowlevel.sm_get_driver_info(driver_info)
-version = (driver_info.major, driver_info.minor)
+_driver_info = lowlevel.SM_DRIVER_INFO_PARMS()
+lowlevel.sm_get_driver_info(_driver_info)
+version = (_driver_info.major, _driver_info.minor)
+del _driver_info
 
 def swig_value(s):
     a = s.find('_')

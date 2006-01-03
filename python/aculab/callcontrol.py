@@ -25,12 +25,16 @@ no_state_change_extended_events = [lowlevel.EV_EXT_FACILITY,
 log = logging.getLogger('call')
 log_switch = logging.getLogger('switch')
 
-_versionp = lowlevel.CALL_API_VERSION_PARMS()
-lowlevel.call_api_version(_versionp)
-
-version = (_versionp.major, _versionp.minor, _versionp.rev)
-
-del _versionp
+try:
+    _versionp = lowlevel.CALL_API_VERSION_PARMS()
+    lowlevel.call_api_version(_versionp)
+    version = (_versionp.major, _versionp.minor, _versionp.rev)
+    del _versionp
+except AttributeError:
+    rc = lowlevel.call_version(0)
+    if rc < 0:
+        raise AculabError(rc, 'call_version')
+    version = ((rc & 0xff00) >> 8, rc & 0xff, '')
 
 class _CallEventDispatcher:
 
@@ -126,7 +130,7 @@ CallDispatcher = _CallEventDispatcher()
 
 class CallHandle:
 
-    def __init__(self, controller, user_data = None, port = None,
+    def __init__(self, controller, user_data = None, card = 0, port = 0,
                  timeslot = None, dispatcher = CallDispatcher):
 
         self.user_data = user_data
@@ -134,11 +138,11 @@ class CallHandle:
         self.dispatcher = dispatcher
         self.port = port
 
-##         if not port:
-##             if version[0] >= 6:
-##                 self.port = snapshot.call[0].ports[0].open.port_id
-##             else:
-##                 self.port = 0
+        # automatically translate port numbers to v6 port_ids
+        if version[0] >= 6:
+            if type(port) == type(0) and type(card) == type(0):
+                from Snapshot import snapshot
+                self.port = snapshot().call[card].ports[port].open.port_id
             
         if not timeslot:
             self.timeslot = -1
@@ -533,11 +537,11 @@ class CallHandle:
 
 class Call(CallHandle):
 
-    def __init__(self, controller, user_data = None, port = None,
+    def __init__(self, controller, user_data = None, card = 0, port = 0,
                  timeslot = -1, dispatcher = CallDispatcher):
         
         CallHandle.__init__(self, controller, user_data,
-                            port, timeslot, dispatcher)
+                            card, port, timeslot, dispatcher)
 
         self.openin()
 

@@ -81,12 +81,6 @@ typedef struct {
 
 %apply (int *OUTPUT) { int *perrno };
 
-#ifdef TiNG_USE_V6
-#define cc_version 6
-#else
-#define cc_version 5
-#endif
-
 /* Allows to execute Python code during function calls */
 %define BLOCKING(name) 
 %exception name {
@@ -214,9 +208,22 @@ BLOCKING(smfax_tx_page)
 #else
 %include "mvswdrvr.h"
 %include "mvcldrvr.h"
-%include "smosintf.h"
 %include "smdrvr.h"
+#ifndef HAVE_TiNG
+%include "smport.h"
+%include "smosintf.h"
+#endif
 %include "smbesp.h"
+%include "smfwcaps.h"
+#endif
+
+#ifdef TiNG_USE_V6
+#define cc_version 6
+#else
+#define cc_version 5
+/* Some constants were renamed in v6. Make the new names available */
+#define kSMDataFormatULawPCM kSMDataFormat8KHzULawPCM	
+#define kSMDataFormatALawPCM kSMDataFormat8KHzALawPCM
 #endif
 
 /* Use this macro for structures with data and length members, where data must
@@ -370,8 +377,10 @@ GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 }
 %enddef
 
+#ifdef TiNG_USE_V6
 #ifndef SWIGXML
 %include "sized_struct.i"
+#endif
 #endif
 
 %{
