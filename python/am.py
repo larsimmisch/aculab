@@ -112,6 +112,7 @@ class IncomingCallController:
         user_data.speech.play('greeting.al')
         
     def ev_remote_disconnect(self, call, user_data):
+        user_data.speech.stop()
         call.disconnect()
 
     def ev_idle(self, call, user_data):
