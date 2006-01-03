@@ -260,10 +260,7 @@ GET_SET_DATA(UUI_XPARMS, MAXUUI_INFO)
 GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 #endif
 
-PyObject *buffer_alloc(int size = kSMMaxRecordDataBufferSize)
-{
-	return PyBuffer_New(size);
-}
+PyObject *buffer_alloc(int size);
 
 %extend SM_TS_DATA_PARMS {
 
@@ -387,6 +384,11 @@ void delete_ACTIFF_PAGE_HANDLE(ACTIFF_PAGE_HANDLE *self){
   if (self) free(self);
 }
 */
+
+PyObject *buffer_alloc(int size = kSMMaxRecordDataBufferSize);
+{
+	return PyBuffer_New(size);
+}
 
 PyObject *add_result(PyObject *result, PyObject *o)
 {
