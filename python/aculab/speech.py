@@ -362,7 +362,7 @@ class PlayJob:
 
         # no locks held - maybe too cautious
         log.debug('%s play_done(reason=\'%s\', pos=%d)',
-                  channel.name, reason, pos)
+                  channel.name, repr(reason), pos)
 
         # channel.user_data, self.job_data)
         channel.job_done(self, 'play_done', f, reason, pos)
@@ -478,7 +478,7 @@ class RecordJob:
         
         # no locks held - maybe too cautious
         log.debug('%s record_done(reason=\'%s\', size=%d)',
-                  channel.name, self.reason, self.size)
+                  channel.name, repr(self.reason), self.size)
 
         channel.job_done(self, 'record_done', f, self.reason, self.size)
     
@@ -611,7 +611,7 @@ class DigitsJob:
             channel.dispatcher.remove(channel.event_write)
 
             log.debug('%s digits_done(reason=\'%s\')',
-                      channel.name, reason)
+                      channel.name, repr(reason))
 
             channel.job_done(self, 'digits_done', reason)
                 
@@ -644,7 +644,7 @@ class DigitsJob:
 
         # no locks held - maybe too cautious
         log.debug('%s play_done(reason=\'%s\', pos=%d)',
-                  channel.name, reason, pos)
+                  channel.name, repr(reason), pos)
 
         # channel.user_data, self.job_data)
         channel.job_done(self, 'play_done', f, reason, pos)
@@ -780,17 +780,18 @@ class SpeechChannel:
         self.name = None
 
         if version[0] >= 2:
-            import snapshot
-            s = snapshot.Snapshot()
-
+            from snapshot import Snapshot
             if type(module) == type(0):
-                module = s.prosody[card].modules[module].open.module_id
+                module = Snapshot().prosody[card].modules[module]
 
-        self.module = module
+            self.module = module
+            self.module_id = module.open.module_id
+        else:
+            self.module_id = module
 
         alloc = lowlevel.SM_CHANNEL_ALLOC_PLACED_PARMS()
         alloc.type = lowlevel.kSMChannelTypeFullDuplex
-        alloc.module = self.module
+        alloc.module = self.module_id
         
         rc = lowlevel.sm_channel_alloc_placed(alloc)
         if rc:
@@ -994,7 +995,12 @@ class SpeechChannel:
 
         # this is ridiculous: Aculab should decide whether
         # they want to work with offsets or card_ids
-        card = Snapshot().switch[self.info.card].card.card_id            
+        if version[0] >= 2:
+            from snapshot import Snapshot
+            card = Snapshot().switch[self.info.card].card.card_id
+        else:
+            card = self.info.card
+            
         rc = lowlevel.sw_set_output(card, output)
         if (rc):
             raise AculabError(rc, 'sw_set_output(%d, %d:%d := %d:%d)' %
@@ -1036,7 +1042,12 @@ class SpeechChannel:
 
         # this is ridiculous: Aculab should decide whether
         # they want to work with offsets or card_ids
-        card = Snapshot().switch[self.info.card].card.card_id
+        if version[0] >= 2:
+            from snapshot import Snapshot
+            card = Snapshot().switch[self.info.card].card.card_id
+        else:
+            card = self.info.card
+            
         rc = lowlevel.sw_set_output(card, output)
         if rc:
             raise AculabError(rc, 'sw_set_output(%d, %d:%d := %d:%d)' %

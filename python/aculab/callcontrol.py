@@ -141,8 +141,8 @@ class CallHandle:
         # automatically translate port numbers to v6 port_ids
         if version[0] >= 6:
             if type(port) == type(0) and type(card) == type(0):
-                from Snapshot import snapshot
-                self.port = snapshot().call[card].ports[port].open.port_id
+                from snapshot import Snapshot
+                self.port = Snapshot().call[card].ports[port].open.port_id
             
         if not timeslot:
             self.timeslot = -1
