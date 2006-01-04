@@ -15,6 +15,9 @@ class IncomingCallController:
                   call.name, call.details.stream, call.details.ts,
                   call.details.feature_information)
 
+        log.debug('HLC: %s',
+                  repr(call.details.unique_xparms.sig_q931.hilayer.ie));
+
         if call.details.feature_information & ll.FEATURE_RAW_DATA:
             call.get_feature_details(ll.FEATURE_RAW_DATA)
             log.debug('raw data: %s',
