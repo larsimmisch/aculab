@@ -2,6 +2,12 @@
 
 import os
 
+def macroify(m):
+    if m[1]:
+        return '-D%s=s' % m
+    else:
+        return '-D%s' % m[0]
+
 if os.name == 'nt':
     raise RuntimeError('Windows not supported yet')
 elif os.name == 'posix':
@@ -21,11 +27,12 @@ elif os.name == 'posix':
                      dtk + fax + '/lib/actiff.o',
                      dtk + fax + '/lib/faxlib.o' ]
     lib_dirs = [dtk + '/lib']
-    libs = ['acu_cl', 'acu_res', 'TiNG', 'acu_common']
-    sources = ["acu.i"]
-    swig_opts = ['-modern', '-new_repr'] + \
-                ['-D%s' % d[0] for d in define_macros] + \
-                ['-I%s' % i for i in include_dirs] \
+    libs = ['acu_cl', 'acu_res', 'TiNG', 'acu_common', 'stdc++']
+    sources = ["lowlevel.i"]
+    
+swig_opts = ['-modern', '-new_repr'] + \
+            [macroify(d) for d in define_macros] + \
+            ['-I%s' % i for i in include_dirs]
 
 from distutils.core import setup,Extension
 
