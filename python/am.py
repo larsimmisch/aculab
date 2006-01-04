@@ -54,8 +54,8 @@ class AsyncEmail(threading.Thread):
     def run(self):
         try:
             msg = MIMEBase('multipart', 'mixed')
-            msg['Subject'] = 'Answering machine message from %s' % \
-                             self.call.details.originating_addr
+            cli = self.call.details.originating_addr
+            msg['Subject'] = 'Answering machine message from %s' % cli
 
             msg['Date'] = email.Utils.formatdate()
             msg['From'] = smtp_from
@@ -113,15 +113,17 @@ class IncomingCallController:
         
     def ev_remote_disconnect(self, call, user_data):
         user_data.speech.stop()
-        call.disconnect()
 
     def ev_idle(self, call, user_data):
         user_data.close()
         call.user_data = None
 
     def play_done(self, channel, f, reason, position, user_data, job_data):
-        t = os.tmpfile()
-        channel.record(t, max_silence = 2000)
+        if reason is None:
+            t = os.tmpfile()
+            channel.record(t, max_silence = 2000)
+        else:
+            call.disconnect()
 
     def record_done(self, channel, f, reason, position, user_data, job_data):
         f.seek(0)        
