@@ -385,7 +385,7 @@ void delete_ACTIFF_PAGE_HANDLE(ACTIFF_PAGE_HANDLE *self){
 }
 */
 
-PyObject *buffer_alloc(int size = kSMMaxRecordDataBufferSize);
+PyObject *buffer_alloc(int size)
 {
 	return PyBuffer_New(size);
 }
