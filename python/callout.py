@@ -102,18 +102,22 @@ if __name__ == '__main__':
     fd.uui.protocol = lowlevel.UUI_PROTOCOL_USER_SPECIFIC
     fd.uui.setdata('Hallo Hauke, dies ist ein langer und entsetzliche langweiliger Text, den ich nur zum Testen von UUI benutze')
 
-    fd.raw_data.length = 6
-    fd.raw_data.data = struct.pack('BBBBBB',
-                                   2, # See Appendix M, Aculab Call Control
-                                   0x9f, 0x01, 0x02, 0x0a, 0x0b)
+##     fd.raw_data.length = 6
+##     fd.raw_data.data = struct.pack('BBBBBB',
+##                                    2, # See Appendix M, Aculab Call Control
+##                                    0x9f, 0x01, 0x02, 0x0a, 0x0b)
 
+    unique = lowlevel.UNIQUEXU()
+    unique.sig_q931.hilayer.ie = '\x02\x11\x01'
+    
     for i in range(numcalls):
         c = Call(controller,  port=port, timeslot=timeslot)
         c.user_data = CallData(args[0])
 ##        c.openout(args[0], True, OAD)
-        c.openout(args[0], 1, OAD, 
-                   feature = lowlevel.FEATURE_RAW_DATA,
-                   feature_data = fd)
+        c.openout(args[0], 1, OAD,
+                  unique = unique,
+                  feature = lowlevel.FEATURE_USER_USER,
+                  feature_data = fd)
 
 ##         fd.raw_data.length = 6
 ##         fd.raw_data.data = struct.pack('BBBBBB',
