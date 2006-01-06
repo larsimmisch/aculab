@@ -16,7 +16,8 @@ from email.MIMEAudio import MIMEAudio
 import aculab
 from aculab.error import AculabError
 from aculab.callcontrol import Call, CallDispatcher
-from aculab.speech import SpeechChannel, SpeechDispatcher, Glue
+from aculab.speech import (SpeechChannel, SpeechDispatcher, Glue, PlayJob,
+                           RecordJob)
 from aculab.busses import DefaultBus
 
 smtp_server = 'mail.ibp.de'
@@ -45,8 +46,7 @@ def wav_header(data, format, nchannels = 1, sampwidth = 1,
 class AsyncEmail(threading.Thread):
 
     def __init__(self, file, call):
-        threading.Thread.__init__(self, name= 'email')
-        # rewind the file
+        super(self.__class__, self).__init__(name= 'email')
         self.file = file
         self.call = call
         self.setDaemon(1)
@@ -95,7 +95,34 @@ class AsyncEmail(threading.Thread):
 
         log.info('sent answering machine message')
 
-class IncomingCallController:
+class AnsweringMachine(Glue):
+    def __init__(self, controller, module, call):
+        super(self.__class__, self).__init__(controller, module, call)
+
+        self.jobs = [PlayJob(self.speech, '4011_suonho_sweetchoff_iLLCommunications_suonho.al'),
+                     PlayJob(self.speech, '42.al'),
+                     PlayJob(self.speech, 'beep.al'),
+                     RecordJob(self.speech, os.tmpfile(), max_silence=4000)]
+
+    def start(self):
+        self.speech.start(self.jobs[0])
+
+    def job_done(self, job, reason):
+        i = self.jobs.index(job)
+        if i < len(self.jobs) - 1:
+            if reason is None:
+                log.debug('next job: %d', i + 1)
+                self.speech.start(self.jobs[i + 1])
+            else:
+                self.call.disconnect()
+        else:
+            job.file.seek(0)
+            # job.file will be closed by AsyncEmail.run
+            # the call will be hungup from AsyncEmail.run, too
+            e = AsyncEmail(job.file, call)
+            e.start()
+        
+class IncomingCallController(object):
 
     def ev_incoming_call_det(self, call, user_data):
         log.debug('%s stream: %d timeslot: %d',
@@ -105,11 +132,11 @@ class IncomingCallController:
         # Proper applications that handle multiple modules 
         # can be more clever here
         global module
-        call.user_data = Glue(self, module, call)
+        call.user_data = AnsweringMachine(self, module, call)
         call.accept()
 
     def ev_call_connected(self, call, user_data):        
-        user_data.speech.play('greeting.al')
+        user_data.start()
         
     def ev_remote_disconnect(self, call, user_data):
         user_data.speech.stop()
@@ -118,21 +145,16 @@ class IncomingCallController:
         user_data.close()
         call.user_data = None
 
-    def play_done(self, channel, f, reason, position, user_data, job_data):
-        if reason is None:
-            t = os.tmpfile()
-            channel.record(t, max_silence = 2000)
-        else:
-            call.disconnect()
+    def play_done(self, channel, f, reason, position, user_data):
+        pass
 
-    def record_done(self, channel, f, reason, position, user_data, job_data):
-        f.seek(0)        
-        # f will be closed by AsyncEmail.run
-        # the call will be hungup from AsyncEmail.run, too
-        e = AsyncEmail(f, user_data.call)
-        e.start()
+    def record_done(self, channel, f, reason, position, user_data):
+        pass
+
+    def job_done(self, job, reason, user_data):
+        user_data.job_done(job, reason)
         
-    def digits_done(self, channel, user_data, job_data):
+    def digits_done(self, channel, user_data):
         pass
     
     def dtmf(self, channel, digit, user_data):
@@ -141,6 +163,7 @@ class IncomingCallController:
 class RepeatedIncomingCallController(IncomingCallController):
 
     def ev_idle(self, call, user_data):
+        super(self.__class__, self).ev_idle(call, user_data)
         call.openin()
 
 def usage():

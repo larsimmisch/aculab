@@ -23,6 +23,26 @@ lowlevel_wrap.c aculab/lowlevel.py: lowlevel.i
 %$(O): %.c
 	$(CC) -c $(C_DEFINES) $(ACULAB_INCLUDE) $(PYTHON_INCLUDE) $< -o $@ 
 
+ifdef $(TiNG_USE_V6)
+cl_lib.h2: $(DTK)/include/cl_lib.h cl_lib.patch
+	patch -o $@ $(DTK)/include/cl_lib.h cl_lib.patch
+
+res_lib.h2: $(DTK)/include/res_lib.h res_lib.patch
+	patch -o $@ $(DTK)/include/res_lib.h res_lib.patch
+
+#actiff.h2: $(DTK)/$(FAX)/include/actiff.h actiff.patch
+#	patch -o $@ $(DTK)/$(FAX)/include/actiff.h actiff.patch
+
+bfile.h2: $(DTK)/ting/include/bfile.h bfile.patch
+	patch -o $@ $(DTK)/ting/include/bfile.h bfile.patch
+
+# builds are very slow - only rebuild if cl_lib.h changes
+sized_struct.i: $(DTK)/include/cl_lib.h $(DTK)/include/sw_lib.h
+	swig $(DEFINES) $(DTK_INCLUDE) -xml -xmllite lowlevel.i
+	python sized_struct.py lowlevel_wrap.xml
+	rm lowlevel_wrap.xml
+endif
+
 install:
 	python setup.py install
 

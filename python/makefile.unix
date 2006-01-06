@@ -64,15 +64,6 @@ lowlevel_wrap.c aculab/lowlevel.py: lowlevel.i sized_struct.i
 %.o: %.c
 	$(CXX) -g -c $(DEFINES) $(C_DEFINES) -I$(PYTHON_INCLUDE) -Iaculib $< -o $@ 
 
-info: info.o
-	$(CXX) -o $@ info.o $(DTK)/ting/apilib/gen-${TiNGTYPE}_V6/TiNGlib.o -lm -lpthread
-
-dcraw: dcraw.o
-	$(CXX) -o $@ dcraw.o -L$(DTK)/lib -lm -lpthread -lacu_sw -lacu_res -lacu_common -lTiNG
-
-rxfax3: rxfax3.o
-	$(CXX) -g -o $@ rxfax3.o $(EXTRA_OBJS) -lm -lpthread 
-
 test:
 	python test_swig.py
 
@@ -82,14 +73,13 @@ install:
 installer:
 	python setup.py bdist_wininst
 
-# this target should be used to regenerate cl_lib.patch
-# after cl_lib.h2 was modified
+# this target may be used to regenerate the patch files
+# after a new version of the source include files have been installed.
 # Error 1 is ok, Error 2 indicates trouble
 patch: cl_lib.h2 res_lib.h2 bfile.h2 # actiff.h2 
 	-diff -u -b $(DTK)/include/cl_lib.h cl_lib.h2 > cl_lib.patch
 	-diff -u -b $(DTK)/include/res_lib.h res_lib.h2 > res_lib.patch
 	-diff -u -b $(DTK)/ting/include/bfile.h bfile.h2 > bfile.patch
-	# -diff -u -b $(DTK)/$(FAX)/include/actiff.h actiff.h2 > actiff.patch
 
 clean:
 	rm -f aculab/*.so *.o aculab/*.pyc \
