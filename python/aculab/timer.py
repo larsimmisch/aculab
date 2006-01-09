@@ -1,4 +1,4 @@
-"""A timer thread class"""
+"""A thread-based timer"""
 
 import threading
 import time
@@ -11,10 +11,8 @@ class Timer:
         self.args = args
         self.kwargs = kwargs
 
-def timer_sort(x, y):
-    if x.absolute == y.absolute: return 0
-    elif x.absolute < y.absolute: return -1
-    else: return 1
+    def __cmp__(self, other):
+        return cmp(self.absolute, other.absolute)
 
 class TimerThread(threading.Thread):
    
@@ -32,7 +30,7 @@ class TimerThread(threading.Thread):
         self.mutex.acquire()
         try:
             self.timers.append(t)
-            self.timers.sort(timer_sort)
+            self.timers.sort()
             i = self.timers.index(t)
         finally:
             self.mutex.release()
@@ -79,10 +77,10 @@ class TimerThread(threading.Thread):
 
             self.event.clear()
 
-def _test(id):
-    print 'timer', id, 'fired'
-
 if __name__ == '__main__':
+
+    def _test(id):
+        print 'timer', id, 'fired'
 
     print 'expect 3 timers firing with 1 sec delay between them...'
     timer = TimerThread()
