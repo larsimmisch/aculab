@@ -19,10 +19,15 @@ from aculab.callcontrol import Call, CallDispatcher
 from aculab.speech import (SpeechChannel, SpeechDispatcher, Glue, PlayJob,
                            RecordJob)
 from aculab.busses import DefaultBus
+from aculab.timer import TimerThread
 
 smtp_server = 'mail.ibp.de'
 smtp_to = 'lars@ibp.de'
 smtp_from = 'am@ibp.de'
+
+# Modify this change the time the answering machine waits before accepting
+# the call
+WAIT_ACCEPT = 16.0
 
 # ripped from wave.py, which is just a teensy little bit too unflexible
 
@@ -99,12 +104,25 @@ class AnsweringMachine(Glue):
     def __init__(self, controller, module, call):
         super(self.__class__, self).__init__(controller, module, call)
 
+        # start a timer to accept the call later
+        self.timer = timer.add(WAIT_ACCEPT, self.on_timer)
+
+    def close(self):
+        super(self.__class__, self).close()
+        if self.timer:
+            timer.cancel(self.timer)
+
+    def on_timer(self):
+        self.timer = None
+        self.call.accept()
+
+    def start(self):
+        self.timer = None
         self.jobs = [PlayJob(self.speech, '4011_suonho_sweetchoff_iLLCommunications_suonho.al'),
                      PlayJob(self.speech, '42.al'),
                      PlayJob(self.speech, 'beep.al'),
                      RecordJob(self.speech, os.tmpfile(), max_silence=4000)]
 
-    def start(self):
         self.speech.start(self.jobs[0])
 
     def job_done(self, job, reason):
@@ -127,14 +145,12 @@ class IncomingCallController(object):
     def ev_incoming_call_det(self, call, user_data):
         log.debug('%s stream: %d timeslot: %d',
                   call.name, call.details.stream, call.details.ts)
-        
+
         # The Prosody module that was globally selected.
         # Proper applications that handle multiple modules 
         # can be more clever here
-        global module
         call.user_data = AnsweringMachine(self, module, call)
-        call.accept()
-
+        
     def ev_call_connected(self, call, user_data):        
         user_data.start()
         
@@ -172,14 +188,14 @@ def usage():
 
 if __name__ == '__main__':
 
-    log = aculab.defaultLogging(logging.DEBUG)
-
     card = 0
     port = 0
     module = 0
     controller = RepeatedIncomingCallController()
+    daemon = False
+    logfile = None
 
-    options, args = getopt.getopt(sys.argv[1:], 'p:sm:')
+    options, args = getopt.getopt(sys.argv[1:], 'p:sm:d')
 
     for o, a in options:
         if o == '-c':
@@ -190,10 +206,20 @@ if __name__ == '__main__':
             module = int(a)
         elif o == '-s':
             DefaultBus = SCBus()
+        elif o == '-d':
+            daemon = True
+            logfile = '/var/log/am.log'
         else:
             usage()
 
+    log = aculab.defaultLogging(logging.DEBUG, logfile)
+
     call = Call(controller, card=card, port=port)
 
+    aculab.daemonize(pidfile='var/run/am.pid')
+
+    timer = TimerThread()
+    timer.start()
     SpeechDispatcher.start()
     CallDispatcher.run()
+
