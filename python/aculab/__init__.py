@@ -7,7 +7,7 @@ __all__ = ['_lowlevel', 'lowlevel', 'names', 'error',
 # From: http://aspn.activestate.com/ASPN/Cookbook/Python/Recipe/66012
 
 def daemonize(stdout='/dev/null', stderr=None, stdin='/dev/null',
-              pidfile=None, startmsg = 'started with pid %s' ):
+              pidfile=None):
     '''
         This forks the current process into a daemon.
         The stdin, stdout, and stderr arguments are file names that
@@ -50,8 +50,6 @@ def daemonize(stdout='/dev/null', stderr=None, stdin='/dev/null',
     so = file(stdout, 'a+')
     se = file(stderr, 'a+', 0)
     pid = str(os.getpid())
-    sys.stderr.write("%s\n" % startmsg % pid)
-    sys.stderr.flush()
     if pidfile:
         f = file(pidfile,'w+')
         f.write("%s\n" % pid)
