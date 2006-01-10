@@ -22,12 +22,17 @@ from aculab.busses import DefaultBus
 from aculab.timer import TimerThread
 
 smtp_server = 'mail.ibp.de'
-smtp_to = 'lars@ibp.de'
+smtp_to = ['lars@ibp.de']
 smtp_from = 'am@ibp.de'
 
-# Modify this change the time the answering machine waits before accepting
+root = '/usr/local/aculab/python'
+
+# Modify this to change the time the answering machine waits before accepting
 # the call
-WAIT_ACCEPT = 16.0
+wait_accept = 20.0
+
+# Accept calls only to these numbers
+accept_called = ['41', '42']
 
 # ripped from wave.py, which is just a teensy little bit too unflexible
 
@@ -64,7 +69,7 @@ class AsyncEmail(threading.Thread):
 
             msg['Date'] = email.Utils.formatdate()
             msg['From'] = smtp_from
-            msg['To'] = smtp_to
+            msg['To'] = ', '.join(smtp_to)
             # this is not normally visible
             msg.preamble = 'This is a message in MIME format.\r\n'
             # Guarantees the message ends in a newline
@@ -105,7 +110,7 @@ class AnsweringMachine(Glue):
         super(self.__class__, self).__init__(controller, module, call)
 
         # start a timer to accept the call later
-        self.timer = timer.add(WAIT_ACCEPT, self.on_timer)
+        self.timer = timer.add(wait_accept, self.on_timer)
 
     def close(self):
         super(self.__class__, self).close()
@@ -118,9 +123,18 @@ class AnsweringMachine(Glue):
 
     def start(self):
         self.timer = None
-        self.jobs = [PlayJob(self.speech, '4011_suonho_sweetchoff_iLLCommunications_suonho.al'),
-                     PlayJob(self.speech, '42.al'),
-                     PlayJob(self.speech, 'beep.al'),
+        f = os.path.join(root, '%s.al' % self.call.details.destination_addr)
+        if os.path.exists(f):
+            announce = PlayJob(self.speech, f),
+        else:
+            announce = PlayJob(self.speech, os.path.join(root, 'default.al'))
+            
+        self.jobs = [PlayJob(self.speech,
+                             os.path.join(root,
+                                          '4011_suonho_sweetchoff_' \
+                                          'iLLCommunications_suonho.al')),
+                     announce,
+                     PlayJob(self.speech, os.path.join(root, 'beep.al')),
                      RecordJob(self.speech, os.tmpfile(), max_silence=4000)]
 
         self.speech.start(self.jobs[0])
@@ -143,13 +157,14 @@ class AnsweringMachine(Glue):
 class IncomingCallController(object):
 
     def ev_incoming_call_det(self, call, user_data):
-        log.debug('%s stream: %d timeslot: %d',
-                  call.name, call.details.stream, call.details.ts)
+        log.debug('%s called: %s calling: %s stream: %d timeslot: %d',
+                  call.name, call.details.destination_addr,
+                  call.details.originating_addr,
+                  call.details.stream, call.details.ts)
 
-        # The Prosody module that was globally selected.
-        # Proper applications that handle multiple modules 
-        # can be more clever here
-        call.user_data = AnsweringMachine(self, module, call)
+        if call.details.destination_addr in accept_called:
+            call.incoming_ringing()
+            call.user_data = AnsweringMachine(self, module, call)
         
     def ev_call_connected(self, call, user_data):        
         user_data.start()
@@ -158,7 +173,8 @@ class IncomingCallController(object):
         user_data.speech.stop()
 
     def ev_idle(self, call, user_data):
-        user_data.close()
+        if user_data:
+            user_data.close()
         call.user_data = None
 
     def play_done(self, channel, f, reason, position, user_data):
@@ -216,7 +232,8 @@ if __name__ == '__main__':
 
     call = Call(controller, card=card, port=port)
 
-    aculab.daemonize(pidfile='var/run/am.pid')
+    if daemon:
+        aculab.daemonize(pidfile='var/run/am.pid')
 
     timer = TimerThread()
     timer.start()
