@@ -3,14 +3,21 @@ find_init := $(strip $(wildcard /sbin/init) \
 	                     $(wildcard /usr/sbin/init) \
 	 	                 $(wildcard /hurd/auth))
 
-# include the appropriate sub-makefile
+# check for signs of Aculab v6
+find_v6 := $(strip $(wildcard $(ACULAB_ROOT)/include/cl_lib.h))
+
+# include the appropriate definitions
 ifeq ($(find_init),)
   include win32.mk
 else
-  include unix_v5.mk
+  ifneq ($(find_v6),)
+    include unix.mk
+  else
+    include unix_v5.mk
+  endif
 endif # test is_unix
 
-all: aculab/_lowlevel$(SO) aculab/lowlevel.py # info
+all: aculab/_lowlevel$(SO) aculab/lowlevel.py
 
 aculab/_lowlevel$(SO): $(OBJS)
 	$(CC) $(LDFLAGS) -o $@ $(OBJS) $(PYTHON_LIBDIR) $(PYTHON_LIBS) \
@@ -21,9 +28,9 @@ lowlevel_wrap.c aculab/lowlevel.py: lowlevel.i
 	mv lowlevel.py aculab
 
 %$(O): %.c
-	$(CC) -c $(C_DEFINES) $(ACULAB_INCLUDE) $(PYTHON_INCLUDE) $< -o $@ 
+	$(CC) -c -g $(C_DEFINES) $(ACULAB_INCLUDE) $(PYTHON_INCLUDE) $< -o $@ 
 
-ifdef $(TiNG_USE_V6)
+ifneq ($(find_v6),)
 cl_lib.h2: $(DTK)/include/cl_lib.h cl_lib.patch
 	patch -o $@ $(DTK)/include/cl_lib.h cl_lib.patch
 
