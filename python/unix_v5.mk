@@ -2,7 +2,7 @@ O := .o
 A := .a
 SO := .so
 
-DTK := ../dtk111
+DTK := $(ACULAB_ROOT)
 
 CC := gcc
 
