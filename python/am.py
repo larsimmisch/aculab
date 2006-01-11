@@ -22,7 +22,7 @@ from aculab.busses import DefaultBus
 from aculab.timer import TimerThread
 
 smtp_server = 'mail.ibp.de'
-smtp_to = ['lars@ibp.de']
+smtp_to = ['lars@ibp.de', 'claudia@ibp.de']
 smtp_from = 'am@ibp.de'
 
 root = '/usr/local/aculab/python'
