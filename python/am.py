@@ -166,7 +166,6 @@ class AnsweringMachine(Glue):
                              self.call.details.originating_addr,
                              job.duration - job.max_silence)
                 self.call.disconnect()                    
-                self.call.disconnect()
         
 class IncomingCallController(object):
 
