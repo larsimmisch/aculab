@@ -125,7 +125,7 @@ class AnsweringMachine(Glue):
         self.timer = None
         f = os.path.join(root, '%s.al' % self.call.details.destination_addr)
         if os.path.exists(f):
-            announce = PlayJob(self.speech, f),
+            announce = PlayJob(self.speech, f)
         else:
             announce = PlayJob(self.speech, os.path.join(root, 'default.al'))
             
@@ -135,7 +135,7 @@ class AnsweringMachine(Glue):
                                           'iLLCommunications_suonho.al')),
                      announce,
                      PlayJob(self.speech, os.path.join(root, 'beep.al')),
-                     RecordJob(self.speech, os.tmpfile(), max_silence=4000)]
+                     RecordJob(self.speech, os.tmpfile(), max_silence=4.0)]
 
         self.speech.start(self.jobs[0])
 
@@ -148,11 +148,25 @@ class AnsweringMachine(Glue):
             else:
                 self.call.disconnect()
         else:
+            log.debug('recording terminated: %s', reason)
             job.file.seek(0)
-            # job.file will be closed by AsyncEmail.run
-            # the call will be hungup from AsyncEmail.run, too
-            e = AsyncEmail(job.file, call)
-            e.start()
+            # only send recordings with more than a second of speech
+            if job.duration - job.max_silence > 1.0 and not test_run:
+                # job.file will be closed by AsyncEmail.run
+                # the call will be hungup from AsyncEmail.run, too
+                e = AsyncEmail(job.file, self.call)
+                e.start()
+            else:
+                if test_run:
+                    log.info('call from %s discarded - test run. speech: %.3f',
+                             self.call.details.originating_addr,
+                             job.duration - job.max_silence)
+                else:
+                    log.info('call from %s too short: %.3f',
+                             self.call.details.originating_addr,
+                             job.duration - job.max_silence)
+                self.call.disconnect()                    
+                self.call.disconnect()
         
 class IncomingCallController(object):
 
@@ -199,7 +213,7 @@ class RepeatedIncomingCallController(IncomingCallController):
         call.openin()
 
 def usage():
-    print 'usage: am.py [-c <card>] [-p <port>] [-m <module>]'
+    print 'usage: am.py [-c <card>] [-p <port>] [-m <module>] [-d] [-t]'
     sys.exit(-2)
 
 if __name__ == '__main__':
@@ -210,8 +224,9 @@ if __name__ == '__main__':
     controller = RepeatedIncomingCallController()
     daemon = False
     logfile = None
+    test_run = None
 
-    options, args = getopt.getopt(sys.argv[1:], 'p:sm:d')
+    options, args = getopt.getopt(sys.argv[1:], 'p:sm:dt')
 
     for o, a in options:
         if o == '-c':
@@ -225,6 +240,8 @@ if __name__ == '__main__':
         elif o == '-d':
             daemon = True
             logfile = '/var/log/am.log'
+        elif o == '-t':
+            test_run = True
         else:
             usage()
 
