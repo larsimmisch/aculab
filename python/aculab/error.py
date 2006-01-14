@@ -68,16 +68,32 @@ class AculabFAXError(AculabError):
 # See also StopIteration for precedent.
 
 class AculabStopped(Exception):
+    def __str__(self):
+        return self.__repr__()
+
     def __repr__(self):
         return 'stopped'
 
 class AculabClosed(Exception):
+    def __str__(self):
+        return self.__repr__()
+
     def __repr__(self):
         return 'closed'
 
 class AculabSilence(Exception):
+    def __init__(self, silence = None):
+        Exception.__init__(self)
+        self.silence = silence
+
+    def __str__(self):
+        return self.__repr__()
+
     def __repr__(self):
-        return 'silence'
+        if self.silence:
+            return 'silence(%.3fs)' % self.silence
+        else:
+            return 'silence'
 
 class AculabTimeout(Exception):
     def __repr__(self):

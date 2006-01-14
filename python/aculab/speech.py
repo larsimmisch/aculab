@@ -290,7 +290,7 @@ class PlayJob(object):
     def __init__(self, channel, f, agc = 0,
                  speed = 0, volume = 0):
         self.channel = channel
-        self.position = 0
+        self.position = 0.0
         self.agc = agc
         self.speed = speed
         self.volume = volume
@@ -306,6 +306,8 @@ class PlayJob(object):
         self.file.seek(0, 2)
         self.buffer = lowlevel.SM_TS_DATA_PARMS()
         self.length = self.file.tell()
+        # Assumption: alaw or mulaw
+        self.duration = self.length / 8000.0
         self.file.seek(0, 0)
         
     def start(self):
@@ -323,9 +325,9 @@ class PlayJob(object):
         if rc:
             raise AculabSpeechError(rc, 'sm_replay_start')
 
-        log.debug('%s play(%s, agc=%d, speed=%d, volume=%d, length=%d)',
+        log.debug('%s play(%s, agc=%d, speed=%d, volume=%d, duration=%.3f)',
                   self.channel.name, str(self.file), self.agc,
-                  self.speed, self.volume, self.length)
+                  self.speed, self.volume, self.duration)
 
         # On very short samples, we might be done after fill_play_buffer
         if not self.fill_play_buffer():
@@ -350,6 +352,9 @@ class PlayJob(object):
         else:
             pos = self.length
 
+        # Assumption: alaw or mulaw
+        self.duration = pos / 8000.0
+
         f = self.file
 
         if hasattr(self, 'filename'):
@@ -358,10 +363,10 @@ class PlayJob(object):
             f = self.filename
 
         # no locks held - maybe too cautious
-        log.debug('%s play_done(reason=\'%s\', pos=%d)',
-                  self.channel.name, repr(reason), pos)
+        log.debug('%s play_done(reason=\'%s\', duration=%.3f)',
+                  self.channel.name, reason, self.duration)
 
-        self.channel.job_done(self, 'play_done', reason, pos, f)
+        self.channel.job_done(self, 'play_done', reason, self.duration, f)
 
     def fill_play_buffer(self):
         '''Return True if completed'''
@@ -398,15 +403,17 @@ class PlayJob(object):
         rc = lowlevel.sm_replay_abort(stop)
         if rc:
             raise AculabSpeechError(rc, 'sm_replay_abort')
-        
-        self.position = stop.offset
+
+        # position is in seconds
+        # Assumption: alaw/mulaw
+        self.position = stop.offset / 8000.0
 
         log.debug('%s play_stop()', self.channel.name)
 
 class RecordJob(object):
     
     def __init__(self, channel, f, max_octets = 0,
-                 max_elapsed_time = 0, max_silence = 0, elimination = 0,
+                 max_elapsed_time = 0.0, max_silence = 0.0, elimination = 0,
                  agc = 0, volume = 0):
 
         self.channel = channel
@@ -419,13 +426,12 @@ class RecordJob(object):
 
         self.data = lowlevel.SM_TS_DATA_PARMS()
         # tell buffer to use our Python-buffer to store data
-        # it's dangerous and looks awkward, but it avoids a copy
-        # of the data
+        # it avoids a copy of the data
         self.buffer = lowlevel.buffer_alloc(
             lowlevel.kSMMaxRecordDataBufferSize)
         self.data.usebuffer(self.buffer)
-        # size in bytes
-        self.size = 0
+        # size in seconds
+        self.duration = 0.0
         self.max_octets = max_octets
         self.max_elapsed_time = max_elapsed_time
         self.max_silence = max_silence
@@ -442,8 +448,8 @@ class RecordJob(object):
         record.type = lowlevel.kSMDataFormatALawPCM
         record.sampling_rate = 8000
         record.max_octets = self.max_octets
-        record.max_elapsed_time = self.max_elapsed_time
-        record.max_silence = self.max_silence
+        record.max_elapsed_time = int(self.max_elapsed_time * 1000)
+        record.max_silence = int(self.max_silence * 1000)
         record.elimination = self.elimination
         record.agc = self.agc
         record.volume = self.volume
@@ -452,8 +458,8 @@ class RecordJob(object):
         if rc:
             raise AculabSpeechError(rc, 'sm_record_start')
 
-        log.debug('%s record(%s, max_octets=%d, max_time=%d, max_silence=%d, '
-                  'elimination=%d, agc=%d, volume=%d)',
+        log.debug('%s record(%s, max_octets=%d, max_time=%.3f, '
+                  'max_silence=%.3f, elimination=%d, agc=%d, volume=%d)',
                   self.channel.name, str(self.file), self.max_octets,
                   self.max_elapsed_time, self.max_silence, self.elimination,
                   self.agc, self.volume)
@@ -474,10 +480,10 @@ class RecordJob(object):
             f = self.filename
         
         # no locks held - maybe too cautious
-        log.debug('%s record_done(reason=\'%s\', size=%d)',
-                  channel.name, repr(self.reason), self.size)
+        log.debug('%s record_done(reason=\'%s\', length=%.3fs)',
+                  channel.name, self.reason, self.duration)
 
-        channel.job_done(self, 'record_done', self.reason, self.size, f)
+        channel.job_done(self, 'record_done', self.reason, self.duration, f)
     
     def on_read(self):
         status = lowlevel.SM_RECORD_STATUS_PARMS()
@@ -494,6 +500,7 @@ class RecordJob(object):
             if status.status == lowlevel.kSMRecordStatusComplete:
                 if version[0] >= 2:
                     term = status.termination_reason
+                    silence = status.termination_octets
                     # Todo check
                     rc = status.param0
                 else:
@@ -505,7 +512,11 @@ class RecordJob(object):
                         raise AculabSpeechError(rc, 'sm_record_how_terminated')
 
                     term = how.termination_reason
+                    silence = how.termination_octets
                     rc = -1
+
+                # Assumption: alaw/mulaw
+                silence = silence / 8000.0
         
                 self.reason = None
                 if term == lowlevel.kSMRecordHowTerminatedLength:
@@ -513,7 +524,7 @@ class RecordJob(object):
                 elif term == lowlevel.kSMRecordHowTerminatedMaxTime:
                     self.reason = AculabTimeout()
                 elif term == lowlevel.kSMRecordHowTerminatedSilence:
-                    self.reason = AculabSilence()
+                    self.reason = AculabSilence(silence)
                 elif term == lowlevel.kSMRecordHowTerminatedAborted:
                     self.reason = AculabStopped()
                 elif term == lowlevel.kSMRecordHowTerminatedError:
@@ -538,7 +549,8 @@ class RecordJob(object):
                     self.done()
 
                 l = data.length
-                self.size += l
+                # Assumption: alaw/mulaw
+                self.duration += l / 8000.0
                 
                 self.file.write(self.buffer[:l])
 
@@ -605,7 +617,7 @@ class DigitsJob(object):
             channel.dispatcher.remove(channel.event_write)
 
             log.debug('%s digits_done(reason=\'%s\')',
-                      channel.name, repr(reason))
+                      channel.name, reason)
 
             channel.job_done(self, 'digits_done', reason)
                 
@@ -623,13 +635,15 @@ class DigitsJob(object):
         reason = None
         if self.position:
             reason = AculabStopped()
-            pos = self.position
+            # Assumption: alaw or mulaw
+            pos = self.position / 8000.0
         else:
-            pos = self.length
+            # Assumption: alaw or mulaw
+            pos = self.length / 8000.0
 
         # no locks held - maybe too cautious
-        log.debug('%s digits_done(reason=\'%s\', pos=%d)',
-                  channel.name, repr(reason), pos)
+        log.debug('%s digits_done(reason=\'%s\', pos=%.3f)',
+                  channel.name, reason, pos)
 
         channel.job_done(self, 'digits_done', reason, pos)
 
@@ -1110,7 +1124,7 @@ class SpeechChannel(object):
         self.start(job)
 
     def record(self, file, max_octets = 0,
-               max_elapsed_time = 0, max_silence = 0, elimination = 0,
+               max_elapsed_time = 0.0, max_silence = 0.0, elimination = 0,
                agc = 0, volume = 0):
         """Record an alaw file asynchronously.
         
