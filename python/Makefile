@@ -21,14 +21,14 @@ all: aculab/_lowlevel$(SO) aculab/lowlevel.py
 
 aculab/_lowlevel$(SO): $(OBJS)
 	$(CC) $(LDFLAGS) -o $@ $(OBJS) $(PYTHON_LIBDIR) $(PYTHON_LIBS) \
-		$(ACULAB_LIBDIR) $(ACULAB_LIBS) $(POST_LDFLAGS)
+		$(EXTRA_OBJS) $(ACULAB_LIBDIR) $(ACULAB_LIBS) $(POST_LDFLAGS)
 
 lowlevel_wrap.c aculab/lowlevel.py: lowlevel.i
 	$(SWIG) $(DEFINES) -modern -new_repr -python $(ACULAB_INCLUDE) $<
 	mv lowlevel.py aculab
 
 %$(O): %.c
-	$(CC) -c -g $(C_DEFINES) $(ACULAB_INCLUDE) $(PYTHON_INCLUDE) $< -o $@ 
+	$(CC) -c $(C_DEFINES) $(ACULAB_INCLUDE) $(PYTHON_INCLUDE) $< -o $@ 
 
 ifneq ($(find_v6),)
 cl_lib.h2: $(DTK)/include/cl_lib.h cl_lib.patch
