@@ -8,7 +8,7 @@ from email.MIMEBase import MIMEBase
 from email.MIMEText import MIMEText
 from email.MIMEAudio import MIMEAudio
 from wav import *
-from vcard import vcard_find, vcard_str, tel_normalize
+from vcard import vcard_find, vcard_str, tel_normalize, tel_type
 
 smtp_server = 'mail.ibp.de'
 smtp_to = ['lars@ibp.de', 'claudia@ibp.de']

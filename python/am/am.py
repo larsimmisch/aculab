@@ -90,11 +90,11 @@ class AnsweringMachine(Glue):
 class IncomingCallController(object):
 
     def ev_incoming_call_det(self, call, user_data):
-        log.debug('%s called: %s calling: %s stream: %d timeslot: %d',
-                  call.name, call.details.destination_addr,
-                  call.details.originating_addr,
-                  call.details.stream, call.details.ts)
-
+        log.info('%s called: %s calling: %s stream: %d timeslot: %d',
+                 call.name, call.details.destination_addr,
+                 call.details.originating_addr,
+                 call.details.stream, call.details.ts)
+        
         if call.details.destination_addr in accept_called:
             call.incoming_ringing()
             call.user_data = AnsweringMachine(self, module, call)
@@ -145,6 +145,7 @@ if __name__ == '__main__':
     daemon = False
     logfile = None
     test_run = None
+    loglevel = logging.DEBUG
 
     options, args = getopt.getopt(sys.argv[1:], 'p:sm:dt')
 
@@ -159,18 +160,21 @@ if __name__ == '__main__':
             DefaultBus = SCBus()
         elif o == '-d':
             daemon = True
+            loglevel = logging.INFO
             logfile = '/var/log/am.log'
         elif o == '-t':
             test_run = True
         else:
             usage()
 
-    log = aculab.defaultLogging(logging.DEBUG, logfile)
+    log = aculab.defaultLogging(loglevel, logfile)
 
     call = Call(controller, card=card, port=port)
 
     if daemon:
         aculab.daemonize(pidfile='var/run/am.pid')
+
+    log.info('answering machine starting')
 
     timer = TimerThread()
     timer.start()
