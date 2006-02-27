@@ -66,13 +66,39 @@ swig_opts = ['-modern', '-new_repr'] + \
             ['-I%s' % i for i in include_dirs]
 
 from distutils.core import setup,Extension
+from distutils.command.build_ext import build_ext
+from distutils import log
+import shutil
+
+class build_ext_swig_in_package(build_ext):
+    def swig_sources(self, sources, extension):
+        """swig these days generates a shadow module, but distutils doesn't
+        know about it.
+
+        This (rather crude) build_ext subclass copies the shadow python
+        module into their package, assuming standard package layout.
+        
+        It doesn't support more than one .i file per extension.
+        """
+        build_ext.swig_sources(self, sources, extension)
+        package_parts = extension.name.split('.')
+        module = package_parts.pop()
+        if module[0] != '_':
+            log.warn('SWIG extensions must start with an underscore')
+            return
+        # strip underscore
+        module = module[1:]
+        if package_parts:
+            log.debug("cp %s %s", module +'.py', os.path.join(*package_parts))
+            shutil.copy(module +'.py', os.path.join(*package_parts))
 
 setup (name = "aculab",
 	   version = version,
 	   description = "Aculab Python wrapper",
 	   author = "Lars Immisch",
 	   author_email = "lars@ibp.de",
-	   ext_modules = [Extension("aculab._lowlevel", sources,
+       cmdclass = { 'build_ext_swig_in_package' : build_ext_swig_in_package },
+       ext_modules = [Extension("aculab._lowlevel", sources,
                                 include_dirs = include_dirs,
                                 library_dirs = lib_dirs,
                                 libraries = libs,
