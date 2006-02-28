@@ -350,7 +350,9 @@ class CallHandle:
 
         rc = lowlevel.sw_set_output(self.switch, output)
         if rc:
-            raise AculabError(rc, 'sw_set_output', self.handle)
+            raise AculabError(rc, 'sw_set_output(%d:%d := %d:%d)' %
+                              (output.ost, output.ots, source[0], source[1]),
+                              self.handle)
 
         log_switch.debug('%s %d:%d := %d:%d', self.name,
                          output.ost, output.ots,
@@ -374,7 +376,9 @@ class CallHandle:
 
         rc = lowlevel.sw_set_output(self.switch, output)
         if rc:
-            raise AculabError(rc, 'sw_set_output', self.handle)
+            raise AculabError(rc, 'sw_set_output(%d:%d := %d:%d)' %
+                              (sink[0], sink[1], output.ist, output.its),
+                              self.handle)
 
         log_switch.debug('%s %d:%d := %d:%d', self.name,
                          output.ost, output.ots,

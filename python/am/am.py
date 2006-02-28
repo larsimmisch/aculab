@@ -174,9 +174,12 @@ if __name__ == '__main__':
     if daemon:
         aculab.daemonize(pidfile='var/run/am.pid')
 
-    log.info('answering machine starting')
+    try:
+        log.info('answering machine starting')
 
-    timer = TimerThread()
-    timer.start()
-    SpeechDispatcher.start()
-    CallDispatcher.run()
+        timer = TimerThread()
+        timer.start()
+        SpeechDispatcher.start()
+        CallDispatcher.run()
+    except:
+        log.error('answering machine exception', exc_info=1)

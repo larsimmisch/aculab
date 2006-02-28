@@ -141,21 +141,21 @@ BLOCKING(smfax_tx_page)
 %apply char[ANY] { ACU_UCHAR[ANY] };
 
 #ifdef WIN32
-%typemap(python,in) tSMEventId {
+%typemap(in) tSMEventId {
 	$1 = (tSMEventId)PyInt_AsLong($input);
 }
 
-%typemap(python,in,numinputs=0) tSMEventId * ($basetype temp) {
+%typemap(in,numinputs=0) tSMEventId * ($basetype temp) {
 	$1 = ($basetype*)&temp;
 }
 
-%typemap(python,argout) tSMEventId * {
+%typemap(argout) tSMEventId * {
 	$result = add_result($result, PyInt_FromLong((unsigned)*$1));
 }
 #endif
 
 /*
-%typemap(python,except) int {
+%typemap(except) int {
     $function
 
 	if ($1)
@@ -182,11 +182,11 @@ BLOCKING(smfax_tx_page)
 
 /* typemaps for BFILE** */
 
-%typemap(python,in,numinputs=0) BFILE** ($*1_type temp) {
+%typemap(in,numinputs=0) BFILE** ($*1_type temp) {
 	$1 = ($1_type)&temp;
 }
 
-%typemap(python,argout) BFILE** {
+%typemap(argout) BFILE** {
 	$result = add_result(
 		$result, SWIG_NewPointerObj(*$1, SWIGTYPE_p_BFILE, 1));
 }

@@ -80,7 +80,7 @@ class build_ext_swig_in_package(build_ext):
         
         It doesn't support more than one .i file per extension.
         """
-        build_ext.swig_sources(self, sources, extension)
+        sources = build_ext.swig_sources(self, sources, extension)
         package_parts = extension.name.split('.')
         module = package_parts.pop()
         if module[0] != '_':
@@ -89,21 +89,23 @@ class build_ext_swig_in_package(build_ext):
         # strip underscore
         module = module[1:]
         if package_parts:
-            log.debug("cp %s %s", module +'.py', os.path.join(*package_parts))
+            log.warn("cp %s %s", module +'.py', os.path.join(*package_parts))
             shutil.copy(module +'.py', os.path.join(*package_parts))
 
-setup (name = "aculab",
-	   version = version,
-	   description = "Aculab Python wrapper",
-	   author = "Lars Immisch",
-	   author_email = "lars@ibp.de",
-       cmdclass = { 'build_ext_swig_in_package' : build_ext_swig_in_package },
-       ext_modules = [Extension("aculab._lowlevel", sources,
-                                include_dirs = include_dirs,
-                                library_dirs = lib_dirs,
-                                libraries = libs,
-                                extra_objects = extra_objects,
-                                define_macros = define_macros,
-                                swig_opts = swig_opts)],
-       packages = ["aculab"])
+        return sources
+
+setup(name = "aculab",
+      version = version,
+      description = "Aculab Python wrapper",
+      author = "Lars Immisch",
+      author_email = "lars@ibp.de",
+      cmdclass = { 'build_ext' : build_ext_swig_in_package },
+      ext_modules = [Extension("aculab._lowlevel", sources,
+                               include_dirs = include_dirs,
+                               library_dirs = lib_dirs,
+                               libraries = libs,
+                               extra_objects = extra_objects,
+                               define_macros = define_macros,
+                               swig_opts = swig_opts)],
+      packages = ["aculab"])
 
