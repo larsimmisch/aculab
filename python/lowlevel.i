@@ -152,6 +152,19 @@ BLOCKING(smfax_tx_page)
 %typemap(argout) tSMEventId * {
 	$result = add_result($result, PyInt_FromLong((unsigned)*$1));
 }
+#else
+%typemap(in,numinputs=0) tSMEventId *OUTPUT ($basetype temp) {
+	$1 = ($basetype*)&temp;
+}
+
+%typemap(argout) tSMEventId *OUTPUT {
+	tSMEventId* x = (tSMEventId*)calloc(1, sizeof(tSMEventId));
+	memcpy(x, $1, sizeof(tSMEventId));
+	$result = add_result($result,
+						 SWIG_NewPointerObj((void*)x, 
+											SWIGTYPE_p_tSMEventId, 
+											SWIG_POINTER_OWN));
+}
 #endif
 
 /*
@@ -165,17 +178,15 @@ BLOCKING(smfax_tx_page)
   	}
 }
 */
-#ifdef SM_POLL_UNIX
+#ifdef XXX_SM_POLL_UNIX
 %extend tSMEventId {
-	int fileno() {
-		return self->fd;
+	~tSMEventId() {
+		if (self)
+			free(self);
 	}
 
-	PyObject *copy() {
-		tSMEventId *temp = (tSMEventId *)calloc(1, sizeof(tSMEventId));
-		memcpy(temp, self, sizeof(tSMEventId));
-    
-		return SWIG_NewPointerObj((void*)temp, SWIGTYPE_p_tSMEventId, 1);
+	int fileno() {
+		return self->fd;
 	}
 };
 #endif
@@ -188,7 +199,7 @@ BLOCKING(smfax_tx_page)
 
 %typemap(argout) BFILE** {
 	$result = add_result(
-		$result, SWIG_NewPointerObj(*$1, SWIGTYPE_p_BFILE, 1));
+		$result, SWIG_NewPointerObj(*$1, SWIGTYPE_p_BFILE, SWIG_POINTER_OWN));
 }
 
 #ifdef TiNG_USE_V6
@@ -211,7 +222,7 @@ BLOCKING(smfax_tx_page)
 %include "smdrvr.h"
 #ifndef HAVE_TiNG
 %include "smport.h"
-%include "smosintf.h"
+%include "smosintf.h2"
 #endif
 %include "smbesp.h"
 %include "smfwcaps.h"

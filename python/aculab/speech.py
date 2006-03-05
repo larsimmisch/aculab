@@ -208,7 +208,7 @@ class PollSpeechEventDispatcher(threading.Thread):
         
     def add(self, handle, method):
         "blocks until handle is added by dispatcher thread"
-        h = handle.fileno()
+        h = handle.fd
         if threading.currentThread() == self or not self.isAlive():
             # print 'self adding', h
             self.handles[h] = method
@@ -226,7 +226,7 @@ class PollSpeechEventDispatcher(threading.Thread):
 
     def remove(self, handle):
         "blocks until handle is removed by dispatcher thread"
-        h = handle.fileno()
+        h = handle.fd
         if threading.currentThread() == self or not self.isAlive():
             # print 'self removing', h
             del self.handles[h]
@@ -926,23 +926,16 @@ class SpeechChannel(object):
         """event has type SM_CHANNEL_SET_EVENT_PARMS and is modified in place
         The handle is returned"""
         
-        if os.name == 'nt':
-            rc, event.event = lowlevel.smd_ev_create(event.channel,
-                                                     event.event_type,
-                                                     event.issue_events)
-            if rc:
-                raise AculabSpeechError(rc, 'smd_ev_create')
-
-            return pywintypes.HANDLE(event.event)
-
-        rc = lowlevel.smd_ev_create(event.event,
-                                    event.channel,
-                                    event.event_type,
-                                    event.issue_events)
+        rc, ev = lowlevel.smd_ev_create(event.channel,
+                                        event.event_type,
+                                        event.issue_events)
         if rc:
             raise AculabSpeechError(rc, 'smd_ev_create')
 
-        return event.event.copy()
+        if os.name == 'nt':
+            return pywintypes.HANDLE(ev)
+        else:
+            return ev
 
     def set_event(self, type):
         event = lowlevel.SM_CHANNEL_SET_EVENT_PARMS()

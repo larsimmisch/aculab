@@ -1,0 +1,11 @@
+--- ../dtk111/speech/include/smosintf.h	2003-10-08 22:16:14.000000000 +0200
++++ smosintf.h2	2006-03-05 23:30:08.000000000 +0100
+@@ -55,7 +55,7 @@
+ #endif
+ 
+ ACUDLL int smd_ev_create( 
+-	tSMEventId*, 
++	tSMEventId *OUTPUT, 
+ 	tSMChannelId,
+ 	tSM_INT,
+ 	tSM_INT

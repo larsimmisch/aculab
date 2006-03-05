@@ -48,6 +48,9 @@ sized_struct.i: $(DTK)/include/cl_lib.h $(DTK)/include/sw_lib.h
 	swig $(DEFINES) $(DTK_INCLUDE) -xml -xmllite lowlevel.i
 	python sized_struct.py lowlevel_wrap.xml
 	rm lowlevel_wrap.xml
+else
+smosintf.h2: $(DTK)/speech/include/smosintf.h smosintf.patch
+	patch -o $@ $(DTK)/speech/include/smosintf.h smosintf.patch
 endif
 
 install:

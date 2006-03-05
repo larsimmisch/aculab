@@ -4,7 +4,7 @@ import sys
 sys.path.extend(['.', '..'])
 
 import codecs
-from vobject.vobject import readComponents
+from vobject.base import readComponents
 
 addresses = '/var/addresses/All.vcf'
 
@@ -45,12 +45,14 @@ def vcard_str(vc):
             return c.join(val) + n
         return val + n
 
+    print vc
+
     fn = getattr(vc, 'fn', None)
     adr = getattr(vc, 'adr', None)
     tel = getattr(vc, 'tel', None)
-    email = getattr(vc, 'email', None)
+    email = getattr(vc, 'email_list', None)
 
-    s = fn[0].value + '\n'
+    s = fn.value + '\n'
     if adr:
         a = adr[0].value
         s = s + join(a.extended, '\n')
@@ -77,7 +79,7 @@ def vcard_find(tel):
 
     tel = tel_normalize(tel)
     for vc in vcards:
-        t = getattr(vc, 'tel', None)
+        t = getattr(vc, 'tel_list', None)
         if t:
             for i in t:
                 if tel == tel_normalize(i.value):
