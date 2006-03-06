@@ -175,7 +175,8 @@ if __name__ == '__main__':
         aculab.daemonize(pidfile='var/run/am.pid')
 
     try:
-        log.info('answering machine starting')
+        log.info('answering machine starting (bus: %s)',
+                 DefaultBus.__class__.__name__)
 
         timer = TimerThread()
         timer.start()
