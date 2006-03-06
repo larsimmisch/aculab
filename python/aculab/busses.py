@@ -151,7 +151,7 @@ class H100(CTBus):
             for ts in range(128):
                 self.slots.append((st, ts))
 
-def _autodetect():
+def autodetect():
     """Autodetects running (i.e. supported and clocked) busses and returns
     a CTBus subclass.
 
@@ -198,6 +198,10 @@ def _autodetect():
         return MVIP()
     
     return None    
-    
-DefaultBus = H100() # _autodetect()
+
+try:
+    DefaultBus = autodetect()
+except:
+    DefaultBus = None
+
         
