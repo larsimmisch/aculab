@@ -16,8 +16,6 @@ from aculab.busses import DefaultBus
 from aculab.timer import TimerThread
 from mail import AsyncEmail
 
-root = '/usr/local/aculab/python/am'
-
 # Modify this to change the time the answering machine waits before accepting
 # the call
 wait_accept = 20.0
@@ -147,22 +145,23 @@ if __name__ == '__main__':
     logfile = None
     test_run = None
     loglevel = logging.DEBUG
+    root = os.getcwd()
 
-    options, args = getopt.getopt(sys.argv[1:], 'p:sm:dt')
+    options, args = getopt.getopt(sys.argv[1:], 'c:dm:p:r:t')
 
     for o, a in options:
         if o == '-c':
             card = int(a)
-        if o == '-p':
-            port = int(a)
-        elif o == '-m':
-            module = int(a)
-        elif o == '-s':
-            DefaultBus = SCBus()
         elif o == '-d':
             daemon = True
             loglevel = logging.INFO
             logfile = '/var/log/am.log'
+        elif o == '-m':
+            module = int(a)
+        if o == '-p':
+            port = int(a)
+        elif o == '-r':
+            root = a
         elif o == '-t':
             test_run = True
         else:
