@@ -158,7 +158,7 @@ if __name__ == '__main__':
             logfile = '/var/log/am.log'
         elif o == '-m':
             module = int(a)
-        if o == '-p':
+        elif o == '-p':
             port = int(a)
         elif o == '-r':
             root = a
