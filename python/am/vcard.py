@@ -49,12 +49,12 @@ def vcard_str(vc):
 
     fn = getattr(vc, 'fn', None)
     adr = getattr(vc, 'adr', None)
-    tel = getattr(vc, 'tel', None)
+    tel = getattr(vc, 'tel_list', None)
     email = getattr(vc, 'email_list', None)
 
     s = fn.value + '\n'
     if adr:
-        a = adr[0].value
+        a = adr.value
         s = s + join(a.extended, '\n')
         s = s + join(a.street, '\n')
         if a.code or a.city:
