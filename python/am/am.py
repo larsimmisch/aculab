@@ -103,7 +103,8 @@ class IncomingCallController(object):
         user_data.start()
         
     def ev_remote_disconnect(self, call, user_data):
-        user_data.speech.stop()
+        if user_data:
+            user_data.speech.stop()
 
     def ev_idle(self, call, user_data):
         if user_data:
@@ -176,7 +177,7 @@ if __name__ == '__main__':
 
     try:
         log.info('answering machine starting (bus: %s)',
-                 DefaultBus.__class__.__name__)
+                 DefaultBus().__class__.__name__)
 
         timer = TimerThread()
         timer.start()

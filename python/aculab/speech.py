@@ -1046,7 +1046,7 @@ class SpeechChannel(object):
 
         return CTBusConnection(card, sink)
 
-    def connect(self, other, bus = DefaultBus):
+    def connect(self, other, bus = DefaultBus()):
         """Connect to another SpeechChannel or a CallHandle.
 
         Keep the returned reference until the connection should be broken."""

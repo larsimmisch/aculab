@@ -386,7 +386,7 @@ class CallHandle:
 
         return CTBusConnection(self.switch, sink)
 
-    def connect(self, other, bus = DefaultBus):
+    def connect(self, other, bus = DefaultBus()):
         c = Connection(bus)
         if isinstance(other, CallHandle):
             # other is a CallHandle (or subclass)

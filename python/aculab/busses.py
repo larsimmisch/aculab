@@ -151,34 +151,42 @@ class H100(CTBus):
             for ts in range(128):
                 self.slots.append((st, ts))
 
-def autodetect():
-    """Autodetects running (i.e. supported and clocked) busses and returns
-    a CTBus subclass.
+_DefaultBus = None
 
-    If multiple busses are supported, CTBus subclasses are returned in the
-    order:
+def DefaultBus():
+    """Returns the same instance of a CTbus subclass upon every call
+    (singleton).
+
+    Unless a particular bus type can be deduced, the order of preference is:
 
     - H100
     - SCBus
     - MVIP"""
 
-    n = lowlevel.sw_get_drvrs()
+    if _DefaultBus:
+        return _DefaultBus
 
-    buses = 0
+    if lowlevel.cc_version == 5:
+        sw = range(lowlevel.sw_get_drvrs())
+    else:
+        from snapshot import Snapshot
+        sw = [s.open.card_id for s in Snapshot().switch]
+        
+    busses = 0
     
     # first, determine which busses are available on all cards
-    for i in range(n):
+    for s in sw:
         mode = lowlevel.SWMODE_PARMS()
-        rc = lowlevel.sw_mode_switch(i, mode)
+        rc = lowlevel.sw_mode_switch(s, mode)
         if rc:
             raise AculabError(rc, 'sw_mode_switch')
 
-        buses |= mode.ct_buses
+        busses |= mode.ct_buses
 
     # check if any card is sourced from MVIP or SCBus or drives SCBus
-    for i in range(n):
+    for s in sw:
         clock = lowlevel.QUERY_CLKMODE_PARMS()
-        rc = lowlevel.sw_query_clock_control(i, clock)
+        rc = lowlevel.sw_query_clock_control(s, clock)
         if rc:
             raise AculabError(rc, 'sw_query_clock_control')
 
@@ -188,20 +196,16 @@ def autodetect():
                  clock.last_clock_mode == lowlevel.CLOCK_REF_SCBUS:
             return SCBus()
 
-    if buses & (1 << lowlevel.SWMODE_CTBUS_H100):
+    if busses & (1 << lowlevel.SWMODE_CTBUS_H100):
         return H100()
 
-    if buses & (1 << lowlevel.SWMODE_CTBUS_SCBUS):
+    if busses & (1 << lowlevel.SWMODE_CTBUS_SCBUS):
         return SCBus()
 
-    if buses & (1 << lowlevel.SWMODE_CTBUS_MVIP):
+    if busses & (1 << lowlevel.SWMODE_CTBUS_MVIP):
         return MVIP()
     
     return None    
 
-try:
-    DefaultBus = autodetect()
-except:
-    DefaultBus = None
-
-        
+if __name__ == '__main__':
+    print DefaultBus()
