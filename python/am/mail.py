@@ -8,7 +8,6 @@ from email.MIMEBase import MIMEBase
 from email.MIMEText import MIMEText
 from email.MIMEAudio import MIMEAudio
 from wav import *
-from vcard import vcard_find, vcard_str, tel_normalize, tel_type
 
 smtp_server = 'mail.ibp.de'
 smtp_to = ['lars@ibp.de', 'claudia@ibp.de']
@@ -31,19 +30,25 @@ class AsyncEmail(threading.Thread):
             
             cli = self.call.details.originating_addr
             if cli:
-                vc = vcard_find(cli)
-                if vc:
-                    suffix = '(%s)' % cli
-                    for t in vc.tel:
-                        if tel_normalize(cli) == tel_normalize(t.value):
-                            suffix = '(%s: %s)' % (tel_type(t.params['TYPE']),
-                                                   cli)
+                try:
+                    from vcard import (vcard_find, vcard_str, tel_normalize,
+                                       tel_type)
+
+                    vc = vcard_find(cli)
+                    if vc:
+                        suffix = '(%s)' % cli
+                        for t in vc.tel:
+                            if tel_normalize(cli) == tel_normalize(t.value):
+                                suffix = '(%s: %s)' % (tel_type(t.params['TYPE']),
+                                                       cli)
                     
-                    subject = 'Answering machine message from %s %s' \
-                              % (vc.fn[0].value, suffix)
-                    txt = vcard_str(vc)
-                else:
-                    subject = 'Answering machine message from %s' % cli
+                        subject = 'Answering machine message from %s %s' \
+                                  % (vc.fn[0].value, suffix)
+                        txt = vcard_str(vc)
+                    else:
+                        subject = 'Answering machine message from %s' % cli
+                except ImportError:
+                    pass
             
             msg = MIMEBase('multipart', 'mixed')
             msg['Subject'] = subject
