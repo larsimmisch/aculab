@@ -69,13 +69,14 @@ if __name__ == '__main__':
     port = 0
     card = 0
     numcalls = 1
+    uui = False
     timeslot = None
 
     log = aculab.defaultLogging(logging.DEBUG)
 
     controller = OutgoingCallController()
 
-    options, args = getopt.getopt(sys.argv[1:], 'c:p:rt:n:')
+    options, args = getopt.getopt(sys.argv[1:], 'c:p:rt:n:uo:')
 
     for o, a in options:
         if o == '-p':
@@ -88,36 +89,41 @@ if __name__ == '__main__':
             timeslot = int(a)
         elif o == '-n':
             numcalls = int(a)
+        elif o == '-u':
+            uui = True
+        elif o == '-o':
+            OAD = a
         else:
             usage()
 
     if not len(args):
         usage()
 
-    fd = lowlevel.FEATURE_UNION()
-
-    fd.uui.command = lowlevel.UU_DATA_CMD
-    fd.uui.request = lowlevel.UUS_1_IMPLICITLY_PREFERRED
-    fd.uui.control = lowlevel.CONTROL_NEXT_CC_MESSAGE
-    fd.uui.protocol = lowlevel.UUI_PROTOCOL_USER_SPECIFIC
-    fd.uui.setdata('Hallo Hauke, dies ist ein langer und entsetzliche langweiliger Text, den ich nur zum Testen von UUI benutze')
-
+                
 ##     fd.raw_data.length = 6
 ##     fd.raw_data.data = struct.pack('BBBBBB',
 ##                                    2, # See Appendix M, Aculab Call Control
 ##                                    0x9f, 0x01, 0x02, 0x0a, 0x0b)
 
-    unique = lowlevel.UNIQUEXU()
-    unique.sig_q931.hilayer.ie = '\x02\x11\x01'
+##    unique = lowlevel.UNIQUEXU()
+##    unique.sig_q931.hilayer.ie = '\x02\x11\x01'
     
     for i in range(numcalls):
         c = Call(controller,  port=port, timeslot=timeslot)
         c.user_data = CallData(args[0])
-##        c.openout(args[0], True, OAD)
-        c.openout(args[0], 1, OAD,
-                  unique = unique,
-                  feature = lowlevel.FEATURE_USER_USER,
-                  feature_data = fd)
+        if not uui:
+            c.openout(args[0], True, OAD)
+        else:
+            fd = lowlevel.FEATURE_UNION()
+            fd.uui.command = lowlevel.UU_DATA_CMD
+            fd.uui.request = lowlevel.UUS_1_IMPLICITLY_PREFERRED
+            fd.uui.control = lowlevel.CONTROL_NEXT_CC_MESSAGE
+            fd.uui.protocol = lowlevel.UUI_PROTOCOL_USER_SPECIFIC
+            fd.uui.setdata('Hallo Hauke, dies ist ein langer und entsetzliche langweiliger Text, den ich nur zum Testen von UUI benutze')
+            
+            c.openout(args[0], 1, OAD,
+                      feature = lowlevel.FEATURE_USER_USER,
+                      feature_data = fd)
 
 ##         fd.raw_data.length = 6
 ##         fd.raw_data.data = struct.pack('BBBBBB',
