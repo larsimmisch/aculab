@@ -37,7 +37,7 @@ class AsyncEmail(threading.Thread):
                     vc = vcard_find(cli)
                     if vc:
                         suffix = '(%s)' % cli
-                        for t in vc.tel:
+                        for t in vc.tel_list:
                             if tel_normalize(cli) == tel_normalize(t.value):
                                 suffix = '(%s: %s)' % (tel_type(t.params['TYPE']),
                                                        cli)
