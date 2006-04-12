@@ -43,7 +43,7 @@ class AsyncEmail(threading.Thread):
                                                        cli)
                     
                         subject = 'Answering machine message from %s %s' \
-                                  % (vc.fn[0].value, suffix)
+                                  % (vc.fn.value, suffix)
                         txt = vcard_str(vc)
                     else:
                         subject = 'Answering machine message from %s' % cli
