@@ -6,8 +6,10 @@
 #include "sw_lib.h"
 #include "smdrvr.h"
 #include "smbesp.h"
+#ifdef HAVE_FAX
 #include "smfaxapi.h"
 #include "actiff.h"
+#endif
 #include "smdc.h"
 #include "smdc_raw.h"
 #include "smdc_sync.h"
@@ -56,6 +58,7 @@ unsigned char bitrev[] = {
 // %include "typemaps.i"
 
 #ifdef TiNG_USE_V6
+#ifdef HAVE_FAX
 /* Fake an ACTIFF_PAGE_HANDLE (which is just a typedef for void - nasty!) */
 typedef struct {
 } ACTIFF_PAGE_HANDLE;
@@ -69,6 +72,7 @@ typedef struct {
 		if (self) free(self);
 	}
 }
+#endif
 #endif 
 
 %apply int { ACU_ERR, ACU_UINT, ACU_UCHAR, ACU_ULONG, ACU_INT, ACU_LONG, 
@@ -204,18 +208,20 @@ BLOCKING(smfax_tx_page)
 
 #ifdef TiNG_USE_V6
 %include "cl_lib.h2"
-%include "res_lib.h2"
+%include "res_lib.h"
 %include "sw_lib.h"
 %include "smdrvr.h"
 %include "smbesp.h"
+#ifdef HAVE_FAX
 %include "actiff.h"
+%include "smfaxapi.h"
+#endif
 %include "smdc.h"
 %include "smdc_raw.h"
 %include "smdc_sync.h"
 %include "smdc_hdlc.h"
-%include "bfile.h2"
+%include "bfile.h"
 %include "bfopen.h"
-%include "smfaxapi.h"
 #else
 %include "mvswdrvr.h"
 %include "mvcldrvr.h"

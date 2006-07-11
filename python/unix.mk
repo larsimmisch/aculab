@@ -32,9 +32,13 @@ LDFLAGS := -g -shared
 
 OBJS := lowlevel_wrap.o
 
+ifeq ($(HAVE_FAX),)
+EXTRA_OBJS = -Xlinker -R$(DTK)/lib -L$(DTK)/lib
+else
 EXTRA_OBJS = -Xlinker -R$(DTK)/lib -L$(DTK)/lib \
 			$(DTK)/$(FAX)/lib/actiff.o $(DTK)/$(FAX)/lib/faxlib.o \
 			$(DTK)/ting/libutil/gen-$(TiNGTYPE)_V6/aculog.o \
 			$(DTK)/ting/libutil/gen-$(TiNGTYPE)_V6/vseprintf.o \
 			$(DTK)/ting/libutil/gen-$(TiNGTYPE)_V6/bfile.o \
 			$(DTK)/ting/libutil/gen-$(TiNGTYPE)_V6/bfopen.o
+endif

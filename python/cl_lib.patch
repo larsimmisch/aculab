@@ -1,6 +1,6 @@
---- /usr/local/aculab/v6/include/cl_lib.h	2004-11-11 13:08:40.000000000 +0100
-+++ cl_lib.h2	2004-11-12 12:34:47.000000000 +0100
-@@ -16,17 +16,8 @@
+--- /usr/local/aculab/v6/include/cl_lib.h	2006-05-29 15:08:16.000000000 +0200
++++ cl_lib.h2	2006-07-11 13:32:01.000000000 +0200
+@@ -16,16 +16,10 @@
  
  #include "acu_type.h"
  
@@ -14,9 +14,10 @@
 -#else
 -# define ACU_PACK_DIRECTIVE __attribute__ ((packed))
 -#endif /* ACU_LINUX */
--	
-+#define ACU_PACK_DIRECTIVE
 +#define ACU_EXPORT
- 
- //EXPORT_TO_VB START
- 
++#define ACU_PACK_DIRECTIVE
++#define ACU_DEPRECATE_PRE
++#define ACU_DEPRECATE_POST
+ 	
+ enum
+ {

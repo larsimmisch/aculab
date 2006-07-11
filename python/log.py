@@ -7,13 +7,19 @@ from time import sleep
 
 if __name__ == '__main__':
 
-    card = 0
-    port = 0
+    card = 2
+    port = 2
 
     snapshot = Snapshot()
 
     port = snapshot.call[card].ports[port].open.port_id
 
+    l1 = al.L1_XSTATS()
+    l1.net = port
+    rc = al.call_l1_stats(l1)
+
+    print l1.get.clock
+    
     log = al.LOG_XPARMS()
 
     while True:
@@ -27,13 +33,17 @@ if __name__ == '__main__':
         timestamp = log.log.TimeStamp
         packet = log.log.Data_Packet
 
-        if packet and ord(packet[0]) > 5:
-            packet = packet[5:ord(packet[0])+5]
+        l = 0
+        if packet:
+            l = ord(packet[0])
+            print repr(packet[:5])
+        if  l > 5:
+            packet = packet[5:l+5]
         else:
             packet = None
 
         if packet:
-            print rxtx, timestamp, repr(packet)
+            print rxtx, timestamp, l, repr(packet)
         else:
             sleep(0.05)
 
