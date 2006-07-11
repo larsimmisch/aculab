@@ -18,17 +18,6 @@ endif # test is_unix
 
 all: aculab/_lowlevel$(SO) aculab/lowlevel.py
 
-aculab/_lowlevel$(SO): $(OBJS)
-	$(CC) $(LDFLAGS) -o $@ $(OBJS) $(PYTHON_LIBDIR) $(PYTHON_LIBS) \
-		$(EXTRA_OBJS) $(ACULAB_LIBDIR) $(ACULAB_LIBS) $(POST_LDFLAGS)
-
-lowlevel_wrap.c aculab/lowlevel.py: lowlevel.i
-	$(SWIG) $(DEFINES) -modern -new_repr -python $(ACULAB_INCLUDE) $<
-	mv lowlevel.py aculab
-
-%$(O): %.c
-	$(CC) -c $(C_DEFINES) $(ACULAB_INCLUDE) $(PYTHON_INCLUDE) $< -o $@ 
-
 ifneq ($(find_v6),)
 cl_lib.h2: $(DTK)/include/cl_lib.h cl_lib.patch
 	patch -o $@ $(DTK)/include/cl_lib.h cl_lib.patch
@@ -47,10 +36,26 @@ sized_struct.i: $(DTK)/include/cl_lib.h $(DTK)/include/sw_lib.h
 	swig $(DEFINES) $(DTK_INCLUDE) -xml -xmllite lowlevel.i
 	python sized_struct.py lowlevel_wrap.xml
 	rm lowlevel_wrap.xml
+
+lowlevel_wrap.c aculab/lowlevel.py: lowlevel.i cl_lib.h2
+	$(SWIG) $(DEFINES) -modern -new_repr -python $(ACULAB_INCLUDE) $<
+	mv lowlevel.py aculab
+
 else
 smosintf.h2: $(DTK)/speech/include/smosintf.h smosintf.patch
 	patch -o $@ $(DTK)/speech/include/smosintf.h smosintf.patch
+
+lowlevel_wrap.c aculab/lowlevel.py: lowlevel.i smosintf.h2
+	$(SWIG) $(DEFINES) -modern -new_repr -python $(ACULAB_INCLUDE) $<
+	mv lowlevel.py aculab
 endif
+
+aculab/_lowlevel$(SO): $(OBJS)
+	$(CC) $(LDFLAGS) -o $@ $(OBJS) $(PYTHON_LIBDIR) $(PYTHON_LIBS) \
+		$(EXTRA_OBJS) $(ACULAB_LIBDIR) $(ACULAB_LIBS) $(POST_LDFLAGS)
+
+%$(O): %.c
+	$(CC) -c $(C_DEFINES) $(ACULAB_INCLUDE) $(PYTHON_INCLUDE) $< -o $@ 
 
 # To generate a patch, (with the example cl_lib.h), copy a the original 
 # cl_lib.h to cl_lib.h2, edit it, and then do:
