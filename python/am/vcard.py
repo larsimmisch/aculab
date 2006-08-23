@@ -45,8 +45,6 @@ def vcard_str(vc):
             return c.join(val) + n
         return val + n
 
-    print vc
-
     fn = getattr(vc, 'fn', None)
     adr = getattr(vc, 'adr', None)
     tel = getattr(vc, 'tel_list', None)
@@ -73,7 +71,7 @@ def vcard_str(vc):
     return s
 
 def vcard_find(tel):
-    f = codecs.open(addresses, 'r', encoding='UTF-16')
+    f = codecs.open(addresses, 'r', encoding='UTF-16-BE')
 
     vcards = readComponents(f)
 
@@ -84,7 +82,6 @@ def vcard_find(tel):
             for i in t:
                 if tel == tel_normalize(i.value):
                     return vc
-
 
 if __name__ == '__main__':
 
