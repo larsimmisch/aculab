@@ -55,7 +55,7 @@ class _CallEventDispatcher:
     def run(self):
         event = lowlevel.STATE_XPARMS()
         
-        while 1:
+        while True:
             if not self.calls:
                 return
             
@@ -70,12 +70,17 @@ class _CallEventDispatcher:
             
             # call the event handlers
             if event.handle:
-                call = self.calls[event.handle]
                 if event.state == lowlevel.EV_EXTENDED:
                     ev = ext_event_names[event.extended_state].lower()
                 else:
                     ev = event_names[event.state].lower()
-                    
+
+                call = self.calls.get(event.handle, None)
+                if not call:
+                    log.error('got event %s for nonexisting call 0x%x',
+                              ev, event.handle)
+                    continue
+                
                 mutex = getattr(call.user_data, 'mutex', None)
                 if mutex:
                     mutex.acquire()
