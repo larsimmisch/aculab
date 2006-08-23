@@ -154,8 +154,7 @@ class H100(CTBus):
 _DefaultBus = None
 
 def DefaultBus():
-    """Returns the same instance of a CTbus subclass upon every call
-    (singleton).
+    """Returns the same instance of a CTbus subclass on every call (singleton).
 
     Unless a particular bus type can be deduced, the order of preference is:
 
