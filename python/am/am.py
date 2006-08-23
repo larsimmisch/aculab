@@ -133,7 +133,7 @@ class RepeatedIncomingCallController(IncomingCallController):
 
 def usage():
     print 'usage: am.py [-c <card>] [-p <port>] [-m <module>] [-d] [-t]'
-    sys.exit(-2)
+    sys.exit(2)
 
 if __name__ == '__main__':
 
