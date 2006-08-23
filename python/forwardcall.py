@@ -4,19 +4,50 @@ import sys
 import getopt
 from aculab.error import AculabError
 from aculab.callcontrol import *
-from aculab.busses import H100
-from aculab.snapshot import Snapshot
+from aculab.busses import MVIP
 from aculab.names import event_names
 import aculab.lowlevel as lowlevel
 
-h100 = H100()
+mvip = MVIP()
+
+portmap = { '41': 8, '42': 8, '43': 8, '44': 8,
+            '45': 9, '46': 9, '47': 9, '48': 9 }
 
 def routing_table(port, details):
     """Returns the tuple (cause, port, timeslot, destination_address)
     If cause is not none, hangup"""
     
-    return (None, ports[1], find_available_call(ports[1]).timeslot,
-            details.destination_addr)
+    if not details.destination_addr and details.sending_complete:
+        return (lowlevel.LC_CALL_REJECTED, None, None, None)
+
+    if port == 0:
+        # only forward local calls
+        if details.originating_addr in [str(i) for i in range(31, 39)]:
+            return (None, portmap[details.destination_addr],
+                    details.ts, details.destination_addr)
+        else:
+            return (None, None, None, None)
+        
+    elif port in [8, 9]:
+        if not details.sending_complete:
+            return (None, None, None, None)
+        else:
+            if details.destination_addr[0] in ['8', '9']:
+                p = int(details.destination_addr[0])
+                ts = details.ts
+                # kludge to get call back on the same port working without
+                # glare
+                if p == port:
+                    if ts < 16:
+                        ts += 16
+                    else:
+                        ts -= 16
+                return (None, p, ts,  details.destination_addr)
+            else:
+                return (None, 0, details.ts,
+                        details.destination_addr)        
+    else:
+        return (lowlevel.LC_NUMBER_BUSY, None, None, None)
 
 def find_available_call(port, ts = None, exclude = None):
     global calls
@@ -36,7 +67,9 @@ class Forward:
         self.outcall = None
         self.connections = []
 
-    def route(self, originating_address = '41'):
+        self.route()
+
+    def route(self, originating_address = '47'):
         self.incall.user_data = self
 
         if self.outcall:
@@ -49,9 +82,8 @@ class Forward:
                                                           self.incall.details)
 
             if port != None and number:
-                log.info('%s making outgoing call on port %d to %s',
-                         hex(self.incall.handle), port,  number)
-                
+                print hex(self.incall.handle), \
+                      'making outgoing call on port %d to %s' % (port,  number)
                 self.outcall = find_available_call(port, timeslot, self.incall)
                 if not self.outcall:
                     print hex(self.incall.handle), 'no call available'
@@ -62,34 +94,32 @@ class Forward:
             elif cause:
                 self.incall.disconnect(cause)
             else:
-                log.info('%s waiting - no destination address',
-                         hex(self.incall.handle))
+                print hex(self.incall.handle), \
+                      'waiting - no destination address'
 
     def connect(self):
         if not self.connections:
-            self.incall.connect(self.outcall)
-            
-##             slots = [h100.allocate(), h100.allocate()]
+            slots = [mvip.allocate(), mvip.allocate()]
 
-##             c = [self.incall.speak_to(slots[0]),
-##                  self.outcall.listen_to(slots[0]),
-##                  self.outcall.speak_to(slots[1]),
-##                  self.incall.listen_to(slots[1])]
+            c = [self.incall.speak_to(slots[0]),
+                 self.outcall.listen_to(mvip.invert(slots[0])),
+                 self.outcall.speak_to(slots[1]),
+                 self.incall.listen_to(mvip.invert(slots[1]))]
 
-##             self.connections.extend(c)
+            self.connections.extend(c)
 
     def disconnect(self):
         for c in self.connections:
-            h100.free(c.ts)
+            if c.ts[0] < 16:
+                mvip.free(c.ts)
 
         self.connections = []
         
 class ForwardCallController:
-    "controls an incoming call and its corresponding outgoing call"
+    "controls a single incoming call and its corresponding outgoing call"
 
     def ev_incoming_call_det(self, call, model):
         call.user_data = Forward(call)
-        call.user_data.route()
 
     def ev_outgoing_ringing(self, call, model):
         if model.incall and model.outcall:
@@ -168,13 +198,8 @@ if __name__ == '__main__':
 
     # we should also look at call_signal_info here, but this
     # hasn't been swigged properly yet
-
-    snapshot = Snapshot()
-
-    ports = [snapshot.call[0].ports[2].open.port_id,
-             snapshot.call[0].ports[1].open.port_id]
-
-    calls = [Call(controller, None, ports[0], t) for t in e1_ts]
-    calls += [Call(controller, None, ports[1], t) for t in e1_ts]
+    calls = [Call(controller, None, port=0, timeslot=t) for t in bri_ts]
+    calls += [Call(controller, None, port=8, timeslot=t) for t in e1_ts]
+    calls += [Call(controller, None, port=9, timeslot=t) for t in e1_ts]
     
     CallDispatcher.run()
