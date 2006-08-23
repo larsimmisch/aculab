@@ -119,7 +119,7 @@ class MVIP(CTBus):
 
     def __init__(self):
         self.slots = []
-        for st in range(16):
+        for st in range(8):
             for ts in range(32):
                 self.slots.append((st, ts))
 
