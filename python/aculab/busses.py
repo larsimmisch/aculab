@@ -11,7 +11,7 @@ class Connection:
     def __init__(self, bus):
         """If bus is None, the default bus is used."""
         if not bus:
-            self.bus = DefaultBus
+            self.bus = DefaultBus()
         else:
             self.bus = bus
         self.connections = []
@@ -105,14 +105,15 @@ class ProsodyLocalBus(CTBus):
 
 class MVIP(CTBus):
     """MVIP Bus.
-    An instance of this class represents 16 streams of 32 unidirectional
+    An instance of this class represents 8 streams of 32 bidirectional
     timeslots per stream.
 
-    This is in contrast to the original MVIP switching model that
-    exposes 8 streams with 32 bidirectional timelots.
+    This is *totally* different from H.100 and SCBus, where the timeslots
+    are unidirectional.
 
-    The original MVIP switching model does this by treating 'trunk' and
-    'resource' cards differently with regards to the stream numbering.
+    This is a consequence of the MVIP switching model that, among other things,
+    attempted to simplify things by treating 'trunk' and 'resource' cards
+    differently with regards to the stream numbering.
 
     Applications need to be aware of this difference. Caveat implementor.
     """
@@ -154,13 +155,17 @@ class H100(CTBus):
 _DefaultBus = None
 
 def DefaultBus():
-    """Returns the same instance of a CTbus subclass on every call (singleton).
+    """Returns the same instance of a CTbus subclass on every call
+    (like a singleton).
 
-    Unless a particular bus type can be deduced, the order of preference is:
+    If more than one bus type is supported by all cards, and a single bus type
+    cannot be deduced otherwise, the order of preference is:
 
     - H100
     - SCBus
     - MVIP"""
+
+    global _DefaultBus
 
     if _DefaultBus:
         return _DefaultBus
@@ -190,21 +195,23 @@ def DefaultBus():
             raise AculabError(rc, 'sw_query_clock_control')
 
         if clock.last_clock_mode == lowlevel.CLOCK_REF_MVIP:
-            return MVIP()
+            _DefaultBus = MVIP()
+            return _DefaultBus
         elif clock.last_clock_mode & lowlevel.DRIVE_SCBUS or \
                  clock.last_clock_mode == lowlevel.CLOCK_REF_SCBUS:
-            return SCBus()
+            _DefaultBus = SCBus()
+            return _DefaultBus
 
     if busses & (1 << lowlevel.SWMODE_CTBUS_H100):
-        return H100()
+        _DefaultBus = H100()
 
     if busses & (1 << lowlevel.SWMODE_CTBUS_SCBUS):
-        return SCBus()
+        _DefaultBus = SCBus()
 
     if busses & (1 << lowlevel.SWMODE_CTBUS_MVIP):
-        return MVIP()
+        _DefaultBus = MVIP()
     
-    return None    
+    return _DefaultBus
 
 if __name__ == '__main__':
     print DefaultBus()
