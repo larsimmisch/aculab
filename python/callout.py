@@ -62,14 +62,41 @@ class RepeatedOutgoingCallController(OutgoingCallController):
         call.openout(model.number, True, OAD)
 
 def usage():
-    print 'callout.py [-n <number of calls>] [-p <port>] [-c <card>] [-r] number'
+    print 'callout.py [-u] [-n <number of calls>] [-p <port>] [-c <card>] [-r] number'
     sys.exit(-2)
+
+def build_cug(oa_request, cug_index):
+    fd = lowlevel.FEATURE_UNION()
+    fd.facility.length = 0x13
+    fd.facility.data = struct.pack('21B', 0x1C, 0x13, 0x91, 0xA1, 0x10, 2, 2,
+                                   0x8E, 0x10, 2, 1, 2, 0x30, 7, 0x81, 1,
+                                   oa_request, 0x82, 2,
+                                   (cug_index >> 8) & 0xff ,
+                                   cug_index & 0xff)
+
+    return fd
+
+def build_cgpty_cat():
+    fd = lowlevel.FEATURE_UNION()
+    fd.raw_data.length = 6
+    fd.raw_data.data = struct.pack('BBBBBB',
+                                   2, # See Appendix M, Aculab Call Control
+                                   0x9f, 0x01, 0x02, 0x0a, 0x0b)
+
+def build_uui():
+    fd = lowlevel.FEATURE_UNION()
+    fd.uui.command = lowlevel.UU_DATA_CMD
+    fd.uui.request = lowlevel.UUS_1_IMPLICITLY_PREFERRED
+    fd.uui.control = lowlevel.CONTROL_NEXT_CC_MESSAGE
+    fd.uui.protocol = lowlevel.UUI_PROTOCOL_USER_SPECIFIC
+    fd.uui.setdata('Hallo Hauke, dies ist ein langer und entsetzliche langweiliger Text, den ich nur zum Testen von UUI benutze')
 
 if __name__ == '__main__':
     port = 0
     card = 0
     numcalls = 1
     uui = False
+    cug = False
     timeslot = None
 
     log = aculab.defaultLogging(logging.DEBUG)
@@ -91,6 +118,8 @@ if __name__ == '__main__':
             numcalls = int(a)
         elif o == '-u':
             uui = True
+        elif o == '-g':
+            cug = True
         elif o == '-o':
             OAD = a
         else:
@@ -99,31 +128,19 @@ if __name__ == '__main__':
     if not len(args):
         usage()
 
-                
-##     fd.raw_data.length = 6
-##     fd.raw_data.data = struct.pack('BBBBBB',
-##                                    2, # See Appendix M, Aculab Call Control
-##                                    0x9f, 0x01, 0x02, 0x0a, 0x0b)
-
-##    unique = lowlevel.UNIQUEXU()
-##    unique.sig_q931.hilayer.ie = '\x02\x11\x01'
-    
     for i in range(numcalls):
         c = Call(controller,  port=port, timeslot=timeslot)
         c.user_data = CallData(args[0])
-        if not uui:
-            c.openout(args[0], True, OAD)
-        else:
-            fd = lowlevel.FEATURE_UNION()
-            fd.uui.command = lowlevel.UU_DATA_CMD
-            fd.uui.request = lowlevel.UUS_1_IMPLICITLY_PREFERRED
-            fd.uui.control = lowlevel.CONTROL_NEXT_CC_MESSAGE
-            fd.uui.protocol = lowlevel.UUI_PROTOCOL_USER_SPECIFIC
-            fd.uui.setdata('Hallo Hauke, dies ist ein langer und entsetzliche langweiliger Text, den ich nur zum Testen von UUI benutze')
-            
+        if uui:
             c.openout(args[0], 1, OAD,
                       feature = lowlevel.FEATURE_USER_USER,
-                      feature_data = fd)
+                      feature_data = build_uui())
+        elif cug:
+            c.openout(args[0], 1, OAD,
+                      feature = lowlevel.FEATURE_FACILITY,
+                      feature_data = build_cug(1, 2))
+        else:
+            c.openout(args[0], True, OAD)
 
 ##         fd.raw_data.length = 6
 ##         fd.raw_data.data = struct.pack('BBBBBB',
