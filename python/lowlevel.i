@@ -14,6 +14,8 @@
 #include "smdc_raw.h"
 #include "smdc_sync.h"
 #include "smdc_hdlc.h"
+#include "bfile.h"
+#include "bfopen.h"
 #else
 #include "mvswdrvr.h"
 #include "mvcldrvr.h"

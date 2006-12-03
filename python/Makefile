@@ -33,11 +33,11 @@ cl_lib.h2: $(DTK)/include/cl_lib.h cl_lib.patch
 
 # builds are very slow - only rebuild if cl_lib.h changes
 sized_struct.i: $(DTK)/include/cl_lib.h $(DTK)/include/sw_lib.h
-	swig $(DEFINES) $(DTK_INCLUDE) -xml -xmllite lowlevel.i
+	swig $(DEFINES) $(ACULAB_INCLUDE) -xml -xmllite lowlevel.i
 	python sized_struct.py lowlevel_wrap.xml
 	rm lowlevel_wrap.xml
 
-lowlevel_wrap.c aculab/lowlevel.py: lowlevel.i cl_lib.h2
+lowlevel_wrap.c aculab/lowlevel.py: lowlevel.i cl_lib.h2 sized_struct.i
 	$(SWIG) $(DEFINES) -modern -new_repr -python $(ACULAB_INCLUDE) $<
 	mv lowlevel.py aculab
 
