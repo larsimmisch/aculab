@@ -39,7 +39,7 @@ class AsyncEmail(threading.Thread):
 
     def name_lookup(self, subject, txt):
         try:
-            from vcard import (vcard_find, vcard_str, tel_normalize, tel_type)
+            from vcard import vcard_find, vcard_str, tel_normalize, tel_type
 
             vc = vcard_find(self.cli)
             if vc:

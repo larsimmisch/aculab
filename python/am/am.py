@@ -10,8 +10,8 @@ import logging
 import aculab
 from aculab.error import AculabError
 from aculab.callcontrol import Call, CallDispatcher
-from aculab.speech import (SpeechChannel, SpeechDispatcher, Glue, PlayJob,
-                           RecordJob)
+from aculab.speech import SpeechChannel, SpeechDispatcher, Glue, PlayJob, \
+     RecordJob
 from aculab.busses import DefaultBus
 from aculab.timer import TimerThread
 from mail import AsyncEmail

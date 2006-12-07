@@ -159,11 +159,11 @@ BLOCKING(smfax_tx_page)
 	$result = add_result($result, PyInt_FromLong((unsigned)*$1));
 }
 #else
-%typemap(in,numinputs=0) tSMEventId *OUTPUT ($basetype temp) {
+%typemap(in,numinputs=0) tSMEventId *eventId ($basetype temp) {
 	$1 = ($basetype*)&temp;
 }
 
-%typemap(argout) tSMEventId *OUTPUT {
+%typemap(argout) tSMEventId *eventId {
 	tSMEventId* x = (tSMEventId*)calloc(1, sizeof(tSMEventId));
 	memcpy(x, $1, sizeof(tSMEventId));
 	$result = add_result($result,
