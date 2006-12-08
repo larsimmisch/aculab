@@ -172,7 +172,7 @@ if __name__ == '__main__':
     call = Call(controller, card=card, port=port)
 
     if daemon:
-        aculab.daemonize(pidfile='var/run/am.pid')
+        aculab.daemonize(pidfile='/var/run/am.pid')
 
     try:
         log.info('answering machine starting (bus: %s)',
