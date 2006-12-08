@@ -6,6 +6,7 @@ import struct
 import time
 from aculab.error import AculabError
 from aculab.callcontrol import *
+from aculab.timer import *
 
 OAD = '0403172541'
 
@@ -25,9 +26,12 @@ class Statistics:
         self.average = self.average + value
 
     def __repr__(self):
-        return 'min: %f max: %f average: %f count: %d' % \
-               (self.min, self.max, self.average / self.count, self.count)
-
+        if self.count:
+            return 'min: %f max: %s average: %f count: %d' % \
+                   (self.min, self.max, self.average / self.count, self.count)
+        else:
+            return 'min: %f max: %f average: n/a count: %d' % \
+                   (self.min, self.max, self.count)
 
 statistics = Statistics()
 
@@ -49,6 +53,8 @@ class OutgoingCallController:
                   call.details.stream, call.details.ts)
 
     def ev_call_connected(self, call, model):
+        if hangup is not None:
+            tt.add(hangup, call.disconnect)
         model.stop()
         log.info(statistics)
 
@@ -62,7 +68,7 @@ class RepeatedOutgoingCallController(OutgoingCallController):
         call.openout(model.number, True, OAD)
 
 def usage():
-    print 'callout.py [-u] [-n <number of calls>] [-p <port>] [-c <card>] [-r] number'
+    print 'callout.py [-u] [-n <number of calls>] [-p <port>] [-c <card>] [-r] [-h <hangup secs>]number'
     sys.exit(-2)
 
 def build_cug(oa_request, cug_index):
@@ -98,12 +104,13 @@ if __name__ == '__main__':
     uui = False
     cug = False
     timeslot = None
+    hangup = None
 
     log = aculab.defaultLogging(logging.DEBUG)
 
     controller = OutgoingCallController()
 
-    options, args = getopt.getopt(sys.argv[1:], 'c:p:rt:n:uo:')
+    options, args = getopt.getopt(sys.argv[1:], 'c:h:p:rt:n:uo:')
 
     for o, a in options:
         if o == '-p':
@@ -120,6 +127,10 @@ if __name__ == '__main__':
             uui = True
         elif o == '-g':
             cug = True
+        elif o == '-h':
+            hangup = int(a)
+            tt = TimerThread()
+            tt.start()
         elif o == '-o':
             OAD = a
         else:
