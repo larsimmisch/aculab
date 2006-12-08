@@ -10,11 +10,12 @@ import aculab.lowlevel as lowlevel
 
 mvip = MVIP()
 
-portmap = { '41': 8, '42': 8, '43': 8, '44': 8,
-            '45': 9, '46': 9, '47': 9, '48': 9 }
+portmap = { '41': 8, '42': 8, '43': 8, '44': 9,
+            '45': 9, '46': 9, '47': 1, '48': 1 }
 
 def routing_table(port, details):
-    """Returns the tuple (cause, port, timeslot, destination_address)
+    """Returns the tuple (cause, port, timeslot, destination_address,
+    originating_address)
     If cause is not none, hangup"""
     
     if not details.destination_addr and details.sending_complete:
@@ -22,11 +23,13 @@ def routing_table(port, details):
 
     if port == 0:
         # only forward local calls
-        if details.originating_addr in [str(i) for i in range(31, 39)]:
+        # if details.originating_addr in [str(i) for i in range(31, 39)]:
+        if True:
             return (None, portmap[details.destination_addr],
-                    details.ts, details.destination_addr)
+                    details.ts, details.destination_addr,
+                    details.originating_addr)
         else:
-            return (None, None, None, None)
+            return (None, None, None, None, None)
         
     elif port in [8, 9]:
         if not details.sending_complete:
@@ -42,12 +45,13 @@ def routing_table(port, details):
                         ts += 16
                     else:
                         ts -= 16
-                return (None, p, ts,  details.destination_addr)
+                return (None, p, ts, details.destination_addr,
+                        details.originating_addr)
             else:
                 return (None, 0, details.ts,
-                        details.destination_addr)        
+                        details.destination_addr, details.originating_addr)
     else:
-        return (lowlevel.LC_NUMBER_BUSY, None, None, None)
+        return (lowlevel.LC_NUMBER_BUSY, None, None, None, None)
 
 def find_available_call(port, ts = None, exclude = None):
     global calls
@@ -78,8 +82,8 @@ class Forward:
             self.outcall.send_overlap(d.destination_addr,
                                       d.sending_complete)
         else:
-            cause, port, timeslot, number = routing_table(self.incall.port,
-                                                          self.incall.details)
+            cause, port, timeslot, number, cli = \
+                   routing_table(self.incall.port, self.incall.details)
 
             if port != None and number:
                 print hex(self.incall.handle), \
@@ -90,7 +94,7 @@ class Forward:
                     self.incall.disconnect(lowlevel.LC_NUMBER_BUSY)
                 else:
                     self.outcall.user_data = self
-                    self.outcall.openout(number, 1, originating_address)
+                    self.outcall.openout(number, 1, cli)
             elif cause:
                 self.incall.disconnect(cause)
             else:
@@ -98,6 +102,8 @@ class Forward:
                       'waiting - no destination address'
 
     def connect(self):
+        """Connects incoming and outgoing call. Can be called more than
+        once, but will create the connection only on the first invocation."""
         if not self.connections:
             slots = [mvip.allocate(), mvip.allocate()]
 
@@ -120,17 +126,15 @@ class ForwardCallController:
 
     def ev_incoming_call_det(self, call, model):
         call.user_data = Forward(call)
+        call.incoming_ringing()
 
     def ev_outgoing_ringing(self, call, model):
         if model.incall and model.outcall:
             model.connect()
 
-        model.incall.incoming_ringing()
-
     def ev_call_connected(self, call, model):
-        if call == model.incall:
+        if call != model.incall:
             model.connect()
-        else:
             model.incall.accept()
 
     def ev_remote_disconnect(self, call, model):
@@ -199,6 +203,7 @@ if __name__ == '__main__':
     # we should also look at call_signal_info here, but this
     # hasn't been swigged properly yet
     calls = [Call(controller, None, port=0, timeslot=t) for t in bri_ts]
+    calls += [Call(controller, None, port=1, timeslot=t) for t in bri_ts]
     calls += [Call(controller, None, port=8, timeslot=t) for t in e1_ts]
     calls += [Call(controller, None, port=9, timeslot=t) for t in e1_ts]
     
