@@ -5,7 +5,7 @@
  
  ACUDLL int smd_ev_create( 
 -	tSMEventId*, 
-+	tSMEventId *OUTPUT, 
++	tSMEventId *eventId, 
  	tSMChannelId,
  	tSM_INT,
  	tSM_INT
