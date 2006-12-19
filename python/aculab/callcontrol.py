@@ -340,6 +340,17 @@ class CallHandle:
 
         log.debug('%s send_overlap(%s, %d)', self.name, addr, complete)
 
+    def send_keypad_info(self, keypad = '', display = ''):
+        keypadx = lowlevel.KEYPAD_XPARMS()
+        keypadx.handle = self.handle
+        keypadx.unique_xparms.sig_q931.location = lowlevel.KEYPAD_CONNECT
+        keypadx.unique_xparms.sig_q931.keypad.setie(keypad)
+        keypadx.unique_xparms.sig_q931.display.setie(display)
+
+        rc = lowlevel.call_send_keypad_info(keypadx)
+        if rc:
+            raise AculabError(rc, 'call_send_keypad_info')
+
     def listen_to(self, source):
         """source is a tuple of (stream, timeslot).
            Returns a CTBusConnection.
