@@ -13,7 +13,10 @@ CC := cl /MD
 
 SWIG := $(dir $(strip $(wildcard c:/swig-1.3.21/swig.exe) \
                       $(wildcard d:/swig-1.3.21/swig.exe) \
-                      $(wildcard e:/swig-1.3.21/swig.exe)))swig
+                      $(wildcard e:/swig-1.3.21/swig.exe) \
+                      $(wildcard c:/swigwin-1.3.31/swig.exe) \
+                      $(wildcard d:/swigwin-1.3.31/swig.exe) \
+                      $(wildcard e:/swigwin-1.3.31/swig.exe)))swig
 
 PYTHON := $(dir $(strip $(wildcard c:/python24/python.exe) \
                         $(wildcard d:/python24/python.exe) \
