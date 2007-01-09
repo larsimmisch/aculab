@@ -103,13 +103,13 @@ class ProsodyCard(Card):
         open_prosp.card_id = card.card_id
         rc = lowlevel.acu_open_prosody(open_prosp)
         if rc:
-            raise AculabError(rc, 'acu_open_prosody')
+            raise AculabError(rc, '%s acu_open_prosody' % self.card.serial_no)
 
         sm_infop = lowlevel.SM_CARD_INFO_PARMS()
         sm_infop.card = card.card_id
         rc = lowlevel.sm_get_card_info(sm_infop)
         if rc:
-            raise AculabError(rc, 'sm_get_card_info')
+            raise AculabError(rc, '%s sm_get_card_info' % self.card.serial_no)
 
         self.modules = [Module(card, i) for i in range(sm_infop.module_count)]
 
