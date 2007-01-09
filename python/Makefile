@@ -1,6 +1,6 @@
 # check for signs of Unix
 find_init := $(strip $(wildcard /sbin/init) \
-	                     $(wildcard /usr/sbin/init))
+	                 $(wildcard /usr/sbin/init))
 
 # check for signs of Aculab v6
 find_v6 := $(strip $(wildcard $(ACULAB_ROOT)/include/cl_lib.h))

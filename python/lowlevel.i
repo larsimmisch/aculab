@@ -184,7 +184,7 @@ BLOCKING(smfax_tx_page)
   	}
 }
 */
-#ifdef XXX_SM_POLL_UNIX
+#ifdef SM_POLL_UNIX
 %extend tSMEventId {
 	~tSMEventId() {
 		if (self)
@@ -212,8 +212,14 @@ BLOCKING(smfax_tx_page)
 %include "cl_lib.h2"
 %include "res_lib.h"
 %include "sw_lib.h"
-%include "smdrvr.h"
+%include "smtypes.h"
+%include "visdecl.h"
+%include "smcore.h"
+%include "prosgen.h"
+// %include "pros_pci.h"
+// %include "pros_s.h"
 %include "smbesp.h"
+%include "prospapi.h"
 #ifdef HAVE_FAX
 %include "actiff.h"
 %include "smfaxapi.h"

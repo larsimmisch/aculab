@@ -36,7 +36,7 @@ TiNGTYPE := LINUX
 DEFINES := -DACU_LINUX -DSM_POLL_UNIX -DTiNGTYPE_$(TiNGTYPE) -DTiNG_USE_V6
 C_DEFINES := -g -DNDEBUG -D_REENTRANT -fPIC $(DEFINES)
 
-ACULAB_INCLUDE = -I$(DTK)/include -I$(DTK)/ting/include -I$(DTK)/$(FAX)/include
+ACULAB_INCLUDE = -I$(DTK)/include -I$(DTK)/ting/apilib  -I$(DTK)/ting/apilib/LINUX -I$(DTK)/ting/pubdoc/gen -I$(DTK)/$(FAX)/include -I$(DTK)/ting/include
 ACULAB_LIBDIR = -L$(DTK)/lib -L$(DTK)/ting/lib
 ACULAB_LIBS = -lacu_cl -lacu_sw -lacu_res -lacu_common -lTiNG -lstdc++
 
