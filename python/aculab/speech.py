@@ -210,11 +210,11 @@ class PollSpeechEventDispatcher(threading.Thread):
         "blocks until handle is added by dispatcher thread"
         h = handle.fd
         if threading.currentThread() == self or not self.isAlive():
-            # print 'self adding', h
+            # log.debug('adding fd : %d %s', h, method)
             self.handles[h] = method
             self.poll.register(h)
         else:
-            # print 'adding', h
+            # log.debug('self adding: %d %s', h, method)
             event = threading.Event()
             self.mutex.acquire()
             self.handles[h] = method
@@ -228,11 +228,11 @@ class PollSpeechEventDispatcher(threading.Thread):
         "blocks until handle is removed by dispatcher thread"
         h = handle.fd
         if threading.currentThread() == self or not self.isAlive():
-            # print 'self removing', h
+            # log.debug('removing fd: %d', h)
             del self.handles[h]
             self.poll.unregister(h)
         else:
-            # print 'removing', h
+            # log.debug('removing fd: %d', h)
             event = threading.Event()
             self.mutex.acquire()
             del self.handles[h]
@@ -269,9 +269,11 @@ class PollSpeechEventDispatcher(threading.Thread):
                         finally:
                             self.mutex.release()
 
+                        # log.info('event on fd %d %s', a, m)
                         # ignore method not found
                         if m:
                             m()
+                            
             except StopIteration:
                 return
             except KeyboardInterrupt:
@@ -565,8 +567,8 @@ class RecordJob(object):
 
 class DigitsJob(object):
     
-    def __init__(self, channel, digits, inter_digit_delay = 32,
-                 digit_duration = 64):
+    def __init__(self, channel, digits, inter_digit_delay = 0,
+                 digit_duration = 0):
         self.channel = channel
         self.digits = digits
         self.inter_digit_delay = inter_digit_delay
@@ -645,7 +647,7 @@ class DigitsJob(object):
         log.debug('%s digits_done(reason=\'%s\', pos=%.3f)',
                   channel.name, reason, pos)
 
-        channel.job_done(self, 'digits_done', reason, pos)
+        channel.job_done(self, 'digits_done', reason) #, pos)
 
 class DCReadJob(object):
     
@@ -763,7 +765,7 @@ class SpeechChannel(object):
         self.user_data = user_data
         self.job = None
         self.close_pending = None
-        # initialize early before any exception is thrown
+        # initialize early 
         self.event_read = None
         self.event_write = None
         self.event_recog = None
@@ -806,14 +808,14 @@ class SpeechChannel(object):
         self.event_write = self.set_event(lowlevel.kSMEventTypeWriteData);
         self.event_recog = self.set_event(lowlevel.kSMEventTypeRecog)
 
-        # add the recog event to the dispatcher
-        self.dispatcher.add(self.event_recog, self.on_recog)
-
         if version[0] >= 2:
             self._ting_connect()
             log.debug('%s out: %d:%d, in: %d:%d', self.name, self.info.ost,
                       self.info.ots, self.info.ist, self.info.its)
         self._listen()
+
+        # add the recog event to the dispatcher
+        self.dispatcher.add(self.event_recog, self.on_recog)
 
     def __del__(self):
         self._close()
@@ -898,7 +900,7 @@ class SpeechChannel(object):
         listen_for = lowlevel.SM_LISTEN_FOR_PARMS()
         listen_for.channel = self.channel
         listen_for.tone_detection_mode = \
-                                  lowlevel.kSMToneLenDetectionMinDuration40;
+                                  lowlevel.kSMToneDetectionMinDuration40;
         listen_for.map_tones_to_digits = lowlevel.kSMDTMFToneSetDigitMapping;
         rc = lowlevel.sm_listen_for(listen_for)
         if rc:
@@ -937,13 +939,14 @@ class SpeechChannel(object):
         else:
             return ev
 
-    def set_event(self, type):
+    def set_event(self, _type):
         event = lowlevel.SM_CHANNEL_SET_EVENT_PARMS()
 
         event.channel = self.channel
         event.issue_events = lowlevel.kSMChannelSpecificEvent
-        event.event_type = type
+        event.event_type = _type
         handle = self.create_event(event)
+        event.event = handle
 
         rc = lowlevel.sm_channel_set_event(event)
         if rc:
@@ -1133,7 +1136,7 @@ class SpeechChannel(object):
 
         self.start(job)
 
-    def digits(self, digits, inter_digit_delay = 32, digit_duration = 64):
+    def digits(self, digits, inter_digit_delay = 0, digit_duration = 0):
         """Send a string of DTMF digits asynchronously."""
 
         job = DigitsJob(self, digits, inter_digit_delay,
@@ -1156,6 +1159,7 @@ class SpeechChannel(object):
         self.start(job)        
 
     def on_recog(self):
+        # log.debug('%s on_recog', self.name)
         recog = lowlevel.SM_RECOGNISED_PARMS()
         
         while True:
