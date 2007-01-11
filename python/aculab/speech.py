@@ -810,7 +810,6 @@ class SpeechChannel(object):
 
         if version[0] >= 2:
             self._ting_connect()
-            self.info.card = -1 # workaround for unreliable Aculab API
             log.debug('%s out: %d:%d, in: %d:%d card: %d',
                       self.name, self.info.ost,
                       self.info.ots, self.info.ist, self.info.its,
