@@ -36,8 +36,8 @@ def tel_normalize(tel):
 
     return tel
 
-def vcard_str(vc):
-
+def vcard_str(vc, long):
+    
     def join(val, n = '', c = ' '):
         if not val:
             return ''
@@ -72,16 +72,19 @@ def vcard_str(vc):
 
 def vcard_find(tel):
     f = codecs.open(addresses, 'r', encoding='UTF-16-BE')
+    try:
+        vcards = readComponents(f)
 
-    vcards = readComponents(f)
+        tel = tel_normalize(tel)
+        for vc in vcards:
+            t = getattr(vc, 'tel_list', None)
+            if t:
+                for i in t:
+                    if tel == tel_normalize(i.value):
+                        return vc
+    finally:
+        f.close()
 
-    tel = tel_normalize(tel)
-    for vc in vcards:
-        t = getattr(vc, 'tel_list', None)
-        if t:
-            for i in t:
-                if tel == tel_normalize(i.value):
-                    return vc
 
 if __name__ == '__main__':
 
