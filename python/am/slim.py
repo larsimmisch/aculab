@@ -37,6 +37,8 @@ def async_cli_display(cli):
     return t
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.DEBUG,
+                        format='%(asctime)s %(levelname)s %(message)s')
+    
     cli_display('01772706491')
     
