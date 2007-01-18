@@ -32,7 +32,7 @@ def cli_display(cli):
                     line2 = '%s %s' % (line2, tel_type(t.params['TYPE']))
 
     except ImportError:
-        pass
+        log.info('Cannot import vcard', exc_info=1)
     except:
         log.warn('VCard lookup for CLI %s failed.', cli, exc_info=1)
 
