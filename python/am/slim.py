@@ -4,8 +4,15 @@ import threading
 
 log = logging.getLogger('slim')
 
-def slim_display(line1, line2, duration):
-    url = 'http://bernoulli:9000/status.txt?p0=display&p1=%s&p2=%s&p3=%.1f' % \
+server = 'bernoulli'
+players = [ '00:04:20:05:82:60', '00:04:20:02:05:47' ]
+
+def slim_display(line1, line2, duration, player = None):
+    url = 'http://%s:9000/status.txt?' % server
+    if player:
+        url = url + 'player=%s&' % urllib.quote(player)
+        
+    url = url + 'p0=display&p1=%s&p2=%s&p3=%.1f' % \
           (urllib.quote(line1), urllib.quote(line2), float(duration))
 
     log.debug(url)
@@ -29,7 +36,8 @@ def cli_display(cli):
     except:
         log.warn('VCard lookup for CLI %s failed.', cli, exc_info=1)
 
-    slim_display(line1, line2, 20)
+    for p in players:
+        slim_display(line1, line2, 20, p)
 
 def async_cli_display(cli):
     t = threading.Thread(None, cli_display, 'slim display', cli)
