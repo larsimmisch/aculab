@@ -16,6 +16,7 @@ from aculab.busses import DefaultBus
 from aculab.timer import TimerThread
 import aculab.lowlevel as lowlevel
 from mail import AsyncEmail
+from slim import async_cli_display
 
 # Modify this to change the time the answering machine waits before accepting
 # the call
@@ -273,13 +274,16 @@ class ForwardCallController:
 
 class IncomingCallController(object):
     def ev_incoming_call_det(self, call, user_data):
+        cli = call.details.originating_addr
         log.info('%s called: %s calling: %s stream: %d timeslot: %d',
-                 call.name, call.details.destination_addr,
-                 call.details.originating_addr,
+                 call.name, call.details.destination_addr, cli,
                  call.details.stream, call.details.ts)
-        
+
         if portmap.get(call.details.destination_addr, None) == 'am':
-            # Let AMController take over. It pops
+            if cli:
+                async_cli_display(cli)
+
+            # Let AMController take over.
             call.push_controller(amcontroller)
             call.user_data = AnsweringMachine(amcontroller, module, call)
             call.incoming_ringing()
