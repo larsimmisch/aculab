@@ -40,7 +40,8 @@ def cli_display(cli):
         slim_display(line1, line2, 20, p)
 
 def async_cli_display(cli):
-    t = threading.Thread(None, cli_display, 'slim display', cli)
+    t = threading.Thread(target=cli_display, name='slim display', args=(cli,))
+    t.setDaemon(1)
     t.start()
     return t
 
@@ -48,5 +49,6 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG,
                         format='%(asctime)s %(levelname)s %(message)s')
     
-    cli_display('01772706491')
+    t = async_cli_display('01772706491')
+    t.join()
     

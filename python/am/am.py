@@ -279,15 +279,20 @@ class IncomingCallController(object):
                  call.name, call.details.destination_addr, cli,
                  call.details.stream, call.details.ts)
 
+        log.debug('portmap: %s',
+                  portmap.get(call.details.destination_addr, None))
+
         if portmap.get(call.details.destination_addr, None) == 'am':
             if cli:
                 async_cli_display(cli)
 
             # Let AMController take over.
+            log.debug('starting timer for answering machine')
             call.push_controller(amcontroller)
             call.user_data = AnsweringMachine(amcontroller, module, call)
             call.incoming_ringing()
         elif forwarding:
+            log.debug('starting forwarding')
             call.push_controller(fwcontroller)
             call.user_data = Forward(call)
             call.incoming_ringing()
@@ -315,7 +320,7 @@ if __name__ == '__main__':
             card = int(a)
         elif o == '-d':
             daemon = True
-            loglevel = logging.INFO
+            # loglevel = logging.INFO
             logfile = '/var/log/am.log'
         elif o == '-m':
             module = int(a)
