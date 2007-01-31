@@ -246,12 +246,13 @@ class ForwardCallController:
 
         # pass on cause values
         cause = call.get_cause()
-        if call == model.incall:
-            if model.outcall:
-                model.outcall.disconnect(cause)
-        elif call == model.outcall:
-            if model.incall:
-                model.incall.disconnect(cause)
+        if model:
+            if call == model.incall:
+                if model.outcall:
+                    model.outcall.disconnect(cause)
+            elif call == model.outcall:
+                if model.incall:
+                    model.incall.disconnect(cause)
 
         call.disconnect()
 
