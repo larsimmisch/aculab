@@ -8,6 +8,10 @@ from aculab.error import AculabError
 from aculab.callcontrol import *
 import aculab.lowlevel as ll
 
+def hex_string(s):
+    l = [hex(ord(c)) for c in s]
+    return ' '.join(l)
+
 class IncomingCallController:
 
     def ev_incoming_call_det(self, call, model):
@@ -22,6 +26,11 @@ class IncomingCallController:
             call.get_feature_details(ll.FEATURE_RAW_DATA)
             log.debug('raw data: %s',
                       repr(call.feature_details.feature.raw_data.getdata()))
+
+        if call.details.feature_information == lowlevel.FEATURE_FACILITY:
+            call.get_feature_details(ll.FEATURE_FACILITY)
+            log.debug('%s Facility: %s', call.name,
+                      hex_string(call.feature_details.feature.facility.getdata()))
         
         call.accept()
 
