@@ -34,12 +34,12 @@ cl_lib.h2: $(DTK)/include/cl_lib.h cl_lib.patch
 # builds are very slow - only rebuild if cl_lib.h changes
 # exclude structures that are %extended already
 sized_struct.i: $(DTK)/include/cl_lib.h $(DTK)/include/sw_lib.h
-	swig $(DEFINES) $(ACULAB_INCLUDE) -xml -xmllite lowlevel.i
+	swig $(DEFINES) $(SWIG_DEFINES) $(ACULAB_INCLUDE) -xml -xmllite lowlevel.i
 	python sized_struct.py -x ACU_SNAPSHOT_PARMS lowlevel_wrap.xml
 	rm lowlevel_wrap.xml
 
 lowlevel_wrap.c aculab/lowlevel.py: lowlevel.i cl_lib.h2 sized_struct.i
-	$(SWIG) $(DEFINES) -modern -new_repr -python $(ACULAB_INCLUDE) $<
+	$(SWIG) $(DEFINES) $(SWIG_DEFINES) -modern -new_repr -python $(ACULAB_INCLUDE) $<
 	mv lowlevel.py aculab
 
 else
