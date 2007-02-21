@@ -36,7 +36,7 @@ def tel_normalize(tel):
 
     return tel
 
-def vcard_str(vc, long):
+def vcard_str(vc):
     
     def join(val, n = '', c = ' '):
         if not val:

@@ -22,7 +22,7 @@ def cli_display(cli):
     line1 = 'Calling: %s' % cli
     line2 = ''
     try:
-        from vcard import vcard_find, vcard_str, tel_normalize, tel_type
+        from vcard import vcard_find, tel_normalize, tel_type
 
         vc = vcard_find(cli)
         if vc:
