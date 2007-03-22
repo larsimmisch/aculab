@@ -3,7 +3,7 @@ A := .a
 SO := .so
 
 DTK := $(ACULAB_ROOT)
-FAX := ProsodyLibraries/Group3fax_LINUX_V6_rel321/API
+FAX := ProsodyLibraries/Group3Fax/API
 
 CC := gcc
 
