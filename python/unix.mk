@@ -37,7 +37,7 @@ DEFINES := -DACU_LINUX -DSM_POLL_UNIX -DTiNGTYPE_$(TiNGTYPE) -DTiNG_USE_V6 -DPRO
 SWIG_DEFINES := -DTiNG_USE_UNDECORATED_NAMES
 C_DEFINES := -g -DNDEBUG -D_REENTRANT -fPIC $(DEFINES)
 
-ACULAB_INCLUDE = -I$(DTK)/include -I$(DTK)/TiNG/pubdoc/gen -I$(DTK)/$(FAX)/include -I$(DTK)/TiNG/include -I$(DTK)/TiNG/apilib  -I$(DTK)/TiNG/apilib/LINUX
+ACULAB_INCLUDE = -I$(DTK)/include -I$(DTK)/TiNG/pubdoc/gen -I$(DTK)/$(FAX)/include -I$(DTK)/TiNG/apilib -I$(DTK)/TiNG/apilib/LINUX -I$(DTK)/TiNG/include
 ACULAB_LIBDIR = -L$(DTK)/lib -L$(DTK)/TiNG/lib
 ACULAB_LIBS = -lacu_cl -lacu_sw -lacu_res -lacu_common -lTiNG -lacu_rmsm -lstdc++
 

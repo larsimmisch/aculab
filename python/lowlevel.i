@@ -219,6 +219,7 @@ BLOCKING(smfax_tx_page)
 // %include "pros_pci.h"
 // %include "pros_s.h"
 %include "smbesp.h"
+%include "smcore.h"
 %include "prospapi.h"
 #ifdef HAVE_FAX
 %include "actiff.h"
