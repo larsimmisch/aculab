@@ -90,7 +90,8 @@ class _CallEventDispatcher:
 
                 try:
                     mcall = getattr(call, ev, None)
-                    mcontroller = getattr(call.controller, ev, None)
+                    mcontroller = getattr(call.controllers[-1], ev, None)
+                    
 
                     # compute description of handlers
                     if mcontroller and mcall:
@@ -139,7 +140,8 @@ class CallHandle:
                  timeslot = None, dispatcher = CallDispatcher):
 
         self.user_data = user_data
-        self.controller = controller
+        # this is a stack of controllers
+        self.controllers = [controller]
         self.dispatcher = dispatcher
         self.port = port
 
@@ -166,6 +168,12 @@ class CallHandle:
         # no_state_change_events
         self.last_event = lowlevel.EV_IDLE
         self.last_extended_event = None
+
+    def push_controller(self, controller):
+        self.controllers.append(controller)
+
+    def pop_controller(self):
+        self.controllers.pop()
 
     def openin(self, unique_xparms = None, cnf = None):
         inparms = lowlevel.IN_XPARMS()
@@ -370,7 +378,8 @@ class CallHandle:
                               (output.ost, output.ots, source[0], source[1]),
                               self.handle)
 
-        log_switch.debug('%s %d:%d := %d:%d', self.name,
+        log_switch.debug('%s [%d] %d:%d := %d:%d', self.name,
+                         self.switch,
                          output.ost, output.ots,
                          output.ist, output.its)
 
@@ -396,7 +405,8 @@ class CallHandle:
                               (sink[0], sink[1], output.ist, output.its),
                               self.handle)
 
-        log_switch.debug('%s %d:%d := %d:%d', self.name,
+        log_switch.debug('%s [%d] %d:%d := %d:%d', self.name,
+                         self.switch,
                          output.ost, output.ots,
                          output.ist, output.its)
 
