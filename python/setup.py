@@ -64,30 +64,33 @@ class build_ext_swig_in_package(build_ext):
     def pre_swig_hook(self, sources, ext):
         """Extra hook to build cl_lib.h2 and sized_struct.i"""
 
-        self.spawn(['patch', '-o', 'cl_lib.h2',
-                    os.path.join(dtk, 'include', 'cl_lib.h'), 'cl_lib.patch'])
+        # crude detection of V5 vs v6
+        if os.path.exists(dtk + '/include/cl_lib.h'):
+            self.spawn(['patch', '-o', 'cl_lib.h2',
+                        os.path.join(dtk, 'include', 'cl_lib.h'),
+                        'cl_lib.patch'])
 
-        swig = self.swig or self.find_swig()
-        swig_cmd = [swig, '-xml', '-xmllite']
-        swig_cmd.extend(self.swig_opts)
+            swig = self.swig or self.find_swig()
+            swig_cmd = [swig, '-xml', '-xmllite']
+            swig_cmd.extend(self.swig_opts)
 
-        # Do not override commandline arguments
-        if not self.swig_opts:
-            for o in ext.swig_opts:
-                # More ugly hacks.
-                # Remove Python specific swig args
-                if not o in ['-modern', '-new_repr']:
-                    swig_cmd.append(o)
+            # Do not override commandline arguments
+            if not self.swig_opts:
+                for o in ext.swig_opts:
+                    # More ugly hacks.
+                    # Remove Python specific swig args
+                    if not o in ['-modern', '-new_repr']:
+                        swig_cmd.append(o)
 
-        self.spawn(swig_cmd + ['-o', 'lowlevel.xml', 'lowlevel.i'])
+            self.spawn(swig_cmd + ['-o', 'lowlevel.xml', 'lowlevel.i'])
 
-        of = open('sized_struct.i', 'w')
-        parser = xml.sax.make_parser()
-        handler = FindStruct(of)
+            of = open('sized_struct.i', 'w')
+            parser = xml.sax.make_parser()
+            handler = FindStruct(of)
 
-        parser.setContentHandler(handler)
-        parser.parse('lowlevel.xml')
-        of.close()
+            parser.setContentHandler(handler)
+            parser.parse('lowlevel.xml')
+            of.close()
 
     def swig_sources(self, sources, extension):
         """swig these days generates a shadow module, but distutils doesn't
