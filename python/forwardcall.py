@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+# Note: forwarding functionality is also in the answering machine now
+
 import sys
 import getopt
 from aculab.error import AculabError
@@ -65,7 +67,6 @@ def find_available_call(port, ts = None, exclude = None):
     return None
 
 class Forward:
-
     def __init__(self, incall):
         self.incall = incall
         self.outcall = None
