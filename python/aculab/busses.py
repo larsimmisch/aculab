@@ -49,16 +49,16 @@ class CTBusConnection:
 
         rc = lowlevel.sw_set_output(self.sw, output)
         if rc:
-            raise AculabError(rc, 'sw_set_output(%d:%d, %s, 0x%x)'
-                              % (self.ts[0], self.ts[1], mode_str(output.mode),
-                                 output.pattern))
+            raise AculabError(rc, 'sw_set_output(%d:%d, DISABLE_MODE)'
+                              % (self.ts[0], self.ts[1]))
 
         log.debug('%02d:%02d disabled' % self.ts)
 
         self.sw = None
+        self.ts = None
 
     def __del__(self):
-        if self.sw:
+        if self.ts:
             self.close()
 
     def __repr__(self):
@@ -66,20 +66,31 @@ class CTBusConnection:
 
 class NetConnection:
     """A connection to a network timeslot."""
-    def __init__(self, port, ts):
-        self.port = port
+    def __init__(self, sw, port, ts):
+        self.sw = sw
         self.ts = ts
+        self.port = port
 
     def close(self):
         """Disables a timeslot."""
+        output = lowlevel.OUTPUT_PARMS()
+        output.ost = self.ts[0]
+        output.ots = self.ts[1]
+        output.mode = lowlevel.PATTERN_MODE
 
-        rc = lowlevel.idle_net_ts(self.port, self.ts[1])
+        if lowlevel.call_line(self.port) == lowlevel.L_E1:
+            output.pattern = 0x55 # alaw silence
+        else:
+            output.pattern = 0xff # mulaw silence
+            
+        rc = lowlevel.sw_set_output(self.sw, output)
         if rc:
-            raise AculabError(rc, 'idle_net_ts(%d:%d)' % (self.ts[0],
-                                                          self.ts[1]))
+            raise AculabError(rc, 'sw_set_output(%d:%d, PATTERN_MODE, 0x%x)'
+                              % (self.ts[0], self.ts[1], output.pattern))
 
-        log.debug('%02d:%02d idle_net_ts', self.ts[0], self.ts[1])
-        
+        log.debug('%02d:%02d silenced' % self.ts)
+
+        self.sw = None
         self.port = None
         self.ts = None
 

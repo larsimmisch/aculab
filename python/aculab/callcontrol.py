@@ -382,7 +382,8 @@ class CallHandle:
                          output.ost, output.ots,
                          output.ist, output.its)
 
-        return NetConnection(self.port, (self.details.stream, self.details.ts))
+        return NetConnection(self.switch, self.port, (self.details.stream,
+                                                      self.details.ts))
 
     def speak_to(self, sink):
         """source is a tuple of (stream, timeslot).
@@ -563,6 +564,10 @@ class CallHandle:
     def ev_idle(self):
         self.get_feature_details(lowlevel.FEATURE_FACILITY)
         self.get_details()
+        # Assert idle pattern according to Q.522, section 2.12
+        rc = lowlevel.idle_net_ts(self.port, self.details.ts)
+        if rc:
+            raise AculabError(rc, 'idle_net_ts', self.handle)
         self.release()
 
 class Call(CallHandle):
