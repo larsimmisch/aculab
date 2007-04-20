@@ -18,8 +18,9 @@ class Connection:
         self.timeslots = []
 
     def close(self):
-        """Closes the endpoint connections and frees the timeslots."""
-        for c in self.connections:
+        """Closes the endpoint connections and frees the timeslots.
+        Connections are closed in reversed order to avoid clicks."""
+        for c in reversed(self.connections):
             c.close()
 
         self.connections = []
@@ -48,7 +49,9 @@ class CTBusConnection:
 
         rc = lowlevel.sw_set_output(self.sw, output)
         if rc:
-            raise AculabError(rc, 'sw_set_output')
+            raise AculabError(rc, 'sw_set_output(%d:%d, %s, 0x%x)'
+                              % (self.ts[0], self.ts[1], mode_str(output.mode),
+                                 output.pattern))
 
         log.debug('%02d:%02d disabled' % self.ts)
 
@@ -60,6 +63,32 @@ class CTBusConnection:
 
     def __repr__(self):
         return '<CTBusConnection [' + str(self.sw) + ', ' + str(self.ts) + ']>'
+
+class NetConnection:
+    """A connection to a network timeslot."""
+    def __init__(self, port, ts):
+        self.port = port
+        self.ts = ts
+
+    def close(self):
+        """Disables a timeslot."""
+
+        rc = lowlevel.idle_net_ts(self.port, self.ts[1])
+        if rc:
+            raise AculabError(rc, 'idle_net_ts(%d:%d)' % (self.ts[0],
+                                                          self.ts[1]))
+
+        log.debug('%02d:%02d idle_net_ts', self.ts[0], self.ts[1])
+        
+        self.port = None
+        self.ts = None
+
+    def __del__(self):
+        if self.ts:
+            self.close()
+
+    def __repr__(self):
+        return '<NetConnection [' + str(self.port) + ', ' + str(self.ts) + ']>'
 
 class CTBus(object):
     """Base class for an isochronous, multiplexed bus.

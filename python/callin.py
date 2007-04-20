@@ -43,7 +43,10 @@ class RepeatedIncomingCallController(IncomingCallController):
         call.openin()
 
 def usage():
-    print 'usage: callin.py [-n <numcalls>] [-c <card> ] [-p <port>] [-t <timeslot>] [-r]'
+    print '''usage: callin.py [-n <numcalls>] [-c <card> ] [-p <port>] [-t <timeslot>] [-r]
+
+    The options -t <timeslot> and -n <numcalls> conflict and can not be used at
+    the same time.'''
     sys.exit(-2)
 
 if __name__ == '__main__':
@@ -64,8 +67,12 @@ if __name__ == '__main__':
         elif o == '-p':
             port = int(a)
         elif o == '-n':
+            if timeslot is not None:
+                usage()
             numcalls = int(a)
         elif o == '-t':
+            if numcalls > 1:
+                usage()
             timeslot = int(a)
         elif o == '-r':
             controller = RepeatedIncomingCallController()

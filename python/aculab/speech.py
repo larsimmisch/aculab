@@ -1131,7 +1131,6 @@ class SpeechChannel(object):
         closed. File objects are recorded to and not rewound or closed at
         the end"""
 
-
         job = RecordJob(self, file, max_octets,
                         max_elapsed_time, max_silence, elimination,
                         agc, volume)

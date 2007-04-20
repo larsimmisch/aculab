@@ -3,7 +3,7 @@ import getopt
 import lowlevel
 import aculab
 import logging
-from busses import Connection, CTBusConnection, DefaultBus
+from busses import Connection, CTBusConnection, NetConnection, DefaultBus
 from error import AculabError
 from names import event_names
 
@@ -129,12 +129,11 @@ class _CallEventDispatcher:
 
 CallDispatcher = _CallEventDispatcher()
 
-# The CallHandle class models a call handle, as defined by the Aculab lowlevel,
-# and common operations on it. Some events are handled to maintain the 
-# internal state, but in general, event handling is delegated to the
-# controller.
-
 class CallHandle:
+    """The CallHandle class models a call handle, as defined by the Aculab
+    lowlevel, and common operations on it. Some events are handled to maintain
+    the internal state, but in general, event handling is delegated to the
+    controller."""
 
     def __init__(self, controller, user_data = None, card = 0, port = 0,
                  timeslot = None, dispatcher = CallDispatcher):
@@ -361,9 +360,9 @@ class CallHandle:
 
     def listen_to(self, source):
         """source is a tuple of (stream, timeslot).
-           Returns a CTBusConnection.
+           Returns a NetConnection.
            Do not discard the return value - it will dissolve
-           the connection when it's garbage collected"""
+           the connection when it is garbage collected"""
 
         output = lowlevel.OUTPUT_PARMS()
         output.ost = self.details.stream
@@ -383,8 +382,7 @@ class CallHandle:
                          output.ost, output.ots,
                          output.ist, output.its)
 
-        return CTBusConnection(self.switch,
-                               (self.details.stream, self.details.ts))
+        return NetConnection(self.port, (self.details.stream, self.details.ts))
 
     def speak_to(self, sink):
         """source is a tuple of (stream, timeslot).
@@ -419,7 +417,7 @@ class CallHandle:
             if self.switch == other.switch:
                 # connect directly
                 c.connections = [self.listen_to((other.details.stream,
-                                                 other.details.ts)),
+                                                   other.details.ts)),
                                  other.listen_to((self.details.stream,
                                                   self.details.ts))]
             else:
@@ -481,6 +479,7 @@ class CallHandle:
         return self.feature_details
 
     def accept(self):
+        """Accept the call."""
         rc = lowlevel.call_accept(self.handle)
         if rc:
             raise AculabError(rc, 'call_accept', self.handle)
@@ -488,6 +487,7 @@ class CallHandle:
         log.debug('%s accept()', self.name)
 
     def incoming_ringing(self):
+        """Signal incoming ringing."""
         rc = lowlevel.call_incoming_ringing(self.handle)
         if rc:
             raise AculabError(rc, 'call_incoming_ringing', self.handle)
@@ -495,7 +495,7 @@ class CallHandle:
         log.debug('%s incoming_ringing()', self.name)
 
     def disconnect(self, cause = None):
-        '''cause may be a CAUSE_XPARMS struct or an int'''
+        '''Disconnect a call. Cause may be a CAUSE_XPARMS struct or an int'''
         if cause is None:
             xcause = lowlevel.CAUSE_XPARMS()
             xcause.cause = lowlevel.LC_NORMAL
@@ -515,7 +515,7 @@ class CallHandle:
         log.debug('%s disconnect(%d)', self.name, xcause.cause)
 
     def release(self, cause = None):
-        '''cause may be a CAUSE_XPARMS struct or an int'''
+        '''Release a call. Cause may be a CAUSE_XPARMS struct or an int'''
 
         self.dispatcher.remove(self)
 
@@ -566,6 +566,7 @@ class CallHandle:
         self.release()
 
 class Call(CallHandle):
+    """A Call is a CallHandle that does an automatic openin upon creation."""
 
     def __init__(self, controller, user_data = None, card = 0, port = 0,
                  timeslot = -1, dispatcher = CallDispatcher):

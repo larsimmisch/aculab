@@ -65,7 +65,7 @@ def defaultLogging(level = logging.WARNING, logfile = None):
     log = logging.getLogger('')
     log.setLevel(level)
     log_formatter = logging.Formatter(
-        '%(asctime)s %(name)s %(levelname)-5s %(message)s')
+        '%(asctime)s %(levelname)-5s %(name)s %(message)s')
     if logfile is None:
         hdlr = logging.StreamHandler()
         hdlr.setFormatter(log_formatter)

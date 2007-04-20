@@ -23,7 +23,10 @@ class AculabError(Exception):
             desc = desc + str(rc)
             
         self.desc = desc
-        
+
+    def __repr__(self):
+        return self.desc
+
     def __str__(self):
         return self.desc
 
