@@ -1,23 +1,31 @@
---- /usr/local/aculab/v6/include/cl_lib.h	2006-05-29 15:08:16.000000000 +0200
-+++ cl_lib.h2	2006-07-11 13:32:01.000000000 +0200
-@@ -16,16 +16,10 @@
+--- /usr/local/aculab/v6/include/cl_lib.h	2007-04-23 16:47:54.000000000 +0200
++++ cl_lib.h2	2007-05-10 17:15:57.000000000 +0200
+@@ -16,21 +16,13 @@
  
  #include "acu_type.h"
  
 -#ifndef ACU_LINUX
 -#ifndef ACU_SOLARIS_SPARC
+-#ifndef ACU_QNX
 -# pragma pack (push, 1 )
 -# define ACU_PACK_DIRECTIVE
+-#else
+-# define ACU_PACK_DIRECTIVE __attribute__ ((packed))
+-#endif
 -#else
 -# define ACU_PACK_DIRECTIVE
 -#endif /* ACU_SOLARIS_SPARC */
 -#else
 -# define ACU_PACK_DIRECTIVE __attribute__ ((packed))
 -#endif /* ACU_LINUX */
+-	
++/* <Lars: SWIG workarounds> */
 +#define ACU_EXPORT
 +#define ACU_PACK_DIRECTIVE
 +#define ACU_DEPRECATE_PRE
 +#define ACU_DEPRECATE_POST
- 	
++/* </Lars: SWIG workarounds> */
++
  enum
  {
+ 	/*---- system configuration information ----*/
