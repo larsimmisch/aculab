@@ -1,4 +1,4 @@
-%module lowlevel
+%module(docstring="The Aculab API as seen by SWIG.") lowlevel
 %{
 #ifdef TiNG_USE_V6
 #include "cl_lib.h"

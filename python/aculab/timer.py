@@ -43,7 +43,8 @@ class TimerThread(threading.Thread):
         return t
         
     def cancel(self, timer):
-        '''cancel a timer. Cancelling an expired timer raises a ValueError'''
+        '''Cancel a timer.
+        Cancelling an expired timer raises a ValueError'''
         self.mutex.acquire()
 
         # if the deleted timer was the next, wake up the timer thread to
@@ -58,6 +59,8 @@ class TimerThread(threading.Thread):
             self.event.set()
             
     def run(self):
+        '''Run the Timer in the current thread.
+        If you want to run the Timer in its own thread, call start()'''
         while True:
             self.mutex.acquire()
             if self.timers:

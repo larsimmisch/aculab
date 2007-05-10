@@ -1,3 +1,5 @@
+"""FAX Job classes for the SpeechChannel."""
+
 import sys
 import os
 import time

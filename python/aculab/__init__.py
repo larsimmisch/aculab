@@ -1,3 +1,5 @@
+"""Event driven, MVC inspired Python wrapper around the Aculab API."""
+
 import logging
 import logging.handlers
 
@@ -61,6 +63,10 @@ def daemonize(stdout='/dev/null', stderr=None, stdin='/dev/null',
     os.dup2(se.fileno(), sys.stderr.fileno())
 
 def defaultLogging(level = logging.WARNING, logfile = None):
+    """Establish default logging as used by the example scripts.
+
+    If logfile is None (the default), log to stdout.
+    Read the source for details."""
 
     log = logging.getLogger('')
     log.setLevel(level)

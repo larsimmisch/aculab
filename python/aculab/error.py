@@ -1,7 +1,21 @@
+"""Exception classes for the Aculab API.
+
+Job termination reasons are also modelled as exceptions.
+This is stretching the concept 'exception' a little, because some
+are perfectly normal and to be expected.
+
+But since exeptions due to an error may also occur, this seems better than to
+create a distinction between expected causes and unexpected ones -
+in particular because the distinction is arbitrary in some cases.
+
+See StopIteration for a precedent.
+"""
+
 from names import error_names, sm_error_names, fax_error_names
 
 class AculabError(Exception):
-
+    """Call Control exception. The error code is stored in value."""
+    
     def __init__(self, rc, function = '', handle = None):
         self.handle = handle
         self.value = rc
@@ -31,7 +45,8 @@ class AculabError(Exception):
         return self.desc
 
 class AculabSpeechError(AculabError):
-
+    """Prosody exception. The error code is stored in value."""
+    
     def __init__(self, rc, function = ''):
         if rc in sm_error_names.keys():
             self.value = rc
@@ -46,6 +61,7 @@ class AculabSpeechError(AculabError):
                 self.desc = 'unknown error: ' + str(rc)
             
 class AculabFAXError(AculabError):
+    """FAX exception. The error code is stored in value."""
 
     def __init__(self, rc, function = ''):
         if rc in fax_error_names.keys():
@@ -60,17 +76,9 @@ class AculabFAXError(AculabError):
             else:
                 self.desc = 'unknown error: ' + str(rc)
 
-# Reasons for termination. These are modelled as exceptions.
-# This is stretching the concept 'exception' a little, because some
-# are perfectly normal and to be expected.
-
-# But since actual exeptions may also occur, this seems better than to
-# create a distinction between expected causes and unexpected ones -
-# in particular because the distinction is arbitrary in some cases.
-
-# See also StopIteration for precedent.
-
 class AculabStopped(Exception):
+    """Termination reason: stopped."""
+    
     def __str__(self):
         return self.__repr__()
 
@@ -78,6 +86,7 @@ class AculabStopped(Exception):
         return 'stopped'
 
 class AculabClosed(Exception):
+    """Termination reason: closed."""
     def __str__(self):
         return self.__repr__()
 
@@ -85,6 +94,8 @@ class AculabClosed(Exception):
         return 'closed'
 
 class AculabSilence(Exception):
+    """Termination reason: silence."""
+    
     def __init__(self, silence = None):
         Exception.__init__(self)
         self.silence = silence
@@ -99,5 +110,7 @@ class AculabSilence(Exception):
             return 'silence'
 
 class AculabTimeout(Exception):
+    """Termination reason: timeout."""
+
     def __repr__(self):
         return 'timeout'

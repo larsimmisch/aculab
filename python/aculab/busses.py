@@ -1,3 +1,5 @@
+'''CT busses, and various types of connections.'''
+
 import sys
 import lowlevel
 import logging
@@ -6,7 +8,12 @@ from error import AculabError
 log = logging.getLogger('switch')
 
 class Connection:
-    """A connection across a bus"""
+    """A container for simplex connections and bus timeslots.
+
+    Used internally. Relevant members are timeslots and connections.
+
+    This class takes care of closing the contained connections and bus
+    timeslots in the proper order upon destruction."""
 
     def __init__(self, bus):
         """If bus is None, the default bus is used."""
@@ -18,7 +25,7 @@ class Connection:
         self.timeslots = []
 
     def close(self):
-        """Closes the endpoint connections and frees the timeslots.
+        """Closes the contained connections and frees the timeslots.
         Connections are closed in reversed order to avoid clicks."""
         for c in reversed(self.connections):
             c.close()
@@ -35,7 +42,7 @@ class Connection:
             self.close()
 
 class CTBusConnection:
-
+    """A simplex connection across a bus."""
     def __init__(self, sw, ts):
         self.sw = sw
         self.ts = ts
@@ -66,6 +73,7 @@ class CTBusConnection:
 
 class NetConnection:
     """A connection to a network timeslot."""
+    
     def __init__(self, sw, port, ts):
         self.sw = sw
         self.ts = ts
@@ -155,7 +163,8 @@ class MVIP(CTBus):
     attempted to simplify things by treating 'trunk' and 'resource' cards
     differently with regards to the stream numbering.
 
-    Applications need to be aware of this difference. Caveat implementor.
+    Applications need to be aware of this difference. Don't use this unless
+    you have to. Caveat implementor.
     """
 
     def __init__(self):
@@ -195,8 +204,7 @@ class H100(CTBus):
 _DefaultBus = None
 
 def DefaultBus():
-    """Returns the same instance of a CTbus subclass on every call
-    (like a singleton).
+    """Singleton: Return the sanest bus supported by the hardware.
 
     If more than one bus type is supported by all cards, and a single bus type
     cannot be deduced otherwise, the order of preference is:

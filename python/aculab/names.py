@@ -1,3 +1,13 @@
+"""Map constant values to names.
+
+Available dictionaries are:
+
+event_names
+sm_error_names
+error_names
+fax_error_names
+"""
+
 import re
 import lowlevel
 

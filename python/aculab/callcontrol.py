@@ -1,3 +1,8 @@
+'''Call Control - a thin layer on top of the Aculab API.
+
+Terminology: a call in this module should rather be called a call leg.
+'''
+
 import sys
 import getopt
 import lowlevel
@@ -130,10 +135,10 @@ class _CallEventDispatcher:
 CallDispatcher = _CallEventDispatcher()
 
 class CallHandle:
-    """The CallHandle class models a call handle, as defined by the Aculab
-    lowlevel, and common operations on it. Some events are handled to maintain
-    the internal state, but in general, event handling is delegated to the
-    controller."""
+    """An Aculab call handle, and common operations on it.
+
+    Some events are handled to maintain the internal state, but in general,
+    event handling is delegated to the controller."""
 
     def __init__(self, controller, user_data = None, card = 0, port = 0,
                  timeslot = None, dispatcher = CallDispatcher):
@@ -496,7 +501,7 @@ class CallHandle:
         log.debug('%s incoming_ringing()', self.name)
 
     def disconnect(self, cause = None):
-        '''Disconnect a call. Cause may be a CAUSE_XPARMS struct or an int'''
+        """Disconnect a call. Cause may be a CAUSE_XPARMS struct or an int"""
         if cause is None:
             xcause = lowlevel.CAUSE_XPARMS()
             xcause.cause = lowlevel.LC_NORMAL
@@ -516,7 +521,7 @@ class CallHandle:
         log.debug('%s disconnect(%d)', self.name, xcause.cause)
 
     def release(self, cause = None):
-        '''Release a call. Cause may be a CAUSE_XPARMS struct or an int'''
+        """Release a call. Cause may be a CAUSE_XPARMS struct or an int"""
 
         self.dispatcher.remove(self)
 

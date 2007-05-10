@@ -1,3 +1,5 @@
+"""A snapshot of all available cards, ports and modules (v6 API and later)."""
+
 from pprint import PrettyPrinter
 import lowlevel
 from busses import ProsodyLocalBus

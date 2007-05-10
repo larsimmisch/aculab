@@ -1,3 +1,16 @@
+"""Higher level speech processing functions.
+
+This module contains the SpeechChannel, which is a full duplex prosody channel,
+and higher level speech processing functions.
+
+These higher level speech processing functions are internally represented as
+jobs, but the job can be used explicitly to create, store or retrieve speech
+operations.
+
+The design goal is to encapsulate every speech operation as a job.
+The only exception is DTMF recognition: this is always active and not
+represented by a job."""
+
 import sys
 import os
 import time
@@ -36,9 +49,16 @@ def swig_value(s):
     return s            
 
 class Glue(object):
-    '''Create a SpeechChannel and glue it to a call.'''
+    """Glue logic to tie a SpeechChannel to a Call.
+
+    This class is meant to be a base-class for the data of a single call
+    with a Prosody channel for speech processing.
+
+    It will allocate a SpeechChannel upon creation and connect it to the call.
+    When deleted, it will close and disconnect the SpeechChannel."""
     
     def __init__(self, controller, module, call):
+        """Allocate a speech channel on module and connect it to the call."""
         self.call = call
         # initialize to None in case an exception is raised
         self.speech = None
@@ -51,6 +71,9 @@ class Glue(object):
         self.close()
 
     def close(self):
+        """Disconnect and close the SpeechChannel.
+        This is called implicitly by __del__, but can be called
+        independently"""
         if self.connection:
             self.connection.close()
             self.connection = None
@@ -60,7 +83,7 @@ class Glue(object):
             
 # this class is only needed on Windows
 class Win32DispatcherThread(threading.Thread):
-    """Helper class for Win32SpeechEventDispatcher.
+    """Helper thread for Win32SpeechEventDispatcher.
     
     WaitForMultipleObjects is limited to 64 objects,
     so multiple dispatcher threads are needed."""
@@ -78,6 +101,9 @@ class Win32DispatcherThread(threading.Thread):
         threading.Thread.__init__(self)
 
     def update(self):
+        """Used internally.
+        
+        Update the internal list of objects to wait for."""
         self.mutex.acquire()
         try:
             while self.queue:
@@ -130,7 +156,10 @@ class Win32DispatcherThread(threading.Thread):
                           exc_info=1)
         
 class Win32SpeechEventDispatcher(object):
-    """Prosody Event dispatcher for Windows."""
+    """Prosody Event dispatcher for Windows.
+
+    Manages multiple threads if more than 64 event handles are used.
+    Each SpeechChannel uses 3 event handles, so this happens quickly."""
 
     def __init__(self):
         self.mutex = threading.Lock()
@@ -138,6 +167,8 @@ class Win32SpeechEventDispatcher(object):
         self.running = False
         
     def add(self, handle, method):
+        """Add a new handle to the dispatcher. method will be called when the
+        event is fired."""
         self.mutex.acquire()
         try:
             for d in self.dispatchers:
@@ -157,6 +188,7 @@ class Win32SpeechEventDispatcher(object):
             self.mutex.release()
 
     def remove(self, handle):
+        """Remove a handle from the dispatcher."""
         self.mutex.acquire()
         try:
             for d in self.dispatchers:
@@ -207,7 +239,10 @@ class PollSpeechEventDispatcher(threading.Thread):
         self.poll.register(self.pipe[0], select.POLLIN)
         
     def add(self, handle, method):
-        "blocks until handle is added by dispatcher thread"
+        """Add a new handle to the dispatcher. method will be called when the
+        event is fired.
+        
+        This method blocks until handle is added by dispatcher thread"""
         h = handle.fd
         if threading.currentThread() == self or not self.isAlive():
             # log.debug('adding fd : %d %s', h, method)
@@ -225,7 +260,9 @@ class PollSpeechEventDispatcher(threading.Thread):
             event.wait()
 
     def remove(self, handle):
-        "blocks until handle is removed by dispatcher thread"
+        """Remove a handle from the dispatcher.
+        
+        This method blocks until handle is removed by the dispatcher thread."""
         h = handle.fd
         if threading.currentThread() == self or not self.isAlive():
             # log.debug('removing fd: %d', h)
@@ -243,7 +280,7 @@ class PollSpeechEventDispatcher(threading.Thread):
             event.wait()
 
     def run(self):
-        
+        'Run the dispatcher.'
         while True:
             try:
                 active = self.poll.poll()
@@ -288,9 +325,13 @@ else:
     SpeechDispatcher = PollSpeechEventDispatcher()
 
 class PlayJob(object):
+    """A Play job plays an entire file through its SpeechChannel."""
 
     def __init__(self, channel, f, agc = 0,
                  speed = 0, volume = 0):
+        """Create a PlayJob.
+        """
+        
         self.channel = channel
         self.position = 0.0
         self.agc = agc
@@ -371,7 +412,7 @@ class PlayJob(object):
         self.channel.job_done(self, 'play_done', reason, self.duration, f)
 
     def fill_play_buffer(self):
-        '''Return True if completed'''
+        """Return True if completed"""
         status = lowlevel.SM_REPLAY_STATUS_PARMS()
 
         while True:
@@ -654,7 +695,7 @@ class DCReadJob(object):
     def __init__(self, channel, cmd, min_to_collect, min_idle = 0,
                  blocking = 0):
 
-        '''Arguments are mostly from dc_rx_control'''
+        """Arguments are mostly from dc_rx_control"""
         self.channel = channel
         self.cmd = cmd
         self.min_to_collect = min_to_collect
