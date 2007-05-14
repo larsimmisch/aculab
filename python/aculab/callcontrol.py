@@ -8,7 +8,7 @@ import getopt
 import lowlevel
 import aculab
 import logging
-from busses import Connection, CTBusConnection, NetConnection, DefaultBus
+from busses import Connection, CTBusEndpoint, NetEndpoint, DefaultBus
 from error import AculabError
 from names import event_names
 
@@ -365,7 +365,7 @@ class CallHandle:
 
     def listen_to(self, source):
         """source is a tuple of (stream, timeslot).
-           Returns a NetConnection.
+           Returns a NetEndpoint.
            Do not discard the return value - it will dissolve
            the connection when it is garbage collected"""
 
@@ -387,12 +387,12 @@ class CallHandle:
                          output.ost, output.ots,
                          output.ist, output.its)
 
-        return NetConnection(self.switch, self.port, (self.details.stream,
-                                                      self.details.ts))
+        return NetEndpoint(self.switch, self.port, (self.details.stream,
+                                                    self.details.ts))
 
     def speak_to(self, sink):
         """source is a tuple of (stream, timeslot).
-           Returns a CTBusConnection.
+           Returns a CTBusEndpoint.
            Do not discard the return value - it will dissolve
            the connection when it's garbage collected"""
 
@@ -414,7 +414,7 @@ class CallHandle:
                          output.ost, output.ots,
                          output.ist, output.its)
 
-        return CTBusConnection(self.switch, sink)
+        return CTBusEndpoint(self.switch, sink)
 
     def connect(self, other, bus = DefaultBus()):
         c = Connection(bus)
@@ -422,35 +422,35 @@ class CallHandle:
             # other is a CallHandle (or subclass)
             if self.switch == other.switch:
                 # connect directly
-                c.connections = [self.listen_to((other.details.stream,
-                                                   other.details.ts)),
-                                 other.listen_to((self.details.stream,
-                                                  self.details.ts))]
+                c.endpoints = [self.listen_to((other.details.stream,
+                                               other.details.ts)),
+                               other.listen_to((self.details.stream,
+                                                self.details.ts))]
             else:
                 # allocate two timeslots
                 c.timeslots = [ bus.allocate(), bus.allocate() ]
-                # make connections
-                c.connections = [ other.speak_to(c.timeslots[0]),
-                                  self.listen_to(c.timeslots[0]),
-                                  self.speak_to(c.timeslots[1]),
-                                  other.listen_to(c.timeslots[1]) ]
+                # make endpoints
+                c.endpoints = [ other.speak_to(c.timeslots[0]),
+                                self.listen_to(c.timeslots[0]),
+                                self.speak_to(c.timeslots[1]),
+                                other.listen_to(c.timeslots[1]) ]
         
         else:
             # other is a SpeechChannel (or subclass)
             if self.switch == other.info.card:
                 # connect directly
-                c.connections = [self.listen_to((other.info.ost,
-                                                 other.info.ots)),
-                                 other.listen_to((self.details.stream,
-                                                  self.details.ts))]
+                c.endpoints = [self.listen_to((other.info.ost,
+                                               other.info.ots)),
+                               other.listen_to((self.details.stream,
+                                                self.details.ts))]
             else:
                 # allocate two timeslots
                 c.timeslots = [ bus.allocate(), bus.allocate() ]
-                # make connections
-                c.connections = [ other.speak_to(c.timeslots[0]),
-                                  self.listen_to(c.timeslots[0]),
-                                  self.speak_to(c.timeslots[1]),
-                                  other.listen_to(c.timeslots[1]) ]
+                # make endpoints
+                c.endpoints = [ other.speak_to(c.timeslots[0]),
+                                self.listen_to(c.timeslots[0]),
+                                self.speak_to(c.timeslots[1]),
+                                other.listen_to(c.timeslots[1]) ]
 
         return c
 

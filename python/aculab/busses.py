@@ -8,11 +8,11 @@ from error import AculabError
 log = logging.getLogger('switch')
 
 class Connection:
-    """A container for simplex connections and bus timeslots.
+    """A connection between two resources.
 
-    Used internally. Relevant members are timeslots and connections.
-
-    This class takes care of closing the contained connections and bus
+    A connection consists of endpoints and timeslots.
+    
+    This class takes care of closing the contained connectionsendpoints and bus
     timeslots in the proper order upon destruction."""
 
     def __init__(self, bus):
@@ -21,16 +21,16 @@ class Connection:
             self.bus = DefaultBus()
         else:
             self.bus = bus
-        self.connections = []
+        self.endpoints = []
         self.timeslots = []
 
     def close(self):
-        """Closes the contained connections and frees the timeslots.
-        Connections are closed in reversed order to avoid clicks."""
-        for c in reversed(self.connections):
+        """Closes the contained endpoints and frees the timeslots.
+        Endpoints are closed in reversed order to avoid clicks."""
+        for c in reversed(self.endpoints):
             c.close()
 
-        self.connections = []
+        self.endpoints = []
 
         for t in self.timeslots:
             self.bus.free(t)
@@ -38,11 +38,11 @@ class Connection:
         self.timeslots = []
 
     def __del__(self):
-        if self.connections or self.timeslots:
+        if self.endpoints or self.timeslots:
             self.close()
 
-class CTBusConnection:
-    """A simplex connection across a bus."""
+class CTBusEndpoint:
+    """An endpoint of a L{Connection} on a bus."""
     def __init__(self, sw, ts):
         self.sw = sw
         self.ts = ts
@@ -69,10 +69,10 @@ class CTBusConnection:
             self.close()
 
     def __repr__(self):
-        return '<CTBusConnection [' + str(self.sw) + ', ' + str(self.ts) + ']>'
+        return '<CTBusEndpoint [' + str(self.sw) + ', ' + str(self.ts) + ']>'
 
-class NetConnection:
-    """A connection to a network timeslot."""
+class NetEndpoint:
+    """An endpoint of a network timeslot."""
     
     def __init__(self, sw, port, ts):
         self.sw = sw
@@ -107,7 +107,7 @@ class NetConnection:
             self.close()
 
     def __repr__(self):
-        return '<NetConnection [' + str(self.port) + ', ' + str(self.ts) + ']>'
+        return '<NetEndpoint [' + str(self.port) + ', ' + str(self.ts) + ']>'
 
 class CTBus(object):
     """Base class for an isochronous, multiplexed bus.
@@ -122,10 +122,10 @@ class CTBus(object):
         self.slots.append(slot)
 
     def listen_to(self, switch, sink, source):
-        """sink and source are tuples of timeslots.
-           and returns a CTBusConnection.
-           Do not discard the return value - it will dissolve
-           the connection when it's garbage collected."""
+        """sink and source are tuples of (stream, timeslots).
+        returns a CTBusEndpoint.
+        Do not discard the return value - it will disconnect the endpoint
+        when it is garbage collected."""
 
         output = lowlevel.OUTPUT_PARMS()
         output.ost = sink[0]
@@ -138,7 +138,7 @@ class CTBus(object):
         if rc:
             raise AculabError(rc, 'sw_set_output')
 
-        return CTBusConnection(switch, sink)
+        return CTBusEndpoint(switch, sink)
 
 class ProsodyLocalBus(CTBus):
     """An instance of this class represents the timeslots on
@@ -205,13 +205,13 @@ _DefaultBus = None
 
 def DefaultBus():
     """Singleton: Return the sanest bus supported by the hardware.
-
-    If more than one bus type is supported by all cards, and a single bus type
-    cannot be deduced otherwise, the order of preference is:
-
+    
+    If more than one bus type is supported by all cards, the order of
+    preference is:
     - H100
     - SCBus
-    - MVIP"""
+    - MVIP
+    """
 
     global _DefaultBus
 

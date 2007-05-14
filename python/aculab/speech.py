@@ -18,7 +18,7 @@ import threading
 import logging
 import lowlevel
 import names
-from busses import Connection, CTBusConnection, DefaultBus
+from busses import Connection, CTBusEndpoint, DefaultBus
 from error import *
 
 if os.name == 'nt':
@@ -29,7 +29,7 @@ else:
     import select
 
 __all__ = ['SpeechDispatcher', 'PlayJob', 'RecordJob', 'DigitsJob',
-           'SpeechConnection', 'SpeechChannel', 'version']
+           'SpeechEndpoint', 'SpeechChannel', 'version']
 
 log = logging.getLogger('speech')
 log_switch = logging.getLogger('switch')
@@ -54,11 +54,18 @@ class Glue(object):
     This class is meant to be a base-class for the data of a single call
     with a Prosody channel for speech processing.
 
-    It will allocate a SpeechChannel upon creation and connect it to the call.
-    When deleted, it will close and disconnect the SpeechChannel."""
+    It will allocate a I{SpeechChannel} upon creation and connect it to the
+    call.
+    When deleted, it will close and disconnect the I{SpeechChannel}."""
     
     def __init__(self, controller, module, call):
-        """Allocate a speech channel on module and connect it to the call."""
+        """Allocate a speech channel on module and connect it to the call.
+
+        @param controller: The controller will be passed to the SpeechChannel
+        @param module: The module to open the SpeechChannel on. May be either
+            a C{tSMModuleId} or an offset.
+        @param call: The call that the SpeechChannel will be connected to."""
+        
         self.call = call
         # initialize to None in case an exception is raised
         self.speech = None
@@ -89,6 +96,7 @@ class Win32DispatcherThread(threading.Thread):
     so multiple dispatcher threads are needed."""
 
     def __init__(self, mutex, handle = None, method = None):
+        """Create a Win32DisptacherThread."""
         self.queue = []
         self.wakeup = win32event.CreateEvent(None, 0, 0, None)
         self.mutex = mutex
@@ -121,6 +129,9 @@ class Win32DispatcherThread(threading.Thread):
         return self.handles.keys()
 
     def run(self):
+        """The Win32DispatcherThread run loop. Should not be called
+        directly."""
+        
         handles = self.handles.keys()
 
         while handles:
@@ -158,7 +169,7 @@ class Win32DispatcherThread(threading.Thread):
 class Win32SpeechEventDispatcher(object):
     """Prosody Event dispatcher for Windows.
 
-    Manages multiple threads if more than 64 event handles are used.
+    Manages multiple dispatcher threads if more than 64 event handles are used.
     Each SpeechChannel uses 3 event handles, so this happens quickly."""
 
     def __init__(self):
@@ -167,8 +178,10 @@ class Win32SpeechEventDispatcher(object):
         self.running = False
         
     def add(self, handle, method):
-        """Add a new handle to the dispatcher. method will be called when the
-        event is fired."""
+        """Add a new handle to the dispatcher.
+
+        @param handle: The handle of the Event to watch.
+        @param method: This will be called when the event is fired."""
         self.mutex.acquire()
         try:
             for d in self.dispatchers:
@@ -188,7 +201,10 @@ class Win32SpeechEventDispatcher(object):
             self.mutex.release()
 
     def remove(self, handle):
-        """Remove a handle from the dispatcher."""
+        """Remove a handle from the dispatcher.
+
+        @param handle: The handle of the Event to watch."""
+        
         self.mutex.acquire()
         try:
             for d in self.dispatchers:
@@ -199,6 +215,8 @@ class Win32SpeechEventDispatcher(object):
             self.mutex.release()
 
     def start(self):
+        """Start the dispatcher in a separate thread."""
+        
         if not self.dispatchers:
             self.dispatchers.append(Win32DispatcherThread(self.mutex))
 
@@ -209,6 +227,8 @@ class Win32SpeechEventDispatcher(object):
             d.start()
 
     def run(self):
+        """Run the dispatcher in the current thread."""
+        
         if not self.dispatchers:
             self.dispatchers.append(Win32DispatcherThread(self.mutex))
 
@@ -224,6 +244,7 @@ class PollSpeechEventDispatcher(threading.Thread):
     Linux."""
 
     def __init__(self):
+        """Create a dispatcher."""
         threading.Thread.__init__(self)
         self.handles = {}
         self.mutex = threading.Lock()
@@ -239,10 +260,13 @@ class PollSpeechEventDispatcher(threading.Thread):
         self.poll.register(self.pipe[0], select.POLLIN)
         
     def add(self, handle, method):
-        """Add a new handle to the dispatcher. method will be called when the
-        event is fired.
+        """Add a new handle to the dispatcher.
+
+        @param handle: Typically the C{tSMEventId} associated with the
+            event, but any object with an C{fd} attribute will work also.
+        @param method: This will be called when the event is fired.
         
-        This method blocks until handle is added by dispatcher thread"""
+        add blocks until handle is added by dispatcher thread"""
         h = handle.fd
         if threading.currentThread() == self or not self.isAlive():
             # log.debug('adding fd : %d %s', h, method)
@@ -261,6 +285,9 @@ class PollSpeechEventDispatcher(threading.Thread):
 
     def remove(self, handle):
         """Remove a handle from the dispatcher.
+
+        @param handle: Typically the C{tSMEventId} associated with the
+        event, but any object with an C{fd} attribute will work also.
         
         This method blocks until handle is removed by the dispatcher thread."""
         h = handle.fd
@@ -325,11 +352,25 @@ else:
     SpeechDispatcher = PollSpeechEventDispatcher()
 
 class PlayJob(object):
-    """A Play job plays an entire file through its SpeechChannel."""
+    """A PlayJob plays a file through its L{SpeechChannel}."""
 
     def __init__(self, channel, f, agc = 0,
                  speed = 0, volume = 0):
         """Create a PlayJob.
+
+        For an in-depth description of parameters, see U{sm_replay_start
+        <http://www.aculab.com/support/TiNG/gen/apifn-sm_replay_start.html>}.
+
+        @param channel: The L{SpeechChannel} that will play the file.
+        @param f: Either a filename (string) or a file descriptor.
+        If a string is passed in, the associated file will be opened for
+        playing and closed upon completion.
+        If a fd is passed in, the file will be left open and not be reset
+        to the beginning.
+        @param agc: A nonzero value activates automatic gain control
+        @param speed: The speed for used for replaying in percent. 0 is the
+        same as 100: normal speed.
+        @param volume: The volume adjustment in db.
         """
         
         self.channel = channel
@@ -354,7 +395,11 @@ class PlayJob(object):
         self.file.seek(0, 0)
         
     def start(self):
-        'Do not call this method directly - call SpeechChannel.start instead'
+        """Start the playback.
+
+        I{Do not call this method directly - call SpeechChannel.start instead}
+        """
+        
         replay = lowlevel.SM_REPLAY_PARMS()
         replay.channel = self.channel.channel
         replay.agc = self.agc
@@ -383,6 +428,8 @@ class PlayJob(object):
         return self
 
     def done(self):
+        """I{Used internall} upon completion."""
+        
         # remove the write event from the dispatcher
         if self.dispatcher:
             self.dispatcher.remove(self.channel.event_write)
@@ -412,7 +459,10 @@ class PlayJob(object):
         self.channel.job_done(self, 'play_done', reason, self.duration, f)
 
     def fill_play_buffer(self):
-        """Return True if completed"""
+        """I{Used internally} to fill the play buffers on the board.
+        
+        @returns: True if completed"""
+        
         status = lowlevel.SM_REPLAY_STATUS_PARMS()
 
         while True:
@@ -441,6 +491,9 @@ class PlayJob(object):
                     raise AculabSpeechError(rc, 'sm_put_replay_data')
 
     def stop(self):
+        """Stop a PlayJob. The internal position will be updated based upon
+        the information available from the drivers."""
+
         stop = lowlevel.SM_REPLAY_ABORT_PARMS()
         stop.channel = self.channel.channel
         rc = lowlevel.sm_replay_abort(stop)
@@ -454,10 +507,28 @@ class PlayJob(object):
         log.debug('%s play_stop()', self.channel.name)
 
 class RecordJob(object):
+    """A RecordJob records a file through its L{SpeechChannel}."""
     
     def __init__(self, channel, f, max_octets = 0,
                  max_elapsed_time = 0.0, max_silence = 0.0, elimination = 0,
                  agc = 0, volume = 0):
+        """Create a RecordJob. The recording will be in alaw, 8kHz.
+
+        For an in-depth description of parameters, see U{sm_record_start
+        <http://www.aculab.com/support/TiNG/gen/apifn-sm_record_start.html>}.
+
+        @param channel: The SpeechChannel that will do the recording.
+        @param f: Either a string (filename) or a fd for the file.
+        If a string is passed in, the associated file will be opened for
+        recording and closed upon completion. If a fd is passed in,
+        the file will be left open and not be reset to the beginning.
+        @param max_octets: Maximum length of the recording (in bytes)
+        @param max_silence: Maximum length of silence in seconds, before the
+        recording is terminated.
+        @param elimination: Activates silence elimination of not zero.
+        @param agc: Nonzero values activate Automatic Gain Control        
+        @param volume: The volume adjustment in db.
+        """
 
         self.channel = channel
         # f may be a string - if it is, close self.file in done
@@ -484,7 +555,10 @@ class RecordJob(object):
         self.reason = None
 
     def start(self):
-        'Do not call this method directly - call SpeechChannel.start instead'
+        """Start the recording.
+
+        I{Do not call this method directly - call SpeechChannel.start instead}
+        """
         
         record = lowlevel.SM_RECORD_PARMS()
         record.channel = self.channel.channel
@@ -511,6 +585,8 @@ class RecordJob(object):
         self.channel.dispatcher.add(self.channel.event_read, self.on_read)
 
     def done(self):                
+        """Called internally upon completion."""
+        
         # remove the read event from the dispatcher
         self.channel.dispatcher.remove(self.channel.event_read)
 
@@ -529,6 +605,8 @@ class RecordJob(object):
         channel.job_done(self, 'record_done', self.reason, self.duration, f)
     
     def on_read(self):
+        """Used internally, called whenever recorded data is available."""
+        
         status = lowlevel.SM_RECORD_STATUS_PARMS()
 
         while True:
@@ -598,6 +676,8 @@ class RecordJob(object):
                 self.file.write(self.buffer[:l])
 
     def stop(self):
+        """Stop the recording."""
+        
         abort = lowlevel.SM_RECORD_ABORT_PARMS()
         abort.channel = self.channel.channel
         rc = lowlevel.sm_record_abort(abort)
@@ -607,9 +687,19 @@ class RecordJob(object):
         log.debug('%s record_stop()', self.channel.name)
 
 class DigitsJob(object):
+    """Job to play a string of DTMF digits."""
     
     def __init__(self, channel, digits, inter_digit_delay = 0,
                  digit_duration = 0):
+        """Prepare to play a string of DTMF digits.
+
+        @param digits: String of DTMF Digits A digit can be from 0-9, A-D, *
+        and #.
+        @param inter_digit_delay: Delay between digits in B{milliseconds}. Zero
+        for the default value (exact value unknown).
+        @param digit_duration: Duration of each digit in B{milliseconds}. Zero
+        for the default value (exact value unknown)."""
+        
         self.channel = channel
         self.digits = digits
         self.inter_digit_delay = inter_digit_delay
@@ -745,7 +835,8 @@ class DCReadJob(object):
 
         channel.job_done(self, 'dc_read_done', f, reason, pos)
 
-class SpeechConnection(object):    
+class SpeechEndpoint(object):
+    
     def __init__(self, channel, direction):
         self.channel = channel
         self.direction = direction
@@ -778,7 +869,7 @@ class SpeechConnection(object):
         self.close()
 
 class SpeechChannel(object):
-    """A full duplex Prosody channel with events"""
+    """A full duplex Prosody channel with events."""
         
     def __init__(self, controller, card = 0, module = 0, mutex = None,
                  user_data = None, dispatcher = SpeechDispatcher):
@@ -921,7 +1012,7 @@ class SpeechChannel(object):
             if (rc):
                 raise AculabSpeechError(rc, 'sm_switch_channel_output')
 
-            self.out_connection = SpeechConnection(self, 'out')
+            self.out_connection = SpeechEndpoint(self, 'out')
 
         if self.info.ist == -1:
             self.in_ts = self.module.timeslots.allocate()
@@ -936,7 +1027,7 @@ class SpeechChannel(object):
             if (rc):
                 raise AculabSpeechError(rc, 'sm_switch_channel_input')
             
-            self.in_connection = SpeechConnection(self, 'in')
+            self.in_connection = SpeechEndpoint(self, 'in')
 
 
     def _listen(self):
@@ -1016,7 +1107,7 @@ class SpeechChannel(object):
             log_switch.debug('%s listen_to(%d:%d)', self.name,
                              source[0], source[1])
 
-            return SpeechConnection(self, 'in')
+            return SpeechEndpoint(self, 'in')
         
         output = lowlevel.OUTPUT_PARMS()
 
@@ -1043,7 +1134,7 @@ class SpeechChannel(object):
                          output.ost, output.ots,
                          output.ist, output.its)
 
-        return CTBusConnection(card, (self.info.ist, self.info.its))
+        return CTBusEndpoint(card, (self.info.ist, self.info.its))
 
     def speak_to(self, sink):
         """Speak to a timeslot. Sink is a tuple (stream, timeslot)"""
@@ -1063,7 +1154,7 @@ class SpeechChannel(object):
             log_switch.debug('%s speak_to(%d:%d)', self.name,
                              sink[0], sink[1])
 
-            return SpeechConnection(self, 'out')
+            return SpeechEndpoint(self, 'out')
         
         output = lowlevel.OUTPUT_PARMS()
 
@@ -1090,7 +1181,7 @@ class SpeechChannel(object):
                          output.ost, output.ots,
                          output.ist, output.its)
 
-        return CTBusConnection(card, sink)
+        return CTBusEndpoint(card, sink)
 
     def connect(self, other, bus = DefaultBus()):
         """Connect to another SpeechChannel or a CallHandle.
@@ -1126,6 +1217,7 @@ class SpeechChannel(object):
 
     def dc_config(self, protocol, pconf, encoding, econf):
         'Configure the channel for data communications'
+        
         config = lowlevel.SMDC_CHANNEL_CONFIG_PARMS()
         config.channel = self.channel
         config.protocol = protocol
@@ -1242,6 +1334,7 @@ class SpeechChannel(object):
             m(job, reason, self.user_data)
 
 class Conference(object):
+    """A Conference: not fully implemented yet."""
     def __init__(self, module = None, mutex = None):
         self.module = module
         self.listeners = 0
