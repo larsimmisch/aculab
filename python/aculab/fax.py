@@ -118,7 +118,7 @@ class FaxJob:
             if rc:
                 raise AculabFAXError(rc, 'smfax_rude_interrupt')
 
-    def done(self, reason = AculabCompleted()):
+    def done(self, reason = None):
 
         function = 'faxrx_done'
         if self.mode == lowlevel.kSMFaxModeTransmitter:

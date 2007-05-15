@@ -18,6 +18,7 @@ import threading
 import logging
 import lowlevel
 import names
+from fax import FaxRxJob
 from busses import Connection, CTBusEndpoint, DefaultBus
 from error import *
 

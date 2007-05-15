@@ -81,7 +81,7 @@ if __name__ == '__main__':
             usage()
 
     snapshot = Snapshot()
-    port = snapshot.call[card].ports[port].open.port_id
+    # port = snapshot.call[card].ports[port].open.port_id
 
     call = Call(controller, port=port)
 

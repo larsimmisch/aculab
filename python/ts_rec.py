@@ -35,7 +35,6 @@ if __name__ == '__main__':
     card = 0
     module = 0
     controller = RecordController()
-    slot = None
 
     options, args = getopt.getopt(sys.argv[1:], 'c:m:')
 
@@ -47,18 +46,30 @@ if __name__ == '__main__':
         else:
             usage()
 
-    try:
-        st = args[0].split(':')
-        slot = (int(st[0]), int(st[1]))
-        filename = args[1]
-    except IndexError:
+    if len(args) % 2 != 0:
         usage()
+
+    slots = []
+    filenames = []
+    for i in range(0, len(args), 2):
+        try:
+            st = args[i].split(':')
+            slots.append((int(st[0]), int(st[1])))
+            filenames.append(args[i+1])
+        except IndexError:
+            usage()
         
     snapshot = Snapshot()
 
-    channel = SpeechChannel(controller, card, module)
+    channels = []
+    connections = []
 
-    channel.record(filename)
-    con = channel.listen_to(slot)
+    for s, f in zip(slots, filenames):
+        channel = SpeechChannel(controller, card, module)
+        channels.append(channel)
+        
+        connections.append(channel.listen_to(s))
+
+        channel.record(f)
     
     SpeechDispatcher.run()

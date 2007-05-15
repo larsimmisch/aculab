@@ -5,6 +5,8 @@ SO := .so
 DTK := $(ACULAB_ROOT)
 FAX := ProsodyLibraries/Group3Fax/API
 
+HAVE_FAX := $(wildcard $(DTK)/$(FAX)/include)
+
 CC := gcc
 
 SWIG := swig
@@ -33,9 +35,14 @@ PYTHON_LIBS = -lpython2.3
 endif
 
 TiNGTYPE := LINUX
-DEFINES := -DACU_LINUX -DSM_POLL_UNIX -DTiNGTYPE_$(TiNGTYPE) -DTiNG_USE_V6 -DPROSODY_TiNG
+DEFINES := -DACU_LINUX -DSM_POLL_UNIX -DTiNGTYPE_$(TiNGTYPE) -DTiNG_USE_V6 -DPROSODY_TiNG -DHAVE_FAX
 SWIG_DEFINES := -DTiNG_USE_UNDECORATED_NAMES
 C_DEFINES := -g -DNDEBUG -D_REENTRANT -fPIC $(DEFINES)
+
+ifneq ($(HAVE_FAX),)
+DEFINES += -DHAVE_FAX
+endif
+
 
 ACULAB_INCLUDE = -I$(DTK)/include -I$(DTK)/TiNG/pubdoc/gen -I$(DTK)/$(FAX)/include -I$(DTK)/TiNG/apilib -I$(DTK)/TiNG/apilib/LINUX -I$(DTK)/TiNG/include
 ACULAB_LIBDIR = -L$(DTK)/lib -L$(DTK)/TiNG/lib
@@ -48,10 +55,10 @@ OBJS := lowlevel_wrap.o
 ifeq ($(HAVE_FAX),)
 EXTRA_OBJS = -Xlinker -R$(DTK)/lib -L$(DTK)/lib
 else
-EXTRA_OBJS = -Xlinker -R$(DTK)/lib -L$(DTK)/lib \
-			$(DTK)/$(FAX)/lib/actiff.o $(DTK)/$(FAX)/lib/faxlib.o \
-			$(DTK)/ting/libutil/gen-$(TiNGTYPE)_V6/aculog.o \
-			$(DTK)/ting/libutil/gen-$(TiNGTYPE)_V6/vseprintf.o \
-			$(DTK)/ting/libutil/gen-$(TiNGTYPE)_V6/bfile.o \
-			$(DTK)/ting/libutil/gen-$(TiNGTYPE)_V6/bfopen.o
+EXTRA_OBJS = -Xlinker -R$(DTK)/lib -L$(DTK)/lib -L$(DTK)/$(FAX)/lib \
+			-lactiff -lfaxlib # \
+			#$(DTK)/ting/libutil/gen-$(TiNGTYPE)_V6/aculog.o \
+			#$(DTK)/ting/libutil/gen-$(TiNGTYPE)_V6/vseprintf.o \
+			#$(DTK)/ting/libutil/gen-$(TiNGTYPE)_V6/bfile.o \
+			#$(DTK)/ting/libutil/gen-$(TiNGTYPE)_V6/bfopen.o
 endif
