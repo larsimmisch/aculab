@@ -52,8 +52,8 @@ lowlevel_wrap.c aculab/lowlevel.py: lowlevel.i smosintf.h2
 endif
 
 aculab/_lowlevel$(SO): $(OBJS)
-	$(CC) $(LDFLAGS) -o $@ $(OBJS) $(PYTHON_LIBDIR) $(PYTHON_LIBS) \
-		$(EXTRA_OBJS) $(ACULAB_LIBDIR) $(ACULAB_LIBS) $(POST_LDFLAGS)
+	$(CC) $(LDFLAGS) -o $@ $(OBJS) $(EXTRA_OBJS) $(PYTHON_LIBDIR) \
+		$(ACULAB_LIBDIR) $(PYTHON_LIBS) $(ACULAB_LIBS) $(POST_LDFLAGS)
 
 %$(O): %.c
 	$(CC) -c $(C_DEFINES) $(ACULAB_INCLUDE) $(PYTHON_INCLUDE) $< -o $@ 
@@ -63,7 +63,7 @@ aculab/_lowlevel$(SO): $(OBJS)
 # diff -u $(DTK)/include/cl_lib.h cl_lib.h2 > cl_lib.patch
 
 install:
-	python setup.py install
+	python install.py aculab
 
 clean:
 	rm -f aculab/*$(SO) *$(O) aculab/*.pyc \

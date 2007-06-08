@@ -9,15 +9,17 @@ CC := gcc
 SWIG := swig
 PYTHON := python
 
-PYTHON_INCLUDE := -I$(firstword $(strip \
-						$(wildcard /usr/local/include/python2.4) \
-	                    $(wildcard /usr/include/python2.4)))
+# Determine Python paths and version from installed python executable via 
+# distutils. 
+PYTHON_INCLUDE := -I$(shell $(PYTHON) install.py -i)
+# avoid multiple warnings if python is not found
+ifneq ($(PYTHON_INCLUDE),) 
+PYTHON_LIBDIR := -L$(shell $(PYTHON) install.py -L)
+PYTHON_VERSION := $(shell $(PYTHON) install.py -v)
+PYTHON_LIBS := -lpython$(PYTHON_VERSION)
+PYTHON_SITEDIR := $(shell $(PYTHON) install.py -l)
+endif
 
-PYTHON_LIBDIR := -L$(firstword $(strip \
-                       $(wildcard /usr/local/lib/python2.4/config/) \
-                       $(wildcard /usr/lib/python2.4/config/)))
-
-PYTHON_LIBS = -lpython2.4
 
 # TiNGTYPE := LINUX
 DEFINES := -DUNIX_SYSTEM -DSM_POLL_UNIX # -DTiNGTYPE_$(TiNGTYPE) -DHAVE_TiNG
