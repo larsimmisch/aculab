@@ -33,6 +33,7 @@ class SwitchCard(Card):
 class Port(object):
     """A port on an Aculab call control card."""
     def __init__(self, card, index):
+        self.index = index
         open_portp = lowlevel.OPEN_PORT_PARMS()
 
         open_portp.card_id = card.card_id
@@ -51,7 +52,10 @@ class Port(object):
 
         self.open = open_portp
         self.info = info_portp
-        
+
+    def __repr__(self):
+        return 'Port(%d)' % self.index
+
 class CallControlCard(Card):
     """An Aculab card capable of call control."""
     def __init__(self, card, info):
