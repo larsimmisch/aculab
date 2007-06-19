@@ -3,7 +3,7 @@ A := .a
 SO := .so
 
 DTK := $(ACULAB_ROOT)
-FAX := ProsodyLibraries/Group3Fax/API_disabled
+FAX := ProsodyLibraries/Group3Fax/API
 
 HAVE_FAX := $(strip $(wildcard $(DTK)/$(FAX)/include))
 
@@ -26,21 +26,20 @@ endif
 
 TiNGTYPE := LINUX
 DEFINES := -DACU_LINUX -DSM_POLL_UNIX -DTiNGTYPE_$(TiNGTYPE) -DTiNG_USE_V6 
-SWIG_DEFINES := -DTiNG_USE_UNDECORATED_NAMES
-C_DEFINES := -g -DNDEBUG -D_REENTRANT -fPIC $(DEFINES)
-
 ifneq ($(HAVE_FAX),)
 DEFINES += -DHAVE_FAX
 endif
+SWIG_DEFINES := -DTiNG_USE_UNDECORATED_NAMES
+C_DEFINES := -g -DNDEBUG -D_REENTRANT -fPIC $(DEFINES)
 
 
 ACULAB_INCLUDE = -I$(DTK)/include -I$(DTK)/TiNG/pubdoc/gen -I$(DTK)/$(FAX)/include -I$(DTK)/TiNG/apilib -I$(DTK)/TiNG/apilib/LINUX -I$(DTK)/TiNG/include
 ACULAB_LIBDIR = -L$(DTK)/lib -L$(DTK)/TiNG/lib
-ACULAB_LIBS = -lacu_cl -lacu_sw -lacu_res -lacu_common -lTiNG -lacu_rmsm -lstdc++
+ACULAB_LIBS = -lacu_cl -lacu_sw -lacu_res -lacu_common -lTiNG 
 
 ifneq ($(HAVE_FAX),)
-ACULAB_LIBDIR += -L$(DTK)/lib -L$(DTK)/TiNG/lib -L$(DTK)/$(FAX)/lib
-ACULAB_LIBS += -lactiff -lfaxlib
+ACULAB_LIBDIR += -L$(DTK)/$(FAX)/lib
+ACULAB_LIBS += -lfaxlib -lactiff -lfontconfig -lstdc++
 endif
 
 LDFLAGS := -g -shared
