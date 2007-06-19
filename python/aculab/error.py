@@ -24,7 +24,7 @@ class AculabError(Exception):
             if handle:
                 desc = '[0x%x] %s failed: ' % (handle, function)
             else:
-                desc = ' %s() failed: ' % (function)
+                desc = '%s() failed: ' % (function)
         else:
             if handle:
                 desc = '[0x%x]: ' % handle
