@@ -20,7 +20,7 @@ import lowlevel
 import names
 from util import Lockable
 from fax import FaxRxJob
-from busses import Connection, CTBusEndpoint, DefaultBus
+from busses import Connection, CTBusEndpoint, SpeechEndpoint, DefaultBus
 from error import *
 
 if os.name == 'nt':
@@ -31,7 +31,7 @@ else:
     import select
 
 __all__ = ['SpeechDispatcher', 'PlayJob', 'RecordJob', 'DigitsJob',
-           'SpeechEndpoint', 'SpeechChannel', 'version']
+           'SpeechChannel', 'version']
 
 log = logging.getLogger('speech')
 log_switch = logging.getLogger('switch')
@@ -742,7 +742,7 @@ class DigitsJob(object):
                  digit_duration = 0):
         """Prepare to play a string of DTMF digits.
 
-        @param digits: String of DTMF Digits A digit can be from 0-9, A-D, *
+        @param digits: String of DTMF Digits. A digit can be from 0-9, A-D, *
         and #.
         @param inter_digit_delay: Delay between digits in B{milliseconds}. Zero
         for the default value (exact value unknown).
@@ -756,7 +756,8 @@ class DigitsJob(object):
         self.stopped = False
 
     def start(self):
-        'Do not call this method directly - call SpeechChannel.start instead'
+        """Do not call this method directly - call L{SpeechChannel.start}
+        instead."""
         
         dp = lowlevel.SM_PLAY_DIGITS_PARMS()
         dp.channel = self.channel.channel
@@ -804,8 +805,10 @@ class DigitsJob(object):
             channel.job_done(self, 'digits_done', reason)
                 
     def stop(self):
+        """Stop the playing of digits."""
+        
         self.stopped = True
-        log.debug('%s disgits_stop()', self.channel.name)
+        log.debug('%s digits_stop()', self.channel.name)
 
         # remove the write event from the dispatcher
         self.channel.dispatcher.remove(self.channel.event_write)
@@ -830,6 +833,7 @@ class DigitsJob(object):
         channel.job_done(self, 'digits_done', reason) #, pos)
 
 class DCReadJob(object):
+    """A DataComms receive job."""
     
     def __init__(self, channel, cmd, min_to_collect, min_idle = 0,
                  blocking = 0):
@@ -884,14 +888,12 @@ class DCReadJob(object):
 
         channel.job_done(self, 'dc_read_done', f, reason, pos)
 
-class SpeechEndpoint(object):
-    
-    def __init__(self, channel, direction):
-        self.channel = channel
-        self.direction = direction
-        if direction not in ['in', 'out']:
-            raise ValueError('direction must be \'in\' or \'out\'')
+class SpeechChannel(object):
+    """A full duplex Prosody channel.
 
+<<<<<<< .mine
+    DTMF detection is started by default."""
+=======
     def close(self):
         if self.channel:
             input = lowlevel.SM_SWITCH_CHANNEL_PARMS()
@@ -919,28 +921,41 @@ class SpeechEndpoint(object):
 
 class SpeechChannel(Lockable):
     """A full duplex Prosody channel with events."""
+>>>>>>> .r265
         
     def __init__(self, controller, card = 0, module = 0, mutex = None,
                  user_data = None, dispatcher = SpeechDispatcher):
-        """Allocate a full duplex Prosody channel and add the events to
-        dispatcher.
+        """Allocate a full duplex Prosody channel.
 
-        Controllers must implement:
-        - play_done(channel, file, reason, position, user_data)
-        - dtmf(channel, digit, user_data)
-        - record_done(channel, file, reason, size, user_data)
-        - digits_done(channel, reason, user_data).
+        @param controller: This object will receive notifications about
+        completed jobs. Controllers should implement:
+         - play_done(self, channel, file, reason, position, user_data)
+         - dtmf(self, channel, digit, user_data)
+         - record_done(self, channel, file, reason, size, user_data)
+         - digits_done(self, channel, reason, user_data).
         
         Reason is an exception or None (for normal termination).
 
-        The module parameter is either the Prosody Sharc DSP number or
-        a snapshot.Module instance.
-        
-        If a mutex is passed in, it will be acquired before any controller
-        method is invoked and released as soon as it returns"""
+        @param module: either the Prosody Sharc DSP offset or
+        a L{snapshot.Module} instance.
 
+<<<<<<< .mine
+        @param mutex: if not C{None}, this mutex will be acquired before any
+        controller method is invoked and released as soon as it returns.
+
+        @param user_data: The data associated with this channel. In MVC terms,
+        this would be the I{model}. In most of the examples, this is a L{Glue}
+        subclass.
+
+        @param dispatcher: The dispatcher used to dispatch controller methods.
+        By default, a single dispatcher is used for all channels.
+        """
+
+        self.card = card
+=======
         Lockable.__init__(self, mutex)
 
+>>>>>>> .r265
         self.controller = controller
         self.dispatcher = dispatcher
         self.user_data = user_data
@@ -978,7 +993,7 @@ class SpeechChannel(Lockable):
 
         # initialise our events
         self.event_read = self.set_event(lowlevel.kSMEventTypeReadData)
-        self.event_write = self.set_event(lowlevel.kSMEventTypeWriteData);
+        self.event_write = self.set_event(lowlevel.kSMEventTypeWriteData)
         self.event_recog = self.set_event(lowlevel.kSMEventTypeRecog)
 
         if version[0] >= 2:
@@ -993,11 +1008,15 @@ class SpeechChannel(Lockable):
         self.dispatcher.add(self.event_recog, self.on_recog)
 
     def __del__(self):
+        """Close the channel if it is still open."""
         self._close()
         if self.name:
             log.debug('%s deleted', self.name)
 
     def _close(self):
+        """Finalizes the shutdown of a speech channel.
+
+        I{Do not use directly, use L{SpeechChannel.close}}."""
         self.lock()
         try:
             if self.event_read:
@@ -1038,6 +1057,11 @@ class SpeechChannel(Lockable):
 ##         return self.channel
 
     def _ting_connect(self):
+        """Connect the channel to a timeslot on its DSPs timeslot range.
+
+        See L{ProsodyTimeslots}.
+
+        I{Used internally}."""
 
         # switch to local timeslots for TiNG
         if self.info.ost == -1:
@@ -1072,6 +1096,7 @@ class SpeechChannel(Lockable):
 
 
     def _listen(self):
+        """Start DTMF detection."""
         listen_for = lowlevel.SM_LISTEN_FOR_PARMS()
         listen_for.channel = self.channel
         listen_for.tone_detection_mode = \
@@ -1082,6 +1107,10 @@ class SpeechChannel(Lockable):
             raise AculabSpeechError(rc, 'sm_listen_for')
 
     def close(self):
+        """Close the channel.
+
+        If the channel is active, all pending jobs will be stopped before
+        the channel is freed."""
         self.lock()
         self.close_pending = 1
         self.unlock()
@@ -1091,9 +1120,27 @@ class SpeechChannel(Lockable):
 
         self._close()
         
+<<<<<<< .mine
+    def lock(self):
+        """Lock the channel if it has a mutex."""
+        if self.mutex:
+            self.mutex.acquire()
+
+    def unlock(self):
+        """Unlock the channel if it has a mutex."""
+        if self.mutex:
+            self.mutex.release()
+
+=======
+>>>>>>> .r265
     def create_event(self, event):
-        """event has type SM_CHANNEL_SET_EVENT_PARMS and is modified in place
-        The handle is returned"""
+        """Create an event for use with the dispatcher.
+
+        I{Used internally.}
+
+        @param event: An object of type C{SM_CHANNEL_SET_EVENT_PARMS} that
+        is modified in place.
+        @returns: The handle of the event."""
         
         rc, ev = lowlevel.smd_ev_create(event.channel,
                                         event.event_type,
@@ -1104,6 +1151,15 @@ class SpeechChannel(Lockable):
         return os_event(ev)
 
     def set_event(self, _type):
+        """Create and set an event for the channel.
+
+        I{Used internally.}
+
+        @param _type: One of:
+         - lowlevel.kSMEventTypeReadData
+         - lowlevel.kSMEventTypeWriteData
+         - lowlevel.kSMEventTypeRecog
+         """
         event = lowlevel.SM_CHANNEL_SET_EVENT_PARMS()
 
         event.channel = self.channel
@@ -1266,6 +1322,10 @@ class SpeechChannel(Lockable):
             raise AculabSpeechError(rc, 'smdc_channel_config')
 
     def start(self, job):
+        """Start a job.
+
+        Only a single job may run at the same time. This is somewhat arbitrary
+        limitation that merely simplifies the implementation."""
         if self.job:
             raise RuntimeError('Already executing job')
 
@@ -1274,11 +1334,9 @@ class SpeechChannel(Lockable):
             job.start()
     
     def play(self, file, volume = 0, agc = 0, speed = 0):
-        """Play an alaw file asynchronously.
-        
-        The file parameter may be a file object or a string.
-        If it is a string, a file with that name is automatically openend and
-        closed. File objects are played and not rewound or closed at the end"""
+        """Play an file.
+
+        This is a shorthand to create and start a L{PlayJob}."""
 
         job = PlayJob(self, file, agc, volume, speed)
 
@@ -1287,12 +1345,9 @@ class SpeechChannel(Lockable):
     def record(self, file, max_octets = 0,
                max_elapsed_time = 0.0, max_silence = 0.0, elimination = 0,
                agc = 0, volume = 0):
-        """Record an alaw file asynchronously.
-        
-        The file parameter may be a file object or a string.
-        If it is a string, a file with that name is automatically openend and
-        closed. File objects are recorded to and not rewound or closed at
-        the end"""
+        """Record to an alaw file.
+
+        This is a shorthand to create and starts a L{RecordJob}."""
 
         job = RecordJob(self, file, max_octets,
                         max_elapsed_time, max_silence, elimination,
@@ -1301,7 +1356,7 @@ class SpeechChannel(Lockable):
         self.start(job)
 
     def digits(self, digits, inter_digit_delay = 0, digit_duration = 0):
-        """Send a string of DTMF digits asynchronously."""
+        """Send a string of DTMF digits."""
 
         job = DigitsJob(self, digits, inter_digit_delay,
                         digit_duration)

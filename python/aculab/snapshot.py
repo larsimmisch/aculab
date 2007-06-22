@@ -2,11 +2,10 @@
 
 from pprint import PrettyPrinter
 import lowlevel
-from busses import ProsodyLocalBus
+from busses import ProsodyTimeslots
 from error import AculabError
 
 _singletons = {}
-
 
 class Card(object):
     """Base class for an Aculab card."""
@@ -16,7 +15,11 @@ class Card(object):
         self.ip_address = None
 
 class SwitchCard(Card):
-    """An Aculab card with a switch matrix."""
+    """An Aculab card with a switch matrix.
+
+    Cards typically have other functions than just switching, but all cards
+    that support switching will also represented by an instance of this class.
+    """
     def __init__(self, card, info):
         Card.__init__(self, card, info)
         
@@ -114,7 +117,7 @@ class Module(object):
         if rc:
             raise AculabError(rc, 'sm_get_module_info')
 
-        self.timeslots = ProsodyLocalBus(self.info.min_stream)
+        self.timeslots = ProsodyTimeslots(self.info.min_stream)
 
 class ProsodyCard(Card):
     """An Aculab Prosody (speech processing) card."""
@@ -220,6 +223,8 @@ class Snapshot(object):
 
 
     def pprint(self, **kwargs):
+        """Pretty-print all cards (not very detailed yet)"""
+        
         pp = PrettyPrinter(*kwargs)
 
         pp.pprint(self.switch)

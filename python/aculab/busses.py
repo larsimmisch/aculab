@@ -12,7 +12,7 @@ class Connection:
 
     A connection consists of endpoints and timeslots.
     
-    This class takes care of closing the contained connectionsendpoints and bus
+    This class takes care of closing the contained endpoints and bus
     timeslots in the proper order upon destruction."""
 
     def __init__(self, bus):
@@ -25,7 +25,9 @@ class Connection:
         self.timeslots = []
 
     def close(self):
-        """Closes the contained endpoints and frees the timeslots.
+        """Close the connection and free all resources.
+
+        Closes the contained endpoints and frees the timeslots.
         Endpoints are closed in reversed order to avoid clicks."""
         for c in reversed(self.endpoints):
             c.close()
@@ -42,13 +44,17 @@ class Connection:
             self.close()
 
 class CTBusEndpoint:
-    """An endpoint of a L{Connection} on a bus."""
+    """An endpoint on a bus.
+
+    Endpoints are used to close a L{Connection}. They do all their work in
+    C{close} or upon destruction (which calls C{close}).
+    """
     def __init__(self, sw, ts):
         self.sw = sw
         self.ts = ts
 
     def close(self):
-        """Disables a timeslot."""
+        """Disable the endpoint."""
         output = lowlevel.OUTPUT_PARMS()
         output.ost = self.ts[0]
         output.ots = self.ts[1]
@@ -69,28 +75,46 @@ class CTBusEndpoint:
             self.close()
 
     def __repr__(self):
-        return '<CTBusEndpoint [' + str(self.sw) + ', ' + str(self.ts) + ']>'
+        return 'CTBusEndpoint(' + str(self.sw) + ', ' + str(self.ts) + ')'
 
 class NetEndpoint:
-    """An endpoint of a network timeslot."""
-    
+    """An endpoint on a network port.
+
+    Endpoints are used to close a L{Connection}. They do all their work in
+    C{close} or upon destruction (which calls C{close}).
+    """
     def __init__(self, sw, port, ts):
+        """Initialize an endpoint.
+
+        @param sw: Handle for the switch card. On v6, this is an
+        C{ACU_CARD_ID}, on v5, this is an index to the card.
+        @param port: The network port. On v6, this is an C{ACU_PORT_ID}, on v5,
+        it is the index of the module (restarts at zero for each new card)
+        @param ts: A tuple (stream, timeslot)
+        """
         self.sw = sw
         self.ts = ts
-        self.port = port
-
+        # precompute silence pattern
+        if lowlevel.call_line(port) == lowlevel.L_E1:
+            self.pattern = 0x55 # alaw silence
+        else:
+            self.pattern = 0xff # mulaw silence
+            
     def close(self):
-        """Disables a timeslot."""
+        """Disable the endpoint.
+
+        This method will assert a silence pattern on the network timeslot.
+
+        The silence pattern (alaw or mulaw) is inferred from the line type
+        via C{call_line}. E1 ports are assumed to be alaw, everything else
+        mulaw."""
+        
         output = lowlevel.OUTPUT_PARMS()
         output.ost = self.ts[0]
         output.ots = self.ts[1]
         output.mode = lowlevel.PATTERN_MODE
+        output.pattern = self.pattern
 
-        if lowlevel.call_line(self.port) == lowlevel.L_E1:
-            output.pattern = 0x55 # alaw silence
-        else:
-            output.pattern = 0xff # mulaw silence
-            
         rc = lowlevel.sw_set_output(self.sw, output)
         if rc:
             raise AculabError(rc, 'sw_set_output(%d:%d, PATTERN_MODE, 0x%x)'
@@ -99,15 +123,67 @@ class NetEndpoint:
         log.debug('%02d:%02d silenced' % self.ts)
 
         self.sw = None
-        self.port = None
         self.ts = None
 
     def __del__(self):
+        """Close the endpoint if it is still open"""
         if self.ts:
             self.close()
 
     def __repr__(self):
-        return '<NetEndpoint [' + str(self.port) + ', ' + str(self.ts) + ']>'
+        """Print a representation of the endpoint."""
+        return 'NetEndpoint(' + str(self.port) + ', ' + str(self.ts) + ')'
+
+class SpeechEndpoint(object):
+    """An endpoint to a DSP.
+
+    Endpoints are used to close a L{Connection}. They do all their work in
+    C{close} or upon destruction (which calls C{close}).
+    """
+    
+    def __init__(self, channel, direction):
+        """Initialize an endpoint to a L{SpeechChannel}.
+
+        @param channel: a L{SpeechChannel}.
+        @param direction: Either I{in} or I{out}. Only used for logging.
+        """
+        self.channel = channel
+        self.direction = direction
+        if direction not in ['in', 'out']:
+            raise ValueError('direction must be \'in\' or \'out\'')
+
+    def close(self):
+        """Disconnect the endpoint."""
+        
+        if self.channel:
+            input = lowlevel.SM_SWITCH_CHANNEL_PARMS()
+
+            input.channel = self.channel.channel
+            input.st = -1
+            input.ts = -1
+
+            if self.direction == 'in':
+                rc = lowlevel.sm_switch_channel_input(input)
+                if rc:
+                    raise AculabSpeechError(rc, 'sm_switch_channel_input')
+            else:
+                rc = lowlevel.sm_switch_channel_output(input)
+                if rc:
+                    raise AculabSpeechError(rc, 'sm_switch_channel_output')
+
+            log.debug('%s disconnected(%s)', self.channel.name,
+                             self.direction)
+
+            self.channel = None
+
+    def __del__(self):
+        """Close the endpoint if it is still open"""        
+        self.close()
+
+    def __repr__(self):
+        """Print a representation of the endpoint."""
+        return 'SpeechEndpoint(0x%x, %s)'% \
+               (self.channel.channel, str(self.ts))
 
 class CTBus(object):
     """Base class for an isochronous, multiplexed bus.
@@ -140,12 +216,13 @@ class CTBus(object):
 
         return CTBusEndpoint(switch, sink)
 
-class ProsodyLocalBus(CTBus):
-    """An instance of this class represents the timeslots on
-    Aculab-specific streams for one Prosody DSP.
-    """
+class ProsodyTimeslots(CTBus):
+    """The timeslots for one Prosody DSP."""
 
     def __init__(self, stream):
+        """Create the timeslots for a Prosody DSP.
+
+        @param stream: The stream number, taken from C{SM_MODULE_INFO_PARMS}"""
         self.slots = []
         for st in range(stream, stream + 2):
             for ts in range(32):
@@ -163,8 +240,8 @@ class MVIP(CTBus):
     attempted to simplify things by treating 'trunk' and 'resource' cards
     differently with regards to the stream numbering.
 
-    Applications need to be aware of this difference. Don't use this unless
-    you have to. Caveat implementor.
+    Applications need to be aware of this difference. Don't use this bus unless
+    you have to.
     """
 
     def __init__(self):
@@ -190,8 +267,8 @@ class SCBus(CTBus):
             self.slots.append((24, ts))
 
 class H100(CTBus):
-    """H.100, the ECTF defined bus standard.
-    This class also applies to H.110.
+    """H.100 (and H.110), the ECTF defined bus standards.
+
     An instance of this class represents 32 streams with 128 unidirectional
     timeslots per stream."""
 
@@ -208,9 +285,9 @@ def DefaultBus():
     
     If more than one bus type is supported by all cards, the order of
     preference is:
-    - H100
-    - SCBus
-    - MVIP
+     - H100
+     - SCBus
+     - MVIP
     """
 
     global _DefaultBus

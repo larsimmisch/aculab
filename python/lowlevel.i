@@ -382,7 +382,6 @@ PyObject *buffer_alloc(int size);
 		return PyBuffer_FromMemory(self->data, self->done_length);
 	}
 }
-#endif
 
 %extend SM_VMPRX_STATUS_PARMS {
 	PyObject *get_ports_address() {
@@ -396,6 +395,7 @@ PyObject *buffer_alloc(int size);
 			(const char*)inet_ntoa(self->u.ports.address));
 	}
 }
+#endif
 
 %define SIZED_STRUCT(name) 
 %extend name {
