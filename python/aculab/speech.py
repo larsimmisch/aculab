@@ -888,40 +888,10 @@ class DCReadJob(object):
 
         channel.job_done(self, 'dc_read_done', f, reason, pos)
 
-class SpeechChannel(object):
+class SpeechChannel(Lockable):
     """A full duplex Prosody channel.
 
-<<<<<<< .mine
     DTMF detection is started by default."""
-=======
-    def close(self):
-        if self.channel:
-            input = lowlevel.SM_SWITCH_CHANNEL_PARMS()
-
-            input.channel = self.channel.channel
-            input.st = -1
-            input.ts = -1
-
-            if self.direction == 'in':
-                rc = lowlevel.sm_switch_channel_input(input)
-                if rc:
-                    raise AculabSpeechError(rc, 'sm_switch_channel_input')
-            else:
-                rc = lowlevel.sm_switch_channel_output(input)
-                if rc:
-                    raise AculabSpeechError(rc, 'sm_switch_channel_output')
-
-            log_switch.debug('%s disconnected(%s)', self.channel.name,
-                             self.direction)
-
-            self.channel = None
-
-    def __del__(self):
-        self.close()
-
-class SpeechChannel(Lockable):
-    """A full duplex Prosody channel with events."""
->>>>>>> .r265
         
     def __init__(self, controller, card = 0, module = 0, mutex = None,
                  user_data = None, dispatcher = SpeechDispatcher):
@@ -939,7 +909,6 @@ class SpeechChannel(Lockable):
         @param module: either the Prosody Sharc DSP offset or
         a L{snapshot.Module} instance.
 
-<<<<<<< .mine
         @param mutex: if not C{None}, this mutex will be acquired before any
         controller method is invoked and released as soon as it returns.
 
@@ -951,11 +920,8 @@ class SpeechChannel(Lockable):
         By default, a single dispatcher is used for all channels.
         """
 
-        self.card = card
-=======
         Lockable.__init__(self, mutex)
 
->>>>>>> .r265
         self.controller = controller
         self.dispatcher = dispatcher
         self.user_data = user_data
@@ -1120,19 +1086,6 @@ class SpeechChannel(Lockable):
 
         self._close()
         
-<<<<<<< .mine
-    def lock(self):
-        """Lock the channel if it has a mutex."""
-        if self.mutex:
-            self.mutex.acquire()
-
-    def unlock(self):
-        """Unlock the channel if it has a mutex."""
-        if self.mutex:
-            self.mutex.release()
-
-=======
->>>>>>> .r265
     def create_event(self, event):
         """Create an event for use with the dispatcher.
 
