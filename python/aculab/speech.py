@@ -304,7 +304,7 @@ class PollSpeechEventDispatcher(threading.Thread):
         # listen to the read fd of our pipe
         self.poll.register(self.pipe[0], select.POLLIN )
         
-    def add(self, handle, method, mask = select.POLLIN):
+    def add(self, handle, method, mask = select.POLLIN|select.POLLOUT):
         """Add a new handle to the dispatcher.
 
         @param handle: Typically the C{tSMEventId} associated with the
@@ -940,8 +940,11 @@ class SpeechChannel(Lockable):
 
         alloc = lowlevel.SM_CHANNEL_ALLOC_PLACED_PARMS()
         alloc.type = lowlevel.kSMChannelTypeFullDuplex
-        alloc.module = self.module.open.module_id
-        
+        if version[0] >= 2:
+            alloc.module = self.module.open.module_id
+        else:
+            alloc.module = self.module
+
         rc = lowlevel.sm_channel_alloc_placed(alloc)
         if rc:
             raise AculabSpeechError(rc, 'sm_channel_alloc_placed')

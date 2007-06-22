@@ -299,7 +299,14 @@ class IncomingCallController(object):
             call.incoming_ringing()
 
 def usage():
-    print 'usage: am.py [-c <card>] [-p <port>] [-m <module>] [-d] [-t] [-f]'
+    print \
+"""Synopsis: am.py [-c <card>] [-p <port>] [-m <module>] [-d] [-t] [-f]
+
+Options:
+  -d: daemonize
+  -t: test run
+  -f: enable forwarding"""
+    
     sys.exit(2)
 
 if __name__ == '__main__':
@@ -314,7 +321,7 @@ if __name__ == '__main__':
     loglevel = logging.DEBUG
     root = os.getcwd()
 
-    options, args = getopt.getopt(sys.argv[1:], 'c:dm:p:r:tf')
+    options, args = getopt.getopt(sys.argv[1:], 'c:dm:p:r:tfh?')
 
     for o, a in options:
         if o == '-c':
