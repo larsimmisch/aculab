@@ -18,7 +18,7 @@ import select
 
 log = logging.getLogger('rtp')
 
-rfc2833_map = {
+rfc2833_digits = {
     0: '0', 1: '1', 2: '2', 3: '3', 4: '4',
     5: '5', 6: '6', 7: '7', 8: '8', 9: '9',
     10: '*', 11: '#', 12: 'A', 13: 'B', 14: 'C', 15: 'D',
@@ -141,7 +141,7 @@ class VMPrx(Lockable):
             log.debug('%s vmprx: tone: %d, volume: %f', self.name,
                       tone, volume)
 
-            self.controller.dtmf(self, rfc2833_map[tone], self.user_data)
+            self.controller.dtmf(self, rfc2933_digits[tone], self.user_data)
             
     def config_tones(self, detect = 1, regen = 0):
         """Configure RFC2833 tone detection/regeneration."""
@@ -181,7 +181,7 @@ class VMPrx(Lockable):
             raise AculabSpeechError(rc, 'sm_vmprx_config_codec_rfc2833')
 
     def default_codecs(self):
-        """Preliminary: should depend on SDP"""
+        """Preliminary: just alaw/mulaw/rfc2833. No connection to SDP yet."""
 
         self.config_codec(lowlevel.kSMCodecTypeAlaw, 0)
         self.config_codec(lowlevel.kSMCodecTypeMulaw, 8)
@@ -247,5 +247,48 @@ class VMPtx:
         rc = lowlevel.sm_vmptx_status(status)
         log.debug('%s vmptx status: %s', self.name,
                   names.vmptx_status_names[status.status])
-
             
+    def config_tones(self, convert = 0, elim = 1):
+        """Configure RFC2833 tone conversion/elimination.
+        By default, don't convert tones, but eliminate them."""
+        
+        tones = lowlevel.SM_VMPTX_TONE_PARMS()
+        tones.vmptx = self.vmptx
+        tones.convert_tones = convert
+        tones.elim_tones = elim
+
+        rc = lowlevel.sm_vmptx_config_tones(tones)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_vmptx_config_tones')
+
+    def config_codec(self, codec, pt,
+                     vad_mode = lowlevel.kSMVMPTxVADModeDisabled,
+                     ptime = 20):
+        """Configure a (generic) codec.
+
+        By default, do not do voice activity detection (i.e. always send data)
+        and send 20ms of data in each packets
+
+        @param vad_mode: voice activity detection mode.
+        @param ptime: how much data (in ms) to send per packet per packet.
+        """
+        
+        codecp = lowlevel.SM_VMPTX_CODEC_PARMS()
+        codecp.vmptx = self.vmptx
+        codecp.codec = codec
+        codecp.payload_type = pt
+    
+        rc = lowlevel.sm_vmptx_config_codec(codecp)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_vmptx_config_codec')
+
+    def config_rfc2833(self, pt = 101):
+        """Configure the RFC2833 codec."""
+        
+        rfc2833 = lowlevel.SM_VMPRX_CODEC_RFC2833_PARMS()
+        rfc2833.vmprx = self.vmprx
+        rfc2833.payload_type = pt
+
+        rc = lowlevel.sm_vmptx_config_codec_rfc2833(rfc2833)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_vmptx_config_codec_rfc2833')

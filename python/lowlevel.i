@@ -144,6 +144,7 @@ BLOCKING(smfax_tx_page)
 %ignore trace_set_mode;
 %ignore dpns_watchdog;
 %ignore call_handle_2_chan;
+%ignore call_version;
 #endif
 
 %ignore BFILE;
@@ -227,6 +228,7 @@ BLOCKING(smfax_tx_page)
 // %include "pros_s.h"
 %include "smbesp.h"
 %include "smcore.h"
+%include "prosdc.h"
 %include "prospapi.h"
 %include "prosrtpapi.h"
 #ifdef HAVE_FAX

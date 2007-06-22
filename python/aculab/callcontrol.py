@@ -31,17 +31,6 @@ no_state_change_extended_events = [lowlevel.EV_EXT_FACILITY,
 log = logging.getLogger('call')
 log_switch = logging.getLogger('switch')
 
-try:
-    _versionp = lowlevel.CALL_API_VERSION_PARMS()
-    lowlevel.call_api_version(_versionp)
-    version = (_versionp.major, _versionp.minor, _versionp.rev)
-    del _versionp
-except AttributeError:
-    rc = lowlevel.call_version(0)
-    if rc < 0:
-        raise AculabError(rc, 'call_version')
-    version = ((rc & 0xff00) >> 8, rc & 0xff, '')
-
 class _CallEventDispatcher:
 
     def __init__(self, verbose = True):
@@ -176,7 +165,7 @@ class CallHandle(CallHandleBase):
         CallHandleBase.__init__(self, controller, user_data, port, dispatcher)
         
         # automatically translate port numbers to v6 port_ids
-        if version[0] >= 6:
+        if lowlevel.cc_version >= 6:
             if type(port) == type(0) and type(card) == type(0):
                 from snapshot import Snapshot
                 self.port = Snapshot().call[card].ports[port].open.port_id
