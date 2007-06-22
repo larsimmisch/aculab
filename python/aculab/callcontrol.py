@@ -1,7 +1,8 @@
-'''Call Control - a thin layer on top of the Aculab API.
+"""Call Control - a thin layer on top of the Aculab API.
 
-Terminology: a call in this module should rather be called a call leg.
-'''
+Terminology: a 'call' in this module should be called a 'call leg' according
+to international treaties, but in Aculab's nomenclature, it's a call.
+"""
 
 import sys
 import getopt
@@ -134,7 +135,36 @@ class _CallEventDispatcher:
 
 CallDispatcher = _CallEventDispatcher()
 
-class CallHandle:
+class CallHandleBase:
+    """Base class for a Call Handle.
+
+    Holds common members and the controller stack."""
+
+    def __init__(self, controller, user_data = None, port = 0,
+                 dispatcher = CallDispatcher):
+
+        self.user_data = user_data
+        # this is a stack of controllers
+        self.controllers = [controller]
+        self.dispatcher = dispatcher
+        self.port = port
+
+        self.handle = None
+        self.name = '0x0000'
+        
+        # The dispatcher sets the last state changing event after dispatching
+        # the event. Which events are deemed state changing is controlled via
+        # no_state_change_events
+        self.last_event = lowlevel.EV_IDLE
+        self.last_extended_event = None
+
+    def push_controller(self, controller):
+        self.controllers.append(controller)
+
+    def pop_controller(self):
+        self.controllers.pop()
+
+class CallHandle(CallHandleBase):
     """An Aculab call handle, and common operations on it.
 
     Some events are handled to maintain the internal state, but in general,
@@ -143,12 +173,8 @@ class CallHandle:
     def __init__(self, controller, user_data = None, card = 0, port = 0,
                  timeslot = None, dispatcher = CallDispatcher):
 
-        self.user_data = user_data
-        # this is a stack of controllers
-        self.controllers = [controller]
-        self.dispatcher = dispatcher
-        self.port = port
-
+        CallHandleBase.__init__(self, controller, user_data, port, dispatcher)
+        
         # automatically translate port numbers to v6 port_ids
         if version[0] >= 6:
             if type(port) == type(0) and type(card) == type(0):
@@ -164,20 +190,7 @@ class CallHandle:
         if self.switch < 0:
             raise AculabError(self.switch, 'call_port_2_swdrvr')
             
-        self.handle = None
-        self.name = '0x0000'
         self.details = lowlevel.DETAIL_XPARMS()
-        # The dispatcher sets the last state changing event after dispatching
-        # the event. Which events are deemed state changing is controlled via
-        # no_state_change_events
-        self.last_event = lowlevel.EV_IDLE
-        self.last_extended_event = None
-
-    def push_controller(self, controller):
-        self.controllers.append(controller)
-
-    def pop_controller(self):
-        self.controllers.pop()
 
     def openin(self, unique_xparms = None, cnf = None):
         inparms = lowlevel.IN_XPARMS()
@@ -267,10 +280,7 @@ class CallHandle:
         log.debug('%s openout(%s, %d, %s)', self.name, destination_address,
                   sending_complete, originating_address)
 
-
-
     def feature_send(self, feature_type, message_control, feature):
-
         fp = lowlevel.FEATURE_DETAIL_XPARMS()
         fp.handle = self.handle
         fp.net = self.port

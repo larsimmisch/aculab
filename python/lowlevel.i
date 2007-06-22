@@ -14,6 +14,7 @@
 #include "smdc_raw.h"
 #include "smdc_sync.h"
 #include "smdc_hdlc.h"
+#include "smrtp.h"
 #include "bfile.h"
 #include "bfopen.h"
 #else
@@ -79,13 +80,14 @@ typedef struct {
 
 %apply int { ACU_ERR, ACU_UINT, ACU_UCHAR, ACU_ULONG, ACU_INT, ACU_LONG, 
 			 ACU_PORT_ID, ACU_CALL_HANDLE, ACU_CARD_ID, tSMCardId, 
-             ACU_RESOURCE_ID, tSM_INT, tSM_UT32 };
+             ACU_RESOURCE_ID, tSM_INT, tSM_UT32, tSMVMPrxId, tSMVMPtxId };
 
 %apply char[ANY] { ACU_CHAR[ANY] };
 
 %apply void * { ACU_EVENT_QUEUE, ACU_ACT };
 
 %apply (int *OUTPUT) { int *perrno };
+%apply (int *OUTPUT) { ACU_PORT_ID *sip_port };
 
 /* Allows to execute Python code during function calls */
 %define BLOCKING(name) 
@@ -133,11 +135,16 @@ BLOCKING(smfax_tx_page)
 %ignore port_init;
 %ignore call_get_global_notification_wait_object;
 %ignore acu_get_aculab_directory;
+#ifdef TiNG_USE_V6
 %ignore sm_get_modules;
 %ignore sm_get_module_card_ix;
 %ignore sm_get_card_switch_ix;
 %ignore sm_get_channel_module_ix;
 %ignore sm_get_cards;
+%ignore trace_set_mode;
+%ignore dpns_watchdog;
+%ignore call_handle_2_chan;
+#endif
 
 %ignore BFILE;
 %ignore TiNG_PRINTF_MODULE;
@@ -221,6 +228,7 @@ BLOCKING(smfax_tx_page)
 %include "smbesp.h"
 %include "smcore.h"
 %include "prospapi.h"
+%include "prosrtpapi.h"
 #ifdef HAVE_FAX
 %include "actiff.h"
 %include "smfaxapi.h"
@@ -373,6 +381,19 @@ PyObject *buffer_alloc(int size);
 	}
 }
 #endif
+
+%extend SM_VMPRX_STATUS_PARMS {
+	PyObject *get_ports_address() {
+		if (self->status != kSMVMPrxStatusGotPorts)
+		{
+	    	PyErr_SetString(PyExc_ValueError, "invalid status");
+			return NULL;
+		}
+		
+		return PyString_FromString(
+			(const char*)inet_ntoa(self->u.ports.address));
+	}
+}
 
 %define SIZED_STRUCT(name) 
 %extend name {

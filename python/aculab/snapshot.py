@@ -13,6 +13,7 @@ class Card(object):
     def __init__(self, card, info):
         self.card = card
         self.info = info
+        self.ip_address = None
 
 class SwitchCard(Card):
     """An Aculab card with a switch matrix."""
@@ -73,10 +74,26 @@ class CallControlCard(Card):
         if rc:
             raise AculabError(rc, 'call_get_card_info')
 
+        if infop.card_type == lowlevel.ACU_PROSODY_X_CARD:
+            ipinfo = lowlevel.ACU_PROSODY_IP_CARD_REGISTRATION_PARMS()
+            
+            ipinfo.card = self.card.serial_no
+            
+            rc = lowlevel.acu_get_prosody_ip_card_config(ipinfo)
+            if rc:
+                raise AculabError(rc, '%s acu_get_prosody_ip_card_config' \
+                                  % self.card.serial_no)
+
+            self.ip_address = ipinfo.ip4_address;
+
         self.ports = [Port(card, i) for i in range(infop.ports)]
 
     def __repr__(self):
-        return 'CallControlCard(%s)' % self.card.serial_no
+        if self.ip_address:
+            return 'CallControlCard(%s, %s)' \
+                   % (self.card.serial_no, self.ip_address)
+        else:
+            return 'CallControlCard(%s)' % self.card.serial_no
             
 class Module(object):
     """A DSP module on an Aculab Prosody (speech processing) card."""
@@ -103,7 +120,8 @@ class ProsodyCard(Card):
     """An Aculab Prosody (speech processing) card."""
     def __init__(self, card, info):
         Card.__init__(self, card, info)
-    
+        
+        self.ip_address = None
         open_prosp = lowlevel.ACU_OPEN_PROSODY_PARMS()
 
         open_prosp.card_id = card.card_id
@@ -116,11 +134,27 @@ class ProsodyCard(Card):
         rc = lowlevel.sm_get_card_info(sm_infop)
         if rc:
             raise AculabError(rc, '%s sm_get_card_info' % self.card.serial_no)
-
+            
         self.modules = [Module(card, i) for i in range(sm_infop.module_count)]
 
+        if sm_infop.card_type == lowlevel.kSMCarrierCardTypePX:
+            ipinfo = lowlevel.ACU_PROSODY_IP_CARD_REGISTRATION_PARMS()
+            
+            ipinfo.card = self.card.serial_no
+            
+            rc = lowlevel.acu_get_prosody_ip_card_config(ipinfo)
+            if rc:
+                raise AculabError(rc, '%s acu_get_prosody_ip_card_config' \
+                                  % self.card.serial_no)
+
+            self.ip_address = ipinfo.ip4_address;
+
     def __repr__(self):
-        return 'ProsodyCard(%s)' % self.card.serial_no
+        if self.ip_address:
+            return 'ProsodyCard(%s, %s)' \
+                   % (self.card.serial_no, self.ip_address)
+        else:
+            return 'ProsodyCard(%s)' % self.card.serial_no
 
 count = 0
 
@@ -138,6 +172,7 @@ class Snapshot(object):
         """Note that we do not have a __init__ method, since this is called
         every time the singleton is re-issued. We do the work here instead"""
         
+        self.sip = None
         self.switch = []
         self.call = []
         self.prosody = []
@@ -147,6 +182,11 @@ class Snapshot(object):
             raise RuntimeError
         
         count = count + 1
+
+        rc, sip_port = lowlevel.sip_open_port()
+        # Don't fail if no SIP service is running
+        if rc == 0:
+            self.sip = sip_port
         
         snapshotp = lowlevel.ACU_SNAPSHOT_PARMS()
     

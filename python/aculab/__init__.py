@@ -84,3 +84,4 @@ def defaultLogging(level = logging.WARNING, logfile = None):
         log.addHandler(hdlr)
         
     return log
+

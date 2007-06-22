@@ -18,6 +18,7 @@ import threading
 import logging
 import lowlevel
 import names
+from util import Lockable
 from fax import FaxRxJob
 from busses import Connection, CTBusEndpoint, DefaultBus
 from error import *
@@ -48,6 +49,30 @@ def swig_value(s):
         return s[a+1:o]
 
     return s            
+
+def os_event(event):
+    if os.name == 'nt':
+        return pywintypes.HANDLE(event)
+    else:
+        return event
+
+def translate_card(card, module):
+    if version[0] < 2:
+        return card, module
+
+    from snapshot import Snapshot
+
+    if type(card) == type(0):
+        c = Snapshot().prosody[card]
+    else:
+        c = card
+
+    if type(module) == type(0):
+        m = c.modules[module]
+    else:
+        m = module
+
+    return c, m
 
 class Glue(object):
     """Glue logic to tie a SpeechChannel to a Call.
@@ -178,7 +203,7 @@ class Win32SpeechEventDispatcher(object):
         self.dispatchers = []
         self.running = False
         
-    def add(self, handle, method):
+    def add(self, handle, method, mask = None):
         """Add a new handle to the dispatcher.
 
         @param handle: The handle of the Event to watch.
@@ -239,6 +264,25 @@ class Win32SpeechEventDispatcher(object):
             d.setDaemon(1)
             d.start()
         self.dispatchers[0].run()
+
+maskmap = { select.POLLIN: 'POLLIN',
+            select.POLLPRI: 'POLLPRI',
+            select.POLLOUT: 'POLLOUT',
+            select.POLLERR: 'POLLERR',
+            select.POLLHUP: 'POLLHUP',
+            select.POLLNVAL: 'POLLNVAL' }
+           
+
+def maskstr(mask):
+    "Print a eventmask for poll"
+
+    l = []
+    for v, s in maskmap.iteritems():
+        if mask & v:
+            l.append(s)
+
+    return '|'.join(l)
+
         
 class PollSpeechEventDispatcher(threading.Thread):
     """Prosody Event dispatcher for Unix systems with poll(), most notably
@@ -258,28 +302,30 @@ class PollSpeechEventDispatcher(threading.Thread):
         self.poll = select.poll()
 
         # listen to the read fd of our pipe
-        self.poll.register(self.pipe[0], select.POLLIN)
+        self.poll.register(self.pipe[0], select.POLLIN )
         
-    def add(self, handle, method):
+    def add(self, handle, method, mask = select.POLLIN):
         """Add a new handle to the dispatcher.
 
         @param handle: Typically the C{tSMEventId} associated with the
             event, but any object with an C{fd} attribute will work also.
         @param method: This will be called when the event is fired.
+        @param mask: Bitmask of POLLIN, POLLPRI, POLLOUT, POLLERR, POLLHUP
+            or POLLNVAL or None for a default mask.
         
         add blocks until handle is added by dispatcher thread"""
         h = handle.fd
         if threading.currentThread() == self or not self.isAlive():
-            # log.debug('adding fd : %d %s', h, method)
+            # log.debug('adding fd: %d %s', h, method.__name__)
             self.handles[h] = method
-            self.poll.register(h)
+            self.poll.register(h, mask)
         else:
-            # log.debug('self adding: %d %s', h, method)
+            # log.debug('self adding: %d %s', h, method.__name__)
             event = threading.Event()
             self.mutex.acquire()
             self.handles[h] = method
             # function 1 is add
-            self.queue.append((1, h, event))
+            self.queue.append((1, h, event, mask))
             self.mutex.release()
             self.pipe[1].write('1')
             event.wait()
@@ -302,7 +348,7 @@ class PollSpeechEventDispatcher(threading.Thread):
             self.mutex.acquire()
             del self.handles[h]
             # function 0 is remove
-            self.queue.append((0, h, event))
+            self.queue.append((0, h, event, None))
             self.mutex.release()
             self.pipe[1].write('0')        
             event.wait()
@@ -312,16 +358,16 @@ class PollSpeechEventDispatcher(threading.Thread):
         while True:
             try:
                 active = self.poll.poll()
-                for a, mode in active:
+                for a, mask in active:
                     if a == self.pipe[0].fileno():
                         self.pipe[0].read(1)
                         self.mutex.acquire()
                         try:
-                            add, fd, event = self.queue.pop(0)
+                            add, fd, event, mask = self.queue.pop(0)
                         finally:
                             self.mutex.release()
                         if add:
-                            self.poll.register(fd)
+                            self.poll.register(fd, mask)
                         else:
                             self.poll.unregister(fd)
 
@@ -334,11 +380,13 @@ class PollSpeechEventDispatcher(threading.Thread):
                         finally:
                             self.mutex.release()
 
-                        # log.info('event on fd %d %s', a, m)
+                        #log.info('event on fd %d %s: %s', a, maskstr(mask),
+                        #         m.__name__)
+                        
                         # ignore method not found
                         if m:
                             m()
-                            
+
             except StopIteration:
                 return
             except KeyboardInterrupt:
@@ -869,7 +917,7 @@ class SpeechEndpoint(object):
     def __del__(self):
         self.close()
 
-class SpeechChannel(object):
+class SpeechChannel(Lockable):
     """A full duplex Prosody channel with events."""
         
     def __init__(self, controller, card = 0, module = 0, mutex = None,
@@ -891,10 +939,10 @@ class SpeechChannel(object):
         If a mutex is passed in, it will be acquired before any controller
         method is invoked and released as soon as it returns"""
 
-        self.card = card
+        Lockable.__init__(self, mutex)
+
         self.controller = controller
         self.dispatcher = dispatcher
-        self.mutex = mutex
         self.user_data = user_data
         self.job = None
         self.close_pending = None
@@ -907,19 +955,11 @@ class SpeechChannel(object):
         self.channel = None
         self.name = None
 
-        if version[0] >= 2:
-            from snapshot import Snapshot
-            if type(module) == type(0):
-                module = Snapshot().prosody[card].modules[module]
-
-            self.module = module
-            self.module_id = module.open.module_id
-        else:
-            self.module_id = module
+        self.card, self.module = translate_card(card, module)
 
         alloc = lowlevel.SM_CHANNEL_ALLOC_PLACED_PARMS()
         alloc.type = lowlevel.kSMChannelTypeFullDuplex
-        alloc.module = self.module_id
+        alloc.module = self.module.open.module_id
         
         rc = lowlevel.sm_channel_alloc_placed(alloc)
         if rc:
@@ -1051,14 +1091,6 @@ class SpeechChannel(object):
 
         self._close()
         
-    def lock(self):
-        if self.mutex:
-            self.mutex.acquire()
-
-    def unlock(self):
-        if self.mutex:
-            self.mutex.release()
-
     def create_event(self, event):
         """event has type SM_CHANNEL_SET_EVENT_PARMS and is modified in place
         The handle is returned"""
@@ -1069,10 +1101,7 @@ class SpeechChannel(object):
         if rc:
             raise AculabSpeechError(rc, 'smd_ev_create')
 
-        if os.name == 'nt':
-            return pywintypes.HANDLE(ev)
-        else:
-            return ev
+        return os_event(ev)
 
     def set_event(self, _type):
         event = lowlevel.SM_CHANNEL_SET_EVENT_PARMS()
@@ -1334,21 +1363,15 @@ class SpeechChannel(object):
         if m:
             m(job, reason, self.user_data)
 
-class Conference(object):
+class Conference(Lockable):
     """A Conference: not fully implemented yet."""
     def __init__(self, module = None, mutex = None):
+        Lockable.__init__(self, mutex)
+        
         self.module = module
         self.listeners = 0
         self.speakers = 0
         self.mutex = mutex
-
-    def lock(self):
-        if self.mutex:
-            self.mutex.acquire()
-
-    def unlock(self):
-        if self.mutex:
-            self.mutex.release()
 
     def add(self, channel, mode):
         self.lock()

@@ -61,7 +61,7 @@ if __name__ == '__main__':
         if o == '-o':
             outfile = a
         if o == '-x':
-            exclude.append(a)
+            exclude.append(unicode(a))
         else:
             usage()
 
