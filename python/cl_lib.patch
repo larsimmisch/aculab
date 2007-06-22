@@ -1,5 +1,5 @@
---- /usr/local/aculab/v6/include/cl_lib.h	2007-04-23 16:47:54.000000000 +0200
-+++ cl_lib.h2	2007-05-10 17:15:57.000000000 +0200
+--- /usr/local/aculab/v6/include/cl_lib.h	2007-04-24 13:36:51.000000000 +0200
++++ cl_lib.h2	2007-06-22 17:06:50.000000000 +0200
 @@ -16,21 +16,13 @@
  
  #include "acu_type.h"
@@ -29,3 +29,12 @@
  enum
  {
  	/*---- system configuration information ----*/
+@@ -2921,7 +2913,7 @@
+ {
+ 	ACU_ULONG size;
+ 	ACU_INT sip_code;
+-	const char* reason_phrase;
++	char* reason_phrase;
+ }
+ ACU_PACK_DIRECTIVE SIP_SET_REASON_PHRASE_PARMS;
+ 
