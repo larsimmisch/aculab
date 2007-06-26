@@ -10,13 +10,16 @@ import logging
 import lowlevel
 import names
 import sdp
+from speech import SpeechChannel, translate_card
+from reactor import SpeechReactor
 from snapshot import Snapshot
 from error import *
-from util import Lockable
-from speech import SpeechDispatcher, os_event, translate_card
+from util import Lockable, os_event
+
 import select
 
 log = logging.getLogger('rtp')
+log_switch = logging.getLogger('switch')
 
 rfc2833_digits = {
     0: '0', 1: '1', 2: '2', 3: '3', 4: '4',
@@ -31,7 +34,7 @@ class VMPrx(Lockable):
     """An RTP receiver."""
         
     def __init__(self, controller, card = 0, module = 0, mutex = None,
-                 user_data = None, dispatcher = SpeechDispatcher):
+                 user_data = None, dispatcher = SpeechReactor):
         """Allocate an RTP receiver, configure alaw/mulaw and RFC 2833 codecs
         and add the event to the dispatcher.
 
@@ -66,7 +69,7 @@ class VMPrx(Lockable):
 
         self.vmprx = vmprx.vmprx
 
-        self.name = '0x%04x' % self.vmprx
+        self.name = 'Vrx-%04x' % self.vmprx
 
         # get the event
         evmprx = lowlevel.SM_VMPRX_EVENT_PARMS()
@@ -142,6 +145,10 @@ class VMPrx(Lockable):
                       tone, volume)
 
             self.controller.dtmf(self, rfc2933_digits[tone], self.user_data)
+
+    def get_datafeed(self):
+        """Used internally by the switching protocol."""
+        return self.datafeed
             
     def config_tones(self, detect = 1, regen = 0):
         """Configure RFC2833 tone detection/regeneration."""
@@ -187,11 +194,11 @@ class VMPrx(Lockable):
         self.config_codec(lowlevel.kSMCodecTypeMulaw, 8)
         self.config_rfc2833()
 
-class VMPtx:
+class VMPtx(Lockable):
     """An RTP transmitter."""
         
     def __init__(self, controller, card = 0, module = 0, mutex = None,
-                 user_data = None, dispatcher = SpeechDispatcher):
+                 user_data = None, dispatcher = SpeechReactor):
 
         Lockable.__init__(self, mutex)
 
@@ -212,7 +219,7 @@ class VMPtx:
             raise AculabSpeechError(rc, 'sm_vmptx_create')
 
         self.vmptx = vmptx.vmptx
-        self.name = '0x%04x' % self.vmptx
+        self.name = 'Vtx-%04x' % self.vmptx
 
         evmptx = lowlevel.SM_VMPTX_EVENT_PARMS()
         evmptx.vmptx = self.vmptx
@@ -223,8 +230,8 @@ class VMPtx:
 
         self.event_vmptx = os_event(evmptx.event)
 
-        log.debug('vmptx event: %d', self.event_vmptx.fd)
-        
+        # log.debug('vmptx event: %d', self.event_vmptx.fd)
+
         self.dispatcher.add(self.event_vmptx, self.on_vmptx, select.POLLIN)
 
     def _close(self):
@@ -247,6 +254,42 @@ class VMPtx:
         rc = lowlevel.sm_vmptx_status(status)
         log.debug('%s vmptx status: %s', self.name,
                   names.vmptx_status_names[status.status])
+
+    def get_datafeed(self):
+        """Used internally by the switching protocol."""
+        return self.datafeed
+
+    def configure(self, sdp):
+        """Configure the Transmitter according to the SDP.
+
+        @param sdp: An instance of class L{SDP}."""
+
+        config = lowlevel.SM_VMPTX_CONFIG_PARMS()
+        config.vmptx = self.vmptx
+        addr = sdp.getAddress('audio')
+
+        log.debug('%s destination: %s', self.name, addr)
+        
+        # need to flatten the address tuple
+        config.set_destination_rtp(*addr)
+
+        rc = lowlevel.sm_vmptx_config(config)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_vmptx_config')
+
+        md = sdp.getMediaDescription('audio')
+        for k, v in md.rtpmap.iteritems():
+            m = v[1]
+            if m.name == 'PCMU':
+                self.config_codec(lowlevel.kSMCodecTypeMulaw, k)
+            elif m.name == 'PCMA':
+                self.config_codec(lowlevel.kSMCodecTypeAlaw, k)
+            elif m.name == 'G729':
+                self.config_codec(lowlevel.kSMCodecTypeG729AB, k)
+            elif m.name == 'telephone-event':
+                self.config_rfc2833(k)
+            else:
+                log.warn('Codec %d %s unsupported', k, m.name)
             
     def config_tones(self, convert = 0, elim = 1):
         """Configure RFC2833 tone conversion/elimination.
@@ -285,10 +328,25 @@ class VMPtx:
     def config_rfc2833(self, pt = 101):
         """Configure the RFC2833 codec."""
         
-        rfc2833 = lowlevel.SM_VMPRX_CODEC_RFC2833_PARMS()
-        rfc2833.vmprx = self.vmprx
+        rfc2833 = lowlevel.SM_VMPTX_CODEC_RFC2833_PARMS()
+        rfc2833.vmptx = self.vmptx
         rfc2833.payload_type = pt
 
         rc = lowlevel.sm_vmptx_config_codec_rfc2833(rfc2833)
         if rc:
             raise AculabSpeechError(rc, 'sm_vmptx_config_codec_rfc2833')
+
+    def listen_to(self, other):
+        if hasattr(other, 'get_datafeed'):
+            connect = lowlevel.SM_VMPTX_DATAFEED_CONNECT_PARMS()
+            connect.vmptx = self.vmptx
+            connect.data_source = other.get_datafeed()
+
+            rc = lowlevel.sm_vmptx_datafeed_connect(connect)
+            if rc:
+                raise AculabSpeechError(rc, 'sm_vmptx_datafeed_connect')
+
+            log_switch.debug('%s := %s', self.name, other.name)
+        else:
+            raise ValueError('Cannot connect to instance without '\
+                             'get_datafeed() method')

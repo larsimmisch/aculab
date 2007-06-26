@@ -7,7 +7,8 @@ import logging
 from busses import Connection, CTBusEndpoint, NetEndpoint, DefaultBus
 from error import AculabError
 from names import event_names
-from callcontrol import CallHandleBase, CallDispatcher
+from callcontrol import CallHandleBase
+from reactor import CallReactor
 from snapshot import Snapshot
 
 log = logging.getLogger('sip')
@@ -19,19 +20,22 @@ class SIPHandle(CallHandleBase):
     event handling is delegated to the controller."""
 
     def __init__(self, controller, user_data = None,
-                 dispatcher = CallDispatcher):
+                 reactor = CallReactor):
 
         sip_port = Snapshot().sip
         if sip_port is None:
             raise RuntimeError('no SIP service running')
 
         CallHandleBase.__init__(self, controller, user_data, sip_port,
-                                dispatcher)
+                                reactor)
+
+        self.details = None
+        self.name = 'SIP-00000000'
         
     def openin(self, request_notification_mask = 0,
                response_notification_mask = 0, call_options = 0):
         
-        inparms = lowlevel.SIP_IN_XPARMS()
+        inparms = lowlevel.SIP_IN_PARMS()
         inparms.net = self.port
         inparms.request_notification_mask = request_notification_mask
         inparms.response_notification_mask = response_notification_mask
@@ -42,9 +46,9 @@ class SIPHandle(CallHandleBase):
             raise AculabError(rc, 'sip_openin')
 
         self.handle = inparms.handle
-        self.name = hex(self.handle)
+        self.name = 'SIP-%08x' % self.handle
 
-        self.dispatcher.add(self)
+        self.reactor.add(self)
 
         log.debug('%s openin()', self.name)
 
@@ -75,16 +79,16 @@ class SIPHandle(CallHandleBase):
             raise AculabError(rc, 'sip_openout')
 
         self.handle = outparms.handle
-        self.name = hex(self.handle)
+        self.name = 'SIP-%08x' % self.handle
 
-        self.dispatcher.add(self)
+        self.reactor.add(self)
 
         log.debug('%s openout(%s, %s)', self.name, destination_address,
                   originating_address)
 
     def get_details(self):
         if self.details:
-            sip_free_details(self.details)
+            lowlevel.sip_free_details(self.details)
             
         self.details = lowlevel.SIP_DETAIL_PARMS()
         self.details.handle = self.handle
@@ -98,12 +102,9 @@ class SIPHandle(CallHandleBase):
     def accept(self, sdp, contact_address = None):
         """Accept the call."""
 
-        media = ACU_MEDIA_OFFER_ANSWER()
-        media.raw_sdp = str(sdp)
-        
         accept = lowlevel.SIP_ACCEPT_PARMS()
         accept.handle = self.handle
-        accept.media_offer_answer = media
+        accept.media_offer_answer.raw_sdp = str(sdp)
         
         rc = lowlevel.sip_accept(accept)
         if rc:
@@ -116,7 +117,7 @@ class SIPHandle(CallHandleBase):
         ringing = lowlevel.SIP_INCOMING_RINGING_PARMS()
         ringing.handle = self.handle
         
-        rc = lowlevel.call_incoming_ringing(ringing)
+        rc = lowlevel.sip_incoming_ringing(ringing)
         if rc:
             raise AculabError(rc, 'sip_incoming_ringing', self.handle)
 
@@ -142,10 +143,10 @@ class SIPHandle(CallHandleBase):
         """Release a call."""
 
         if self.details:
-            sip_free_details(self.details)
+            lowlevel.sip_free_details(self.details)
             self.details = None
         
-        self.dispatcher.remove(self)
+        self.reactor.remove(self)
 
         if self.handle:
             disconnect = lowlevel.DISCONNECT_XPARMS()
@@ -155,16 +156,16 @@ class SIPHandle(CallHandleBase):
             if rc:
                 raise AculabError(rc, 'call_release', self.handle)
 
-        log.debug('%s release(%d)', self.name, xcause.cause)
+        log.debug('%s release()', self.name)
 
         # restore the handle for the inbound call if there is one
         if hasattr(self, 'in_handle'):
             self.handle = self.in_handle
-            self.name = hex(self.handle)
+            self.name = 'SIP-%08x' % self.handle
             del self.in_handle
         else:
             self.handle = None
-            self.name = '0x0000'
+            self.name = 'SIP-00000000'
             
     def ev_incoming_call_det(self):
         self.get_details()
@@ -186,8 +187,8 @@ class SIPCall(SIPHandle):
     creation."""
 
     def __init__(self, controller, user_data = None,
-                 dispatcher = CallDispatcher):
+                 reactor = CallReactor):
         
-        SIPHandle.__init__(self, controller, user_data, dispatcher)
+        SIPHandle.__init__(self, controller, user_data, reactor)
 
         self.openin()

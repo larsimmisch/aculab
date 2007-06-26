@@ -9,9 +9,9 @@ import getopt
 import logging
 import aculab
 from aculab.error import AculabError
-from aculab.callcontrol import Call, CallDispatcher
-from aculab.speech import SpeechChannel, SpeechDispatcher, Glue, PlayJob, \
-     RecordJob
+from aculab.callcontrol import Call
+from aculab.speech import SpeechChannel, Glue, PlayJob, RecordJob
+from aculab.reactor import CallReactor, SpeechReactor
 from aculab.busses import DefaultBus
 from aculab.timer import TimerThread
 import aculab.lowlevel as lowlevel
@@ -375,7 +375,7 @@ if __name__ == '__main__':
 
         timer = TimerThread()
         timer.start()
-        SpeechDispatcher.start()
-        CallDispatcher.run()
+        SpeechReactor.start()
+        CallReactor.run()
     except:
         log.error('answering machine exception', exc_info=1)

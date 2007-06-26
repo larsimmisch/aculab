@@ -1,5 +1,24 @@
 """Contains utility classes: OrderedDict and Lockable."""
 
+import os
+
+if os.name == 'nt':
+    import pywintypes
+
+def swig_value(s):
+    a = s.find('_')
+    if a != -1:
+        o = s.find('_', a+1)
+        return s[a+1:o]
+
+    return s            
+
+def os_event(event):
+    if os.name == 'nt':
+        return pywintypes.HANDLE(event)
+    else:
+        return event
+
 class OrderedDict(dict):
     """A UserDict that preserves insert order whenever possible."""
     def __init__(self, d=None, **kwargs):

@@ -2,10 +2,11 @@
 
 import time
 from aculab.error import AculabError
-from aculab.callcontrol import Call, CallDispatcher
-from aculab.speech import SpeechChannel, SpeechDispatcher
+from aculab.callcontrol import Call
+from aculab.speech import SpeechChannel
+from aculab.reactor import CallReactor, SpeechReactor
 
-SpeechDispatcher.start()
+SpeechReactor.start()
 
 for i in range(20):
     speech = SpeechChannel(controller, 0)

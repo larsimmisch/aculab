@@ -10,8 +10,10 @@ import aculab
 import aculab.lowlevel as lowlevel
 from aculab.error import AculabError
 from aculab.snapshot import Snapshot
-from aculab.speech import SpeechChannel, SpeechDispatcher, DCReadJob
-from aculab.busses import DefaultBus
+from aculab.speech import SpeechChannel, DCReadJob
+from aculab.reactor import SpeechReactor
+from aculab.connect import connect
+
 
 
 f = open('raw.al', 'w')
@@ -34,7 +36,7 @@ class Model:
                          SpeechChannel(controller, card, module,
                                        user_data=self)]
 
-        self.connection = self.channels[0].connect(self.channels[1])
+        self.connection = connect(self.channels[0], self.channels[1])
 
     def reinit(self):
         del self.connection
@@ -43,12 +45,12 @@ class Model:
         self.channels = [SpeechChannel(controller, card, module),
                          SpeechChannel(controller, card, module)]
 
-        self.connection = self.channels[0].connect(self.channels[1])
+        self.connection = connect(self.channels[0], self.channels[1])
 
     def reconnect(self):
         self.reconnected = True
-        del self.connection
-        self.connection = self.channels[0].connect(self.channels[1])
+
+        self.connection = connect(self.channels[0], self.channels[1])
 
     def start(self):
         self.dc_read = DCReadJob(self.channels[0],
@@ -123,4 +125,4 @@ if __name__ == '__main__':
 
     m.start()
     
-    SpeechDispatcher.run()
+    SpeechReactor.run()

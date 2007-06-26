@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 # Copyright (C) 2004 Anthony Baxter
 # Copyright (C) 2004 Jamey Hicks
 #
@@ -326,7 +328,12 @@ class SDP:
         self._o_ipaddr = self.ipaddr = None
         self.port = None
         if text:
-            self.parse(text)
+            if isinstance(text, list):
+                self.parse(text)
+            elif isinstance(text, str):
+                self.parse(text.split('\r\n'))
+            else:
+                raise ValueError('text must be list of strings or string')
             self.assertSanity()
         else:
             # new SDP
@@ -354,13 +361,16 @@ class SDP:
             if len(elts) != 2:
                 continue
             (k,v) = elts
-            if k == 'm':
-                md = MediaDescription(v)
-                self.mediaDescriptions.append(md)
-            elif md:
-                mdparser[k](md, k, v)
-            else:
-                parser[k](self, k, v)
+            try:
+                if k == 'm':
+                    md = MediaDescription(v)
+                    self.mediaDescriptions.append(md)
+                elif md:
+                    mdparser[k](md, k, v)
+                else:
+                    parser[k](self, k, v)
+            except KeyError:
+                raise ValueError, line            
 
     def get(self, typechar, option=None):
         if option is None:
@@ -466,4 +476,10 @@ if __name__ == '__main__':
     sdp.setServerIP('192.168.11.224')
     sdp.addMediaDescription(md)
     
-    print sdp
+    s = str(sdp)
+
+    # print repr(s)
+
+    sdp = SDP(s)
+    print sdp.getMediaDescription('audio').rtpmap
+    print sdp.getAddress('audio')

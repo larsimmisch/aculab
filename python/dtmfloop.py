@@ -10,9 +10,9 @@ import time
 import aculab
 import traceback
 from aculab.error import AculabError
-from aculab.snapshot import Snapshot
-from aculab.speech import SpeechChannel, SpeechDispatcher, Glue
-from aculab.busses import DefaultBus
+from aculab.speech import SpeechChannel
+from aculab.reactor import SpeechReactor
+from aculab.connect import connect
 
 class DTMFLoopController:
 
@@ -49,17 +49,15 @@ if __name__ == '__main__':
         else:
             usage()
 
-    snapshot = Snapshot()
-
     channels = [SpeechChannel(controller, card, module),
                 SpeechChannel(controller, card, module)]
 
-    connection = channels[0].connect(channels[1])
+    connection = connect(channels[0], channels[1])
 
     for i in (0, 1):
         log.debug("[%d] %d:%d", i, channels[i].info.ost, channels[i].info.ots)
 
     channels[0].record('dtmf.al', max_silence = 1000)
-    channels[1].digits('1234567890')
+    channels[1].digits('0123456789')
     
-    SpeechDispatcher.run()
+    SpeechReactor.run()

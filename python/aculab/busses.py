@@ -1,4 +1,4 @@
-'''CT busses, and various types of connections.'''
+'''Connection endpoints, Connection objects and CT busses.'''
 
 import sys
 import lowlevel
@@ -149,30 +149,40 @@ class SpeechEndpoint(object):
         """
         self.channel = channel
         self.direction = direction
-        if direction not in ['in', 'out']:
-            raise ValueError('direction must be \'in\' or \'out\'')
+        if direction not in ['in', 'out', 'datafeed']:
+            raise ValueError("direction must be 'in', 'out' or 'datafeed'")
 
     def close(self):
         """Disconnect the endpoint."""
         
         if self.channel:
-            input = lowlevel.SM_SWITCH_CHANNEL_PARMS()
-
-            input.channel = self.channel.channel
-            input.st = -1
-            input.ts = -1
-
-            if self.direction == 'in':
-                rc = lowlevel.sm_switch_channel_input(input)
+            if self.direction == 'datafeed':
+                connect = lowlevel.SM_CHANNEL_DATAFEED_CONNECT_PARMS()
+                connect.channel = self.channel
+                connect.data_source= lowlevel.kSMNullDatafeedId
+                
+                rc = lowlevel.sm_channel_datafeed_connect(connect)
                 if rc:
-                    raise AculabSpeechError(rc, 'sm_switch_channel_input')
+                    raise AculabSpeechError(rc, 'sm_channel_datafeed_connect')
+                    
             else:
-                rc = lowlevel.sm_switch_channel_output(input)
-                if rc:
-                    raise AculabSpeechError(rc, 'sm_switch_channel_output')
+                input = lowlevel.SM_SWITCH_CHANNEL_PARMS()
 
-            log.debug('%s disconnected(%s)', self.channel.name,
-                             self.direction)
+                input.channel = self.channel.channel
+                input.st = -1
+                input.ts = -1
+                
+                if self.direction == 'in':
+                    rc = lowlevel.sm_switch_channel_input(input)
+                    if rc:
+                        raise AculabSpeechError(rc, 'sm_switch_channel_input')
+                    else:
+                        rc = lowlevel.sm_switch_channel_output(input)
+                        if rc:
+                            raise AculabSpeechError(
+                                rc, 'sm_switch_channel_output')
+                        
+            log.debug('%s disconnected(%s)', self.channel.name, self.direction)
 
             self.channel = None
 
@@ -182,8 +192,46 @@ class SpeechEndpoint(object):
 
     def __repr__(self):
         """Print a representation of the endpoint."""
-        return 'SpeechEndpoint(0x%x, %s)'% \
-               (self.channel.channel, str(self.ts))
+        return 'SpeechEndpoint(%s, %s)'% \
+               (self.channel.name, str(self.ts))
+
+class VMPtxEndpoint(object):
+    """An endpoint to a VMPtx (RTP transmitter).
+
+    Endpoints are used to close a L{Connection}. They do all their work in
+    C{close} or upon destruction (which calls C{close}).
+    """
+    
+    def __init__(self, vmptx):
+        """Initialize a datafeed endpoint to a L{VMPtx}.
+
+        @param vmptx: a L{VMPtx}.
+        """
+        self.channel = channel
+
+    def close(self):
+        """Disconnect the endpoint."""
+        
+        if self.channel:
+            connect = lowlevel.SM_VMPTX_DATAFEED_CONNECT_PARMS()
+            connect.vmptx = self.vmptx
+            connect.data_source= lowlevel.kSMNullDatafeedId
+
+            rc = lowlevel.sm_vmptx_datafeed_connect(connect)
+            if rc:
+                raise AculabSpeechError(rc, 'sm_vmptx_datafeed_connect')
+
+            self.channel = None
+
+    def __del__(self):
+        """Close the endpoint if it is still open"""
+        
+        self.close()
+
+    def __repr__(self):
+        """Print a representation of the endpoint."""
+        
+        return 'VMPtxEndpoint(%s)'% self.vmptx.name    
 
 class CTBus(object):
     """Base class for an isochronous, multiplexed bus.

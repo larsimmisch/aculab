@@ -5,6 +5,7 @@ import getopt
 import struct
 import time
 from aculab.error import AculabError
+from aculab.reactor import CallReactor
 from aculab.callcontrol import *
 from aculab.timer import *
 
@@ -166,7 +167,7 @@ if __name__ == '__main__':
 ##                        lowlevel.CONTROL_LAST_INFO_SETUP, fd)
 
     try:
-        CallDispatcher.run()
+        CallReactor.run()
     except KeyboardInterrupt:
         log.info(statistics)
         raise

@@ -6,6 +6,7 @@ import logging
 import aculab
 from aculab.error import AculabError
 from aculab.callcontrol import *
+from aculab.reactor import CallReactor
 import aculab.lowlevel as ll
 
 def hex_string(s):
@@ -82,4 +83,4 @@ if __name__ == '__main__':
     for i in range(numcalls):
         c = Call(controller, card=card, port=port, timeslot=timeslot)
 
-    CallDispatcher.run()
+    CallReactor.run()

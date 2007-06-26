@@ -9,120 +9,12 @@ import getopt
 import lowlevel
 import aculab
 import logging
+from reactor import CallReactor
 from busses import Connection, CTBusEndpoint, NetEndpoint, DefaultBus
 from error import AculabError
-from names import event_names
-
-# These events are not set in call.last_event because they don't
-# change the state of the call as far as we are concerned
-# They are delivered to the controller, of course
-no_state_change_events = [lowlevel.EV_CALL_CHARGE,
-                          lowlevel.EV_CHARGE_INT,
-                          lowlevel.EV_DETAILS]
-
-no_state_change_extended_events = [lowlevel.EV_EXT_FACILITY,
-                                   lowlevel.EV_EXT_UUI_PENDING,
-                                   lowlevel.EV_EXT_UUI_CONGESTED,
-                                   lowlevel.EV_EXT_UUI_UNCONGESTED,
-                                   lowlevel.EV_EXT_UUS_SERVICE_REQUEST,
-                                   lowlevel.EV_EXT_TRANSFER_INFORMATION]
-
 
 log = logging.getLogger('call')
 log_switch = logging.getLogger('switch')
-
-class _CallEventDispatcher:
-
-    def __init__(self, verbose = True):
-        self.calls = {}
-        self.verbose = verbose
-
-    # add must only be called from a dispatched event
-    # - not from a separate thread
-    def add(self, call):
-        self.calls[call.handle] = call
-
-    # remove must only be called from a dispatched event
-    # - not from a separate thread
-    def remove(self, call):
-        del self.calls[call.handle]
-
-    def run(self):
-        event = lowlevel.STATE_XPARMS()
-        
-        while True:
-            if not self.calls:
-                return
-            
-            event.handle = 0
-            event.timeout = 200
-
-            rc = lowlevel.call_event(event)
-            if rc:
-                raise AculabError(rc, 'call_event')
-
-            handled = ''
-            
-            # call the event handlers
-            if event.handle:
-                if event.state == lowlevel.EV_EXTENDED:
-                    ev = ext_event_names[event.extended_state].lower()
-                else:
-                    ev = event_names[event.state].lower()
-
-                call = self.calls.get(event.handle, None)
-                if not call:
-                    log.error('got event %s for nonexisting call 0x%x',
-                              ev, event.handle)
-                    continue
-                
-                mutex = getattr(call.user_data, 'mutex', None)
-                if mutex:
-                    mutex.acquire()
-
-                mcall = None
-                mcontroller = None
-
-                try:
-                    mcall = getattr(call, ev, None)
-                    mcontroller = getattr(call.controllers[-1], ev, None)
-                    
-
-                    # compute description of handlers
-                    if mcontroller and mcall:
-                        handled = '(call, controller)'
-                    elif mcontroller:
-                        handled = '(controller)'
-                    elif mcall:
-                        handled = '(call)'
-                    else:
-                        handled = '(ignored)'
-
-                    log.debug('%s %s %s', call.name, ev, handled)
-
-                    # let the call handle events first
-                    if mcall:
-                        mcall()
-                    # pass the event on to the controller
-                    if mcontroller:
-                        mcontroller(call, call.user_data)
-
-                finally:
-                    # set call.last_event and call.last_extended_event
-                    if event.state == lowlevel.EV_EXTENDED \
-                       and event.extended_state \
-                       not in no_state_change_extended_events:
-                        call.last_event = lowlevel.EV_EXTENDED
-                        call.last_extended_event = event.extended_state
-                    elif event.state not in no_state_change_events:
-                        call.last_event = event.state
-                        call.last_extended_event = None
-
-                    if mutex:
-                        mutex.release()
-
-
-CallDispatcher = _CallEventDispatcher()
 
 class CallHandleBase:
     """Base class for a Call Handle.
@@ -130,18 +22,18 @@ class CallHandleBase:
     Holds common members and the controller stack."""
 
     def __init__(self, controller, user_data = None, port = 0,
-                 dispatcher = CallDispatcher):
+                 reactor = CallReactor):
 
         self.user_data = user_data
         # this is a stack of controllers
         self.controllers = [controller]
-        self.dispatcher = dispatcher
+        self.reactor = reactor
         self.port = port
 
         self.handle = None
-        self.name = '0x0000'
+        self.name = 'Cch-0000'
         
-        # The dispatcher sets the last state changing event after dispatching
+        # The reactor sets the last state changing event after dispatching
         # the event. Which events are deemed state changing is controlled via
         # no_state_change_events
         self.last_event = lowlevel.EV_IDLE
@@ -160,9 +52,9 @@ class CallHandle(CallHandleBase):
     event handling is delegated to the controller."""
 
     def __init__(self, controller, user_data = None, card = 0, port = 0,
-                 timeslot = None, dispatcher = CallDispatcher):
+                 timeslot = None, reactor = CallReactor):
 
-        CallHandleBase.__init__(self, controller, user_data, port, dispatcher)
+        CallHandleBase.__init__(self, controller, user_data, port, reactor)
         
         # automatically translate port numbers to v6 port_ids
         if lowlevel.cc_version >= 6:
@@ -200,9 +92,9 @@ class CallHandle(CallHandleBase):
             raise AculabError(rc, 'call_openin')
 
         self.handle = inparms.handle
-        self.name = hex(self.handle)
+        self.name = 'Cch-%04x' % self.handle
 
-        self.dispatcher.add(self)
+        self.reactor.add(self)
 
         log.debug('%s openin()', self.name)
 
@@ -262,9 +154,9 @@ class CallHandle(CallHandleBase):
             self.in_handle = self.handle
 
         self.handle = outparms.handle
-        self.name = hex(self.handle)
+        self.name = 'Cch-%04x' % self.handle
 
-        self.dispatcher.add(self)
+        self.reactor.add(self)
 
         log.debug('%s openout(%s, %d, %s)', self.name, destination_address,
                   sending_complete, originating_address)
@@ -307,9 +199,9 @@ class CallHandle(CallHandleBase):
             self.in_handle = self.handle
 
         self.handle = outparms.handle
-        self.name = hex(self.handle)
+        self.name = 'Cch-%04x' % self.handle
 
-        self.dispatcher.add(self)
+        self.reactor.add(self)
 
         log.debug('%s enquiry(%s, %d, %s)', self.name, destination_address,
                   sending_complete, originating_address)
@@ -415,44 +307,6 @@ class CallHandle(CallHandleBase):
 
         return CTBusEndpoint(self.switch, sink)
 
-    def connect(self, other, bus = DefaultBus()):
-        c = Connection(bus)
-        if isinstance(other, CallHandle):
-            # other is a CallHandle (or subclass)
-            if self.switch == other.switch:
-                # connect directly
-                c.endpoints = [self.listen_to((other.details.stream,
-                                               other.details.ts)),
-                               other.listen_to((self.details.stream,
-                                                self.details.ts))]
-            else:
-                # allocate two timeslots
-                c.timeslots = [ bus.allocate(), bus.allocate() ]
-                # make endpoints
-                c.endpoints = [ other.speak_to(c.timeslots[0]),
-                                self.listen_to(c.timeslots[0]),
-                                self.speak_to(c.timeslots[1]),
-                                other.listen_to(c.timeslots[1]) ]
-        
-        else:
-            # other is a SpeechChannel (or subclass)
-            if self.switch == other.info.card:
-                # connect directly
-                c.endpoints = [self.listen_to((other.info.ost,
-                                               other.info.ots)),
-                               other.listen_to((self.details.stream,
-                                                self.details.ts))]
-            else:
-                # allocate two timeslots
-                c.timeslots = [ bus.allocate(), bus.allocate() ]
-                # make endpoints
-                c.endpoints = [ other.speak_to(c.timeslots[0]),
-                                self.listen_to(c.timeslots[0]),
-                                self.speak_to(c.timeslots[1]),
-                                other.listen_to(c.timeslots[1]) ]
-
-        return c
-
     def get_cause(self):
         cause = lowlevel.CAUSE_XPARMS()
         cause.handle = self.handle
@@ -522,7 +376,7 @@ class CallHandle(CallHandleBase):
     def release(self, cause = None):
         """Release a call. Cause may be a CAUSE_XPARMS struct or an int"""
 
-        self.dispatcher.remove(self)
+        self.reactor.remove(self)
 
         # reset details
         self.details = lowlevel.DETAIL_XPARMS()
@@ -547,11 +401,11 @@ class CallHandle(CallHandleBase):
         # restore the handle for the inbound call if there is one
         if hasattr(self, 'in_handle'):
             self.handle = self.in_handle
-            self.name = hex(self.handle)
+            self.name = 'Cch-%04x' % self.handle
             del self.in_handle
         else:
             self.handle = None
-            self.name = '0x0000'
+            self.name = 'Cch-0000'
             
     def ev_incoming_call_det(self):
         self.get_details()
@@ -578,10 +432,10 @@ class Call(CallHandle):
     """A Call is a CallHandle that does an automatic openin upon creation."""
 
     def __init__(self, controller, user_data = None, card = 0, port = 0,
-                 timeslot = -1, dispatcher = CallDispatcher):
+                 timeslot = -1, reactor = CallReactor):
         
         CallHandle.__init__(self, controller, user_data,
-                            card, port, timeslot, dispatcher)
+                            card, port, timeslot, reactor)
 
         self.openin()
 

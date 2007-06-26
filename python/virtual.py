@@ -3,6 +3,7 @@
 import sys
 import getopt
 from aculab.error import AculabError
+from aculab.reactor import CallReactor
 from aculab.lowlevel import *
 from aculab.callcontrol import *
 
@@ -39,4 +40,4 @@ if __name__ == '__main__':
     c = CallHandle(controller, port=port, timeslot=-1)
     c.openin(cnf=lowlevel.CNF_TSVIRTUAL)
 
-    CallDispatcher.run()
+    CallReactor.run()

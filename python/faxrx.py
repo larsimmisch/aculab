@@ -10,8 +10,9 @@ import time
 import aculab
 from aculab.error import AculabError
 from aculab.snapshot import Snapshot
-from aculab.callcontrol import Call, CallDispatcher
-from aculab.speech import SpeechChannel, SpeechDispatcher, Glue
+from aculab.callcontrol import Call
+from aculab.speech import SpeechChannel, Glue
+from aculab.reactor import CallReactor, SpeechReactor
 from aculab.busses import DefaultBus
 
 class IncomingCallController:
@@ -85,5 +86,5 @@ if __name__ == '__main__':
 
     call = Call(controller, port=port)
 
-    SpeechDispatcher.start()
-    CallDispatcher.run()
+    SpeechReactor.start()
+    CallReactor.run()

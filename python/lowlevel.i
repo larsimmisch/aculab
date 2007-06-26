@@ -1,5 +1,6 @@
 %module(docstring="The Aculab API as seen by SWIG.") lowlevel
 %{
+#include "netdb.h"
 #ifdef TiNG_USE_V6
 #include "cl_lib.h"
 #include "res_lib.h"
@@ -55,6 +56,8 @@ unsigned char bitrev[] = {
 	0x0f, 0x8f, 0x4f, 0xcf, 0x2f, 0xaf, 0x6f, 0xef, 0x1f, 0x9f, 0x5f, 0xdf, 
 	0x3f, 0xbf, 0x7f, 0xff
 };
+
+int set_inaddr(PyObject *address, struct sockaddr_in *addr);
 
 %}
 
@@ -395,6 +398,22 @@ PyObject *buffer_alloc(int size);
 			(const char*)inet_ntoa(self->u.ports.address));
 	}
 }
+
+%extend SM_VMPTX_CONFIG_PARMS {
+	void set_destination_rtp(PyObject *args) {
+		set_inaddr(args, &self->destination_rtp);
+	}
+	void set_source_rtp(PyObject *args) {
+		set_inaddr(args, &self->source_rtp);
+	}
+	void set_destination_rtcp(PyObject *args) {
+		set_inaddr(args, &self->destination_rtcp);
+	}
+	void set_source_rtcp(PyObject *args) {
+		set_inaddr(args, &self->source_rtcp);
+	}
+}
+
 #endif
 
 %define SIZED_STRUCT(name) 
@@ -457,6 +476,55 @@ PyObject *add_result(PyObject *result, PyObject *o)
 	Py_XDECREF(o);
 
 	return result;
+}
+
+/* Compute a sockaddr_in from a a tuple(address, port, address_family 
+
+   Code nicked from Python's socketmodule.c */
+
+int set_inaddr(PyObject *args, struct sockaddr_in *addr)
+{
+	int rc, port, af = AF_INET;
+	char *name;
+	struct addrinfo hints, *res;
+	int error;
+	int d1, d2, d3, d4;
+	char ch;
+
+	if (!PyArg_ParseTuple(args, "si|i:set_inaddr", &name, &port, &af))
+	{
+		PyErr_SetString(PyExc_TypeError, "expecting a tuple (string, int, int)");
+		return -1;
+	}
+
+	if (sscanf(name, "%d.%d.%d.%d%c", &d1, &d2, &d3, &d4, &ch) == 4 &&
+	    0 <= d1 && d1 <= 255 && 0 <= d2 && d2 <= 255 &&
+	    0 <= d3 && d3 <= 255 && 0 <= d4 && d4 <= 255) {
+		addr->sin_addr.s_addr = htonl(
+			((long) d1 << 24) | ((long) d2 << 16) |
+			((long) d3 << 8) | ((long) d4 << 0));
+		addr->sin_family = AF_INET;
+
+		return 0;
+	}
+
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = af;
+	Py_BEGIN_ALLOW_THREADS
+	error = getaddrinfo(name, NULL, &hints, &res);
+	Py_END_ALLOW_THREADS
+	if (error) {
+		PyObject *v = Py_BuildValue("(is)", error, gai_strerror(error));
+		PyErr_SetObject(PyExc_RuntimeError, v);
+		Py_DECREF(v);
+		
+		return -1;
+	}
+
+	memcpy((char *) addr, res->ai_addr, sizeof(struct sockaddr_in));
+	freeaddrinfo(res);
+
+	return 0;
 }
 %}
 

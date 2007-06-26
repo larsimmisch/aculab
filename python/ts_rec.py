@@ -11,7 +11,8 @@ import aculab
 import traceback
 from aculab.error import AculabError
 from aculab.snapshot import Snapshot
-from aculab.speech import SpeechChannel, SpeechDispatcher, Glue
+from aculab.speech import SpeechChannel, Glue
+from aculab.reactor import SpeechReactor
 from aculab.busses import DefaultBus
 
 class RecordController:
@@ -72,4 +73,4 @@ if __name__ == '__main__':
 
         channel.record(f)
     
-    SpeechDispatcher.run()
+    SpeechReactor.run()

@@ -14,24 +14,17 @@ represented by a job."""
 import sys
 import os
 import time
-import threading
 import logging
 import lowlevel
 import names
 from util import Lockable
 from fax import FaxRxJob
+from reactor import SpeechReactor
 from busses import Connection, CTBusEndpoint, SpeechEndpoint, DefaultBus
+from util import swig_value, os_event
 from error import *
 
-if os.name == 'nt':
-    import pywintypes
-    import win32api
-    import win32event
-else:
-    import select
-
-__all__ = ['SpeechDispatcher', 'PlayJob', 'RecordJob', 'DigitsJob',
-           'SpeechChannel', 'version']
+__all__ = ['PlayJob', 'RecordJob', 'DigitsJob', 'SpeechChannel', 'version']
 
 log = logging.getLogger('speech')
 log_switch = logging.getLogger('switch')
@@ -41,20 +34,6 @@ _driver_info = lowlevel.SM_DRIVER_INFO_PARMS()
 lowlevel.sm_get_driver_info(_driver_info)
 version = (_driver_info.major, _driver_info.minor)
 del _driver_info
-
-def swig_value(s):
-    a = s.find('_')
-    if a != -1:
-        o = s.find('_', a+1)
-        return s[a+1:o]
-
-    return s            
-
-def os_event(event):
-    if os.name == 'nt':
-        return pywintypes.HANDLE(event)
-    else:
-        return event
 
 def translate_card(card, module):
     if version[0] < 2:
@@ -74,31 +53,6 @@ def translate_card(card, module):
 
     return c, m
 
-class Glue(object):
-    """Glue logic to tie a SpeechChannel to a Call.
-
-    This class is meant to be a base-class for the data of a single call
-    with a Prosody channel for speech processing.
-
-    It will allocate a I{SpeechChannel} upon creation and connect it to the
-    call.
-    When deleted, it will close and disconnect the I{SpeechChannel}."""
-    
-    def __init__(self, controller, module, call):
-        """Allocate a speech channel on module and connect it to the call.
-
-        @param controller: The controller will be passed to the SpeechChannel
-        @param module: The module to open the SpeechChannel on. May be either
-            a C{tSMModuleId} or an offset.
-        @param call: The call that the SpeechChannel will be connected to."""
-        
-        self.call = call
-        # initialize to None in case an exception is raised
-        self.speech = None
-        self.connection = None
-        call.user_data = self
-        self.speech = SpeechChannel(controller, module, user_data = self)
-        self.connection = call.connect(self.speech)
 
     def __del__(self):
         self.close()
@@ -114,292 +68,6 @@ class Glue(object):
             self.speech.close()
             self.speech = None
             
-# this class is only needed on Windows
-class Win32DispatcherThread(threading.Thread):
-    """Helper thread for Win32SpeechEventDispatcher.
-    
-    WaitForMultipleObjects is limited to 64 objects,
-    so multiple dispatcher threads are needed."""
-
-    def __init__(self, mutex, handle = None, method = None):
-        """Create a Win32DisptacherThread."""
-        self.queue = []
-        self.wakeup = win32event.CreateEvent(None, 0, 0, None)
-        self.mutex = mutex
-        # handles is a map from handles to method
-        if handle:
-            self.handles = { self.wakeup: None, handle: method }
-        else:
-            self.handles = { self.wakeup: None }
-        
-        threading.Thread.__init__(self)
-
-    def update(self):
-        """Used internally.
-        
-        Update the internal list of objects to wait for."""
-        self.mutex.acquire()
-        try:
-            while self.queue:
-                add, handle, method = self.queue.pop(0)
-                if add:
-                    # print 'added 0x%04x' % handle
-                    self.handles[handle] = method
-                else:
-                    # print 'removed 0x%04x' % handle
-                    del self.handles[handle]
-
-        finally:
-            self.mutex.release()
-
-        return self.handles.keys()
-
-    def run(self):
-        """The Win32DispatcherThread run loop. Should not be called
-        directly."""
-        
-        handles = self.handles.keys()
-
-        while handles:
-            try:
-                rc = win32event.WaitForMultipleObjects(handles, 0, -1)
-            except win32event.error, e:
-                # 'invalid handle' may occur if an event is deleted
-                # before the update arrives
-                if e[0] == 6:
-                    handles = self.update()
-                    continue
-                else:
-                    raise
-                
-            if rc == win32event.WAIT_OBJECT_0:
-                handles = self.update()
-            else:
-                self.mutex.acquire()
-                try:
-                    m = self.handles[handles[rc - win32event.WAIT_OBJECT_0]]
-                finally:
-                    self.mutex.release()
-
-                try:
-                    if m:
-                        m()
-                except StopIteration:
-                    return
-                except KeyboardInterrupt:
-                    raise
-                except:
-                    log.error('error in Win32DispatcherThread main loop',
-                          exc_info=1)
-        
-class Win32SpeechEventDispatcher(object):
-    """Prosody Event dispatcher for Windows.
-
-    Manages multiple dispatcher threads if more than 64 event handles are used.
-    Each SpeechChannel uses 3 event handles, so this happens quickly."""
-
-    def __init__(self):
-        self.mutex = threading.Lock()
-        self.dispatchers = []
-        self.running = False
-        
-    def add(self, handle, method, mask = None):
-        """Add a new handle to the dispatcher.
-
-        @param handle: The handle of the Event to watch.
-        @param method: This will be called when the event is fired."""
-        self.mutex.acquire()
-        try:
-            for d in self.dispatchers:
-                if len(d.handles) < win32event.MAXIMUM_WAIT_OBJECTS:
-                    d.queue.append((1, handle, method))
-                    win32event.SetEvent(d.wakeup)
-                    
-                    return
-
-            # if no dispatcher has a spare slot, create a new one
-            d = Win32DispatcherThread(self.mutex, handle, method)
-            if self.running:
-                d.setDaemon(1)
-                d.start()
-            self.dispatchers.append(d)
-        finally:
-            self.mutex.release()
-
-    def remove(self, handle):
-        """Remove a handle from the dispatcher.
-
-        @param handle: The handle of the Event to watch."""
-        
-        self.mutex.acquire()
-        try:
-            for d in self.dispatchers:
-                if d.handles.has_key(handle):
-                    d.queue.append((0, handle, None))
-                    win32event.SetEvent(d.wakeup)
-        finally:
-            self.mutex.release()
-
-    def start(self):
-        """Start the dispatcher in a separate thread."""
-        
-        if not self.dispatchers:
-            self.dispatchers.append(Win32DispatcherThread(self.mutex))
-
-        self.running = True
-        
-        for d in self.dispatchers:
-            d.setDaemon(1)
-            d.start()
-
-    def run(self):
-        """Run the dispatcher in the current thread."""
-        
-        if not self.dispatchers:
-            self.dispatchers.append(Win32DispatcherThread(self.mutex))
-
-        self.running = True
-
-        for d in self.dispatchers[1:]:
-            d.setDaemon(1)
-            d.start()
-        self.dispatchers[0].run()
-
-maskmap = { select.POLLIN: 'POLLIN',
-            select.POLLPRI: 'POLLPRI',
-            select.POLLOUT: 'POLLOUT',
-            select.POLLERR: 'POLLERR',
-            select.POLLHUP: 'POLLHUP',
-            select.POLLNVAL: 'POLLNVAL' }
-           
-
-def maskstr(mask):
-    "Print a eventmask for poll"
-
-    l = []
-    for v, s in maskmap.iteritems():
-        if mask & v:
-            l.append(s)
-
-    return '|'.join(l)
-
-        
-class PollSpeechEventDispatcher(threading.Thread):
-    """Prosody Event dispatcher for Unix systems with poll(), most notably
-    Linux."""
-
-    def __init__(self):
-        """Create a dispatcher."""
-        threading.Thread.__init__(self)
-        self.handles = {}
-        self.mutex = threading.Lock()
-        self.queue = []
-
-        # create a pipe to add/remove fds
-        pfds = os.pipe()
-        self.pipe = (os.fdopen(pfds[0], 'rb', 0), os.fdopen(pfds[1], 'wb', 0))
-        self.setDaemon(1)
-        self.poll = select.poll()
-
-        # listen to the read fd of our pipe
-        self.poll.register(self.pipe[0], select.POLLIN )
-        
-    def add(self, handle, method, mask = select.POLLIN|select.POLLOUT):
-        """Add a new handle to the dispatcher.
-
-        @param handle: Typically the C{tSMEventId} associated with the
-            event, but any object with an C{fd} attribute will work also.
-        @param method: This will be called when the event is fired.
-        @param mask: Bitmask of POLLIN, POLLPRI, POLLOUT, POLLERR, POLLHUP
-            or POLLNVAL or None for a default mask.
-        
-        add blocks until handle is added by dispatcher thread"""
-        h = handle.fd
-        if threading.currentThread() == self or not self.isAlive():
-            # log.debug('adding fd: %d %s', h, method.__name__)
-            self.handles[h] = method
-            self.poll.register(h, mask)
-        else:
-            # log.debug('self adding: %d %s', h, method.__name__)
-            event = threading.Event()
-            self.mutex.acquire()
-            self.handles[h] = method
-            # function 1 is add
-            self.queue.append((1, h, event, mask))
-            self.mutex.release()
-            self.pipe[1].write('1')
-            event.wait()
-
-    def remove(self, handle):
-        """Remove a handle from the dispatcher.
-
-        @param handle: Typically the C{tSMEventId} associated with the
-        event, but any object with an C{fd} attribute will work also.
-        
-        This method blocks until handle is removed by the dispatcher thread."""
-        h = handle.fd
-        if threading.currentThread() == self or not self.isAlive():
-            # log.debug('removing fd: %d', h)
-            del self.handles[h]
-            self.poll.unregister(h)
-        else:
-            # log.debug('removing fd: %d', h)
-            event = threading.Event()
-            self.mutex.acquire()
-            del self.handles[h]
-            # function 0 is remove
-            self.queue.append((0, h, event, None))
-            self.mutex.release()
-            self.pipe[1].write('0')        
-            event.wait()
-
-    def run(self):
-        'Run the dispatcher.'
-        while True:
-            try:
-                active = self.poll.poll()
-                for a, mask in active:
-                    if a == self.pipe[0].fileno():
-                        self.pipe[0].read(1)
-                        self.mutex.acquire()
-                        try:
-                            add, fd, event, mask = self.queue.pop(0)
-                        finally:
-                            self.mutex.release()
-                        if add:
-                            self.poll.register(fd, mask)
-                        else:
-                            self.poll.unregister(fd)
-
-                        if event:
-                            event.set()
-                    else:
-                        self.mutex.acquire()
-                        try:
-                            m = self.handles.get(a, None)
-                        finally:
-                            self.mutex.release()
-
-                        #log.info('event on fd %d %s: %s', a, maskstr(mask),
-                        #         m.__name__)
-                        
-                        # ignore method not found
-                        if m:
-                            m()
-
-            except StopIteration:
-                return
-            except KeyboardInterrupt:
-                raise
-            except:
-                log.error('error in PollSpeechEventDispatcher main loop',
-                          exc_info=1)
-
-if os.name == 'nt':
-    SpeechDispatcher = Win32SpeechEventDispatcher()
-else:
-    SpeechDispatcher = PollSpeechEventDispatcher()
-
 class PlayJob(object):
     """A PlayJob plays a file through its L{SpeechChannel}."""
 
@@ -469,19 +137,19 @@ class PlayJob(object):
         # On very short samples, we might be done after fill_play_buffer
         if not self.fill_play_buffer():
             # Ok. We are not finished yet.
-            # Add a dispatcher to self and add the write event to it.
-            self.dispatcher = self.channel.dispatcher
-            self.dispatcher.add(self.channel.event_write,
-                                        self.fill_play_buffer)
+            # Add a reactor to self and add the write event to it.
+            self.reactor = self.channel.reactor
+            self.reactor.add(self.channel.event_write,
+                             self.fill_play_buffer)
 
         return self
 
     def done(self):
         """I{Used internall} upon completion."""
         
-        # remove the write event from the dispatcher
-        if self.dispatcher:
-            self.dispatcher.remove(self.channel.event_write)
+        # remove the write event from the reactor
+        if self.reactor:
+            self.reactor.remove(self.channel.event_write)
 
         # Compute reason.
         reason = None
@@ -630,14 +298,14 @@ class RecordJob(object):
                   self.max_elapsed_time, self.max_silence, self.elimination,
                   self.agc, self.volume)
                   
-        # add the read event to the dispatcher
-        self.channel.dispatcher.add(self.channel.event_read, self.on_read)
+        # add the read event to the reactor
+        self.channel.reactor.add(self.channel.event_read, self.on_read)
 
     def done(self):                
         """Called internally upon completion."""
         
-        # remove the read event from the dispatcher
-        self.channel.dispatcher.remove(self.channel.event_read)
+        # remove the read event from the reactor
+        self.channel.reactor.remove(self.channel.event_read)
 
         channel = self.channel
 
@@ -774,8 +442,8 @@ class DigitsJob(object):
                   self.channel.name, self.digits, self.inter_digit_delay,
                   self.digit_duration)
 
-        # add the write event to the dispatcher
-        self.channel.dispatcher.add(self.channel.event_write, self.on_write)
+        # add the write event to the reactor
+        self.channel.reactor.add(self.channel.event_write, self.on_write)
 
     def on_write(self):
         if self.channel is None:
@@ -796,8 +464,8 @@ class DigitsJob(object):
             if self.stopped:
                 reason = AculabStopped()
 
-            # remove the write event from to the dispatcher
-            channel.dispatcher.remove(channel.event_write)
+            # remove the write event from to the reactor
+            channel.reactor.remove(channel.event_write)
 
             log.debug('%s digits_done(reason=\'%s\')',
                       channel.name, reason)
@@ -810,8 +478,8 @@ class DigitsJob(object):
         self.stopped = True
         log.debug('%s digits_stop()', self.channel.name)
 
-        # remove the write event from the dispatcher
-        self.channel.dispatcher.remove(self.channel.event_write)
+        # remove the write event from the reactor
+        self.channel.reactor.remove(self.channel.event_write)
 
         # Position is only nonzero when play was stopped.
         channel = self.channel
@@ -856,8 +524,8 @@ class DCReadJob(object):
         control.min_idle = self.min_idle
         control.blocking = self.blocking
 
-        # add the read event to the dispatcher
-        self.channel.dispatcher.add(self.channel.event_read, self.on_read)
+        # add the read event to the reactor
+        self.channel.reactor.add(self.channel.event_read, self.on_read)
 
         rc = lowlevel.smdc_rx_control(control)
         if rc:
@@ -876,8 +544,8 @@ class DCReadJob(object):
         if rc:
             raise AculabSpeechError(rc, 'smdc_stop')
 
-        # remove the write event from the dispatcher
-        self.channel.dispatcher.remove(self.channel.event_read)
+        # remove the write event from the reactor
+        self.channel.reactor.remove(self.channel.event_read)
 
         # Position is only nonzero when play was stopped.
         channel = self.channel
@@ -894,7 +562,7 @@ class SpeechChannel(Lockable):
     DTMF detection is started by default."""
         
     def __init__(self, controller, card = 0, module = 0, mutex = None,
-                 user_data = None, dispatcher = SpeechDispatcher):
+                 user_data = None, reactor = SpeechReactor):
         """Allocate a full duplex Prosody channel.
 
         @param controller: This object will receive notifications about
@@ -916,14 +584,14 @@ class SpeechChannel(Lockable):
         this would be the I{model}. In most of the examples, this is a L{Glue}
         subclass.
 
-        @param dispatcher: The dispatcher used to dispatch controller methods.
-        By default, a single dispatcher is used for all channels.
+        @param reactor: The reactor used to dispatch controller methods.
+        By default, a single reactor is used for all channels.
         """
 
         Lockable.__init__(self, mutex)
 
         self.controller = controller
-        self.dispatcher = dispatcher
+        self.reactor = reactor
         self.user_data = user_data
         self.job = None
         self.close_pending = None
@@ -935,6 +603,7 @@ class SpeechChannel(Lockable):
         self.out_ts = None
         self.channel = None
         self.name = None
+        self.datafeed = None
 
         self.card, self.module = translate_card(card, module)
 
@@ -951,7 +620,7 @@ class SpeechChannel(Lockable):
 
         self.channel = alloc.channel
 
-        self.name = '0x%04x' % self.channel
+        self.name = 'SCh-%08x' % self.channel
 
         self.info = lowlevel.SM_CHANNEL_INFO_PARMS()
         self.info.channel = alloc.channel
@@ -971,10 +640,11 @@ class SpeechChannel(Lockable):
                       self.name, self.info.ost,
                       self.info.ots, self.info.ist, self.info.its,
                       self.info.card)
+
         self._listen()
 
-        # add the recog event to the dispatcher
-        self.dispatcher.add(self.event_recog, self.on_recog)
+        # add the recog event to the reactor
+        self.reactor.add(self.event_recog, self.on_recog)
 
     def __del__(self):
         """Close the channel if it is still open."""
@@ -996,7 +666,7 @@ class SpeechChannel(Lockable):
                 self.event_write = None
             if self.event_recog:
                 lowlevel.smd_ev_free(self.event_recog)
-                self.dispatcher.remove(self.event_recog)
+                self.reactor.remove(self.event_recog)
                 self.event_recog = None
 
             if self.out_ts:
@@ -1090,7 +760,7 @@ class SpeechChannel(Lockable):
         self._close()
         
     def create_event(self, event):
-        """Create an event for use with the dispatcher.
+        """Create an event for use with the reactor.
 
         I{Used internally.}
 
@@ -1131,10 +801,42 @@ class SpeechChannel(Lockable):
 
         return handle
 
-    def listen_to(self, source):
-        """Listen to a timeslot.
-        Source is a tuple (stream, timeslot)"""
+    def get_datafeed(self):
+        """Get the datafeed."""
+
+        if self.datafeed:
+            return self.datafeed
+
+        datafeed = lowlevel.SM_CHANNEL_DATAFEED_PARMS()
+        datafeed.channel = self.channel
+
+        rc = lowlevel.sm_channel_get_datafeed(datafeed)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_channel_get_datafeed')
+
+        self.datafeed = datafeed.datafeed
         
+        return self.datafeed
+
+    def listen_to(self, source):
+        """Listen to a timeslot or a tx instance.
+        
+        @param source: a tuple (stream, timeslot) or a transmitter instance
+            (VMPtx, FMPtx or TDMtx)"""
+
+        if hasattr(source, 'get_datafeed'):
+            connect = lowlevel.SM_CHANNEL_DATAFEED_CONNECT_PARMS()
+            connect.channel = self.channel
+            connect.data_source= source.get_datafeed()
+
+            rc = lowlevel.sm_channel_datafeed_connect(connect)
+            if rc:
+                raise AculabSpeechError(rc, 'sm_channel_datafeed_connect')
+
+            log_switch.debug('%s := %s', self.name, source.name)
+
+            return SpeechEndpoint(self, 'datafeed')
+
         if self.info.card == -1:
             input = lowlevel.SM_SWITCH_CHANNEL_PARMS()
 
@@ -1146,7 +848,7 @@ class SpeechChannel(Lockable):
                 raise AculabSpeechError(rc, 'sm_switch_channel_input(%d:%d)' %
                                         (input.st, input.ts))
 
-            log_switch.debug('%s listen_to(%d:%d)', self.name,
+            log_switch.debug('%s := %d:%d', self.name,
                              source[0], source[1])
 
             return SpeechEndpoint(self, 'in')
@@ -1158,15 +860,7 @@ class SpeechChannel(Lockable):
         output.mode = lowlevel.CONNECT_MODE
         output.ist, output.its = source
 
-        # this is ridiculous: Aculab should decide whether
-        # they want to work with offsets or card_ids
-        if version[0] >= 2:
-            from snapshot import Snapshot
-            card = Snapshot().switch[self.info.card].card.card_id
-        else:
-            card = self.info.card
-            
-        rc = lowlevel.sw_set_output(card, output)
+        rc = lowlevel.sw_set_output(self.card.card_id, output)
         if (rc):
             raise AculabError(rc, 'sw_set_output(%d, %d:%d := %d:%d)' %
                               (self.info.card, output.ost, output.ots,
@@ -1176,10 +870,13 @@ class SpeechChannel(Lockable):
                          output.ost, output.ots,
                          output.ist, output.its)
 
-        return CTBusEndpoint(card, (self.info.ist, self.info.its))
+        return CTBusEndpoint(self.card.card_id,
+                             (self.info.ist, self.info.its))
 
     def speak_to(self, sink):
-        """Speak to a timeslot. Sink is a tuple (stream, timeslot)"""
+        """Speak to a timeslot.
+
+        @param sink: a tuple (stream, timeslot)."""
 
         if self.info.card == -1:
             output = lowlevel.SM_SWITCH_CHANNEL_PARMS()
@@ -1205,15 +902,7 @@ class SpeechChannel(Lockable):
         output.ist = self.info.ost			# source
         output.its = self.info.ots
 
-        # this is ridiculous: Aculab should decide whether
-        # they want to work with offsets or card_ids
-        if version[0] >= 2:
-            from snapshot import Snapshot
-            card = Snapshot().switch[self.info.card].card.card_id
-        else:
-            card = self.info.card
-            
-        rc = lowlevel.sw_set_output(card, output)
+        rc = lowlevel.sw_set_output(self.card.card_id, output)
         if rc:
             raise AculabError(rc, 'sw_set_output(%d, %d:%d := %d:%d)' %
                               (self.info.card, output.ost, output.ots,
@@ -1223,39 +912,7 @@ class SpeechChannel(Lockable):
                          output.ost, output.ots,
                          output.ist, output.its)
 
-        return CTBusEndpoint(card, sink)
-
-    def connect(self, other, bus = DefaultBus()):
-        """Connect to another SpeechChannel or a CallHandle.
-
-        Keep the returned reference until the connection should be broken."""
-        if isinstance(other, SpeechChannel):
-            c = Connection(bus)
-            if self.info.card == other.info.card:
-                if other == self:
-                    c.timeslots = [ bus.allocate() ]
-                    c.connections = [self.speak_to(c.timeslots[0]),
-                                     self.listen_to(c.timeslots[0])]
-                else:
-                    # connect directly
-                    c.connections = [self.listen_to((other.info.ost,
-                                                     other.info.ots)),
-                                     other.listen_to((self.info.ost,
-                                                      self.info.ots))]
-            else:
-                # allocate two timeslots
-                c.timeslots = [ bus.allocate(), bus.allocate() ]
-                # make connections
-                c.connections = [ other.speak_to(c.timeslots[0]),
-                                  self.listen_to(c.timeslots[0]),
-                                  self.speak_to(c.timeslots[1]),
-                                  other.listen_to(c.timeslots[1]) ]
-
-            return c
-        
-        else:
-            # assume other is a CallHandle subclass and delegate to it
-            return other.connect(self)
+        return CTBusEndpoint(self.card.card_id, sink)
 
     def dc_config(self, protocol, pconf, encoding, econf):
         'Configure the channel for data communications'

@@ -6,11 +6,13 @@ import getopt
 import logging
 import aculab
 from aculab.error import AculabError
-from aculab.callcontrol import Call, CallDispatcher
-from aculab.speech import SpeechChannel, SpeechDispatcher, Glue, PlayJob
+from aculab.callcontrol import Call
+from aculab.speech import SpeechChannel, PlayJob
 from aculab.busses import DefaultBus
 from aculab.timer import TimerThread
 from aculab.snapshot import Snapshot
+from aculab.connect import connect, Glue
+from aculab.reactor import CallReactor, SpeechReactor
 import aculab.lowlevel as lowlevel
 
 class PlayApp(Glue):
@@ -29,7 +31,7 @@ class PlayApp(Glue):
             timer.cancel(self.timer)
 
     def timed_switch(self):
-        self.connections = self.call.connect(self.speech)
+        self.connections = connect(self.call, self.speech)
         self.speech.start(PlayJob(self.speech, fplay))
 
         # self.timer = timer.add(2.0, self.timed_unswitch)
@@ -131,8 +133,8 @@ if __name__ == '__main__':
 
         timer = TimerThread()
         timer.start()
-        SpeechDispatcher.start()
-        CallDispatcher.run()
+        SpeechReactor.start()
+        CallReactor.run()
     except StopIteration:
         pass
     except:

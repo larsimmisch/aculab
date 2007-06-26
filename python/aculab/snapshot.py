@@ -8,8 +8,13 @@ from error import AculabError
 _singletons = {}
 
 class Card(object):
-    """Base class for an Aculab card."""
+    """Base class for an Aculab card.
+
+    card is a ACU_OPEN_CARD_PARMS struct.
+    info is ACU_CARD_INFO_PARMS struct. """
+    
     def __init__(self, card, info):
+        self.card_id = card.card_id
         self.card = card
         self.info = info
         self.ip_address = None
