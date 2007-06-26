@@ -49,8 +49,8 @@ class CallHandleBase:
 class CallHandle(CallHandleBase):
     """An Aculab call handle, and common operations on it.
 
-    Some events are handled to maintain the internal state, but in general,
-    event handling is delegated to the controller."""
+    All events are delegated to the controller; some events are handled
+    internally to maintain the state."""
 
     def __init__(self, controller, user_data = None, card = 0, port = 0,
                  timeslot = None, reactor = CallReactor):
@@ -106,7 +106,7 @@ class CallHandle(CallHandleBase):
 
         log.debug('%s openin()', self.name)
 
-    def _outparms(self, destination_address, sending_complete = 1,
+    def _outparms(self, destination_address, sending_complete = True,
                   originating_address = '', unique = None,
                   feature_type = None, feature = None, cnf = None):
         """Used internally."""
@@ -449,11 +449,11 @@ class CallHandle(CallHandleBase):
     def get_feature_details(self, type):
         """Return (and cache) the feature details of a call.
 
-        @returns: a C{FEATURE_DETAIL_XPARMS} structure.
-
         See U{call_feature_details
         <http://www.aculab.com/Support/v6_api/CallControl/\
         call_feature_details.htm>}.
+
+        @returns: a C{FEATURE_DETAIL_XPARMS} structure.
         """
         self.feature_details = lowlevel.FEATURE_DETAIL_XPARMS()
         self.feature_details.handle = self.handle
@@ -466,7 +466,7 @@ class CallHandle(CallHandleBase):
         return self.feature_details
 
     def accept(self):
-        """Accept an incoming call.
+        """Accept the incoming call.
         
         See U{call_accept
         <http://www.aculab.com/Support/v6_api/CallControl/call_accept.htm>}.
@@ -479,6 +479,7 @@ class CallHandle(CallHandleBase):
 
     def incoming_ringing(self):
         """Signal incoming ringing to the far end.
+        
         See U{call_incoming_ringing
         <http://www.aculab.com/Support/v6_api/CallControl/\
         call_incoming_ringing.htm>}.
@@ -517,7 +518,7 @@ class CallHandle(CallHandleBase):
         log.debug('%s disconnect(%d)', self.name, xcause.cause)
 
     def release(self, cause = None):
-        """Release a call. Cause may be a CAUSE_XPARMS struct or an int
+        """Release the call.
         
         @param cause: this may be a C{CAUSE_XPARMS} struct or an
         int for an Aculab cause value.
