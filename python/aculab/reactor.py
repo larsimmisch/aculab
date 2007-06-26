@@ -13,6 +13,8 @@ if os.name == 'nt':
     import win32event
 
 log = logging.getLogger('reactor')
+log_call = logging.getLogger('call')
+log_speech = logging.getLogger('speech')
 
 # These events are not set in call.last_event because they don't
 # change the state of the call as far as we are concerned
@@ -69,8 +71,8 @@ class _CallEventReactor:
 
                 call = self.calls.get(event.handle, None)
                 if not call:
-                    log.error('got event %s for nonexisting call 0x%x',
-                              ev, event.handle)
+                    log_call.error('got event %s for nonexisting call 0x%x',
+                                   ev, event.handle)
                     continue
                 
                 mutex = getattr(call.user_data, 'mutex', None)
@@ -95,7 +97,7 @@ class _CallEventReactor:
                     else:
                         handled = '(ignored)'
 
-                    log.debug('%s %s %s', call.name, ev, handled)
+                    log_call.debug('%s %s %s', call.name, ev, handled)
 
                     # let the call handle events first
                     if mcall:
@@ -315,12 +317,12 @@ class PollSpeechEventReactor(threading.Thread):
         """Add a new handle to the reactor.
 
         @param handle: Typically the C{tSMEventId} associated with the
-            event, but any object with an C{fd} attribute will work also.
+        event, but any object with an C{fd} attribute will work also.
         @param method: This will be called when the event is fired.
         @param mask: Bitmask of POLLIN, POLLPRI, POLLOUT, POLLERR, POLLHUP
-            or POLLNVAL or None for a default mask.
+        or POLLNVAL or None for a default mask.
         
-        add blocks until handle is added by reactor thread"""
+        This method blocks until I{handle} is added by reactor thread"""
         h = handle.fd
         if threading.currentThread() == self or not self.isAlive():
             # log.debug('adding fd: %d %s', h, method.__name__)

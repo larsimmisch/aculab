@@ -42,8 +42,8 @@ class VMPrx(Lockable):
         controller.
         
         Controllers must implement:
-        - ready(vmprx, sdp, user_data)
-        - dtmf(vmprx, digit, user_data)."""
+         - ready(vmprx, sdp, user_data)
+         - dtmf(vmprx, digit, user_data)."""
 
         Lockable.__init__(self, mutex)
 
@@ -69,7 +69,7 @@ class VMPrx(Lockable):
 
         self.vmprx = vmprx.vmprx
 
-        self.name = 'Vrx-%04x' % self.vmprx
+        self.name = 'vrx-%08x' % self.vmprx
 
         # get the event
         evmprx = lowlevel.SM_VMPRX_EVENT_PARMS()
@@ -219,7 +219,7 @@ class VMPtx(Lockable):
             raise AculabSpeechError(rc, 'sm_vmptx_create')
 
         self.vmptx = vmptx.vmptx
-        self.name = 'Vtx-%04x' % self.vmptx
+        self.name = 'vtx-%08x' % self.vmptx
 
         evmptx = lowlevel.SM_VMPTX_EVENT_PARMS()
         evmptx.vmptx = self.vmptx

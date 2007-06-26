@@ -10,10 +10,11 @@ import logging
 import aculab
 from aculab.error import AculabError
 from aculab.callcontrol import Call
-from aculab.speech import SpeechChannel, Glue, PlayJob, RecordJob
+from aculab.speech import SpeechChannel, PlayJob, RecordJob
 from aculab.reactor import CallReactor, SpeechReactor
 from aculab.busses import DefaultBus
 from aculab.timer import TimerThread
+from aculab.connect import Glue
 import aculab.lowlevel as lowlevel
 from mail import AsyncEmail
 from slim import async_cli_display

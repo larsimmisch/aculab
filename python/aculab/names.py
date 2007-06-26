@@ -1,11 +1,12 @@
 """Map constant values to names.
 
 Available dictionaries are:
-
-event_names
-sm_error_names
-error_names
-fax_error_names
+ - C{event_names}
+ - C{sm_error_names}
+ - C{error_names}
+ - C{fax_error_names}
+ - C{vmptx_status_names}
+ - C{vmprx_status_names}
 """
 
 import re

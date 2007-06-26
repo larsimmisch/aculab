@@ -8,14 +8,14 @@ def connect(a, b, bus=DefaultBus()):
     """Create a duplex connection between a and b.
 
     @param a: a duplex capable entity (like a CallHandle or a SpeechChannel)
-        or a tuple of (tx, rx).
+    or a tuple of (tx, rx).
         
     @param b: a duplex capable entity (like a CallHandle or a SpeechChannel)
-        or a tuple of (tx, rx).
+    or a tuple of (tx, rx).
 
     @return: A L{Connection} object containing all endpoints and timeslots
-        allocated for the connection. This object will dissolve the
-        connection when it is deleted.
+    allocated for the connection. This object will dissolve the
+    connection when it is deleted.
 
     B{Note}: Ignoring the return value will immediately dissolve the
     connection. Don't do that.
@@ -118,3 +118,18 @@ class Glue(object):
         call.user_data = self
         self.speech = SpeechChannel(controller, module, user_data = self)
         self.connection = connect(call, self.speech)
+
+    def __del__(self):
+        self.close()
+
+    def close(self):
+        """Disconnect and close the SpeechChannel.
+        This is called implicitly by __del__, but can be called
+        independently"""
+        if self.connection:
+            self.connection.close()
+            self.connection = None
+        if self.speech:
+            self.speech.close()
+            self.speech = None
+

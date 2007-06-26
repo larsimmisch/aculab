@@ -53,30 +53,12 @@ def translate_card(card, module):
 
     return c, m
 
-
-    def __del__(self):
-        self.close()
-
-    def close(self):
-        """Disconnect and close the SpeechChannel.
-        This is called implicitly by __del__, but can be called
-        independently"""
-        if self.connection:
-            self.connection.close()
-            self.connection = None
-        if self.speech:
-            self.speech.close()
-            self.speech = None
-            
 class PlayJob(object):
     """A PlayJob plays a file through its L{SpeechChannel}."""
 
     def __init__(self, channel, f, agc = 0,
                  speed = 0, volume = 0):
         """Create a PlayJob.
-
-        For an in-depth description of parameters, see U{sm_replay_start
-        <http://www.aculab.com/support/TiNG/gen/apifn-sm_replay_start.html>}.
 
         @param channel: The L{SpeechChannel} that will play the file.
         @param f: Either a filename (string) or a file descriptor.
@@ -88,6 +70,10 @@ class PlayJob(object):
         @param speed: The speed for used for replaying in percent. 0 is the
         same as 100: normal speed.
         @param volume: The volume adjustment in db.
+
+        See U{sm_replay_start
+        <http://www.aculab.com/support/TiNG/gen/apifn-sm_replay_start.html>}
+        for more information about the parameters.
         """
         
         self.channel = channel
@@ -114,7 +100,8 @@ class PlayJob(object):
     def start(self):
         """Start the playback.
 
-        I{Do not call this method directly - call SpeechChannel.start instead}
+        I{Do not call this method directly - call
+        SpeechChannel.start(playjob) instead}
         """
         
         replay = lowlevel.SM_REPLAY_PARMS()
@@ -145,7 +132,7 @@ class PlayJob(object):
         return self
 
     def done(self):
-        """I{Used internall} upon completion."""
+        """I{Used internally}."""
         
         # remove the write event from the reactor
         if self.reactor:
@@ -231,9 +218,6 @@ class RecordJob(object):
                  agc = 0, volume = 0):
         """Create a RecordJob. The recording will be in alaw, 8kHz.
 
-        For an in-depth description of parameters, see U{sm_record_start
-        <http://www.aculab.com/support/TiNG/gen/apifn-sm_record_start.html>}.
-
         @param channel: The SpeechChannel that will do the recording.
         @param f: Either a string (filename) or a fd for the file.
         If a string is passed in, the associated file will be opened for
@@ -245,6 +229,10 @@ class RecordJob(object):
         @param elimination: Activates silence elimination of not zero.
         @param agc: Nonzero values activate Automatic Gain Control        
         @param volume: The volume adjustment in db.
+
+        See U{sm_record_start
+        <http://www.aculab.com/support/TiNG/gen/apifn-sm_record_start.html>}
+        for more information about the parameters.        
         """
 
         self.channel = channel
@@ -415,7 +403,14 @@ class DigitsJob(object):
         @param inter_digit_delay: Delay between digits in B{milliseconds}. Zero
         for the default value (exact value unknown).
         @param digit_duration: Duration of each digit in B{milliseconds}. Zero
-        for the default value (exact value unknown)."""
+        for the default value (exact value unknown).
+
+        See U{sm_play_digits
+        <http://www.aculab.com/support/TiNG/gen/apifn-sm_play_digits.html>}
+        for more information about the parameters.
+
+        Only C{kSMDTMFDigits} is supported as C{type}.
+        """
         
         self.channel = channel
         self.digits = digits
@@ -505,8 +500,13 @@ class DCReadJob(object):
     
     def __init__(self, channel, cmd, min_to_collect, min_idle = 0,
                  blocking = 0):
+        """Receive binary (possible modulated) data.
 
-        """Arguments are mostly from dc_rx_control"""
+        See U{smdc_rx_control
+        <http://www.aculab.com/support/TiNG/gen/apifn-smdc_rx_control.html>}
+        for more information about the parameters.
+        """
+        
         self.channel = channel
         self.cmd = cmd
         self.min_to_collect = min_to_collect
@@ -566,13 +566,15 @@ class SpeechChannel(Lockable):
         """Allocate a full duplex Prosody channel.
 
         @param controller: This object will receive notifications about
-        completed jobs. Controllers should implement:
+        completed jobs. Controllers must implement:
          - play_done(self, channel, file, reason, position, user_data)
          - dtmf(self, channel, digit, user_data)
          - record_done(self, channel, file, reason, size, user_data)
          - digits_done(self, channel, reason, user_data).
         
         Reason is an exception or None (for normal termination).
+
+        @param card: either a card offset or a L{snapshot.Card} instance.
 
         @param module: either the Prosody Sharc DSP offset or
         a L{snapshot.Module} instance.
@@ -620,7 +622,7 @@ class SpeechChannel(Lockable):
 
         self.channel = alloc.channel
 
-        self.name = 'SCh-%08x' % self.channel
+        self.name = 'sc-%04x' % self.channel
 
         self.info = lowlevel.SM_CHANNEL_INFO_PARMS()
         self.info.channel = alloc.channel
@@ -915,7 +917,13 @@ class SpeechChannel(Lockable):
         return CTBusEndpoint(self.card.card_id, sink)
 
     def dc_config(self, protocol, pconf, encoding, econf):
-        'Configure the channel for data communications'
+        """Configure the channel for data communications.
+
+        See U{smdc_channel_config
+        <http://www.aculab.com/support/TiNG/gen/apifn-smdc_channel_config.html>}
+        for more information about the parameters.
+
+        """
         
         config = lowlevel.SMDC_CHANNEL_CONFIG_PARMS()
         config.channel = self.channel
@@ -1004,7 +1012,6 @@ class SpeechChannel(Lockable):
             if recog.type == lowlevel.kSMRecognisedNothing:
                 return
             elif recog.type == lowlevel.kSMRecognisedDigit:
-
                 self.lock()
                 try:
                     self.controller.dtmf(self, chr(recog.param0),
@@ -1033,6 +1040,7 @@ class SpeechChannel(Lockable):
 
 class Conference(Lockable):
     """A Conference: not fully implemented yet."""
+
     def __init__(self, module = None, mutex = None):
         Lockable.__init__(self, mutex)
         

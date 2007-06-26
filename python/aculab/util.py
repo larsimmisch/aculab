@@ -1,4 +1,4 @@
-"""Contains utility classes: OrderedDict and Lockable."""
+"""Utility classes: L{OrderedDict} and L{Lockable}."""
 
 import os
 

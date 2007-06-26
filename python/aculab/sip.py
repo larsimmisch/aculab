@@ -30,7 +30,7 @@ class SIPHandle(CallHandleBase):
                                 reactor)
 
         self.details = None
-        self.name = 'SIP-00000000'
+        self.name = 'sip-00000000'
         
     def openin(self, request_notification_mask = 0,
                response_notification_mask = 0, call_options = 0):
@@ -46,7 +46,7 @@ class SIPHandle(CallHandleBase):
             raise AculabError(rc, 'sip_openin')
 
         self.handle = inparms.handle
-        self.name = 'SIP-%08x' % self.handle
+        self.name = 'sip-%08x' % self.handle
 
         self.reactor.add(self)
 
@@ -79,7 +79,7 @@ class SIPHandle(CallHandleBase):
             raise AculabError(rc, 'sip_openout')
 
         self.handle = outparms.handle
-        self.name = 'SIP-%08x' % self.handle
+        self.name = 'sip-%08x' % self.handle
 
         self.reactor.add(self)
 
@@ -161,11 +161,11 @@ class SIPHandle(CallHandleBase):
         # restore the handle for the inbound call if there is one
         if hasattr(self, 'in_handle'):
             self.handle = self.in_handle
-            self.name = 'SIP-%08x' % self.handle
+            self.name = 'sip-%08x' % self.handle
             del self.in_handle
         else:
             self.handle = None
-            self.name = 'SIP-00000000'
+            self.name = 'sip-00000000'
             
     def ev_incoming_call_det(self):
         self.get_details()
