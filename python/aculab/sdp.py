@@ -2,7 +2,10 @@
 
 # Copyright (C) 2004 Anthony Baxter
 # Copyright (C) 2004 Jamey Hicks
-#
+
+# Nicked from shtoom
+
+"""SDP, aka Session Description Protocol, as described in RFC 2327"""
 
 from util import OrderedDict
 
@@ -257,10 +260,15 @@ class MediaDescription:
                         # a=rtpmap entry for it.
                         continue
                     self.addRtpMap(PT)
-                    # XXX the above line is unbound local variable error if not RTPDict.has_key(pt) --Zooko 2004-09-29
+                    # XXX the above line is unbound local variable error if
+                    # not RTPDict.has_key(pt) --Zooko 2004-09-29
         self.formats = formats
 
     def setMedia(self, media):
+        """Set the media type.
+
+        @param media: must be 'audio' or 'video'
+        """
         self.media = media
         
     def setTransport(self, transport):
@@ -296,7 +304,8 @@ class MediaDescription:
         self.formats.append(str(payload))
 
     def intersect(self, other):
-        # See RFC 3264
+        """See RFC 3264."""
+        
         map1 = self.rtpmap
         d1 = {}
         for code,(e,fmt) in map1.items():
@@ -314,6 +323,8 @@ class MediaDescription:
                                           (code, (e, fmt)) in outmap.items() ])
 
 class SDP:
+    """An SDP body, parsed for easy access."""
+    
     def __init__(self, text=None):
         from time import time
         self._id = None
@@ -404,6 +415,8 @@ class SDP:
         return bool(len(self.mediaDescriptions))
 
     def show(self):
+        """Return a textual representation of the SDP suitable for use as a
+        SIP body."""
         out = []
         for (k, req, p, u) in parsers:
             for l in u(self, k):
@@ -417,7 +430,7 @@ class SDP:
         return s
 
     def intersect(self, other):
-        # See RFC 3264
+        """See RFC 3264."""
         mds = self.mediaDescriptions
         self.mediaDescriptions = []
         for md in mds:
@@ -431,7 +444,8 @@ class SDP:
                 self.mediaDescriptions.append(md)
 
     def getAddress(self, media):
-        '''Return a tuple (ipaddr, port)'''
+        """Return a tuple (ipaddr, port)"""
+        
         md = self.getMediaDescription(media)
         if not md:
             return None
@@ -445,6 +459,9 @@ class SDP:
         pass
 
     def __str__(self):
+        """Return a textual representation of the SDP suitable for use as a
+        SIP body."""
+        
         return self.show()
 
 def ntp2delta(ticks):

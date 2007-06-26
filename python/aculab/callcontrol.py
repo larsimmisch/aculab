@@ -18,7 +18,7 @@ log = logging.getLogger('call')
 log_switch = logging.getLogger('switch')
 
 class CallHandleBase:
-    """Base class for a Call Handle.
+    """Base class for Call Handles.
 
     Holds common members and the controller stack."""
 
