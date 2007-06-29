@@ -117,7 +117,7 @@ class PlayJob(object):
 
         rc = lowlevel.sm_replay_start(replay)
         if rc:
-            raise AculabSpeechError(rc, 'sm_replay_start')
+            raise AculabSpeechError(rc, 'sm_replay_start', self.channel.name)
 
         log.debug('%s play(%s, agc=%d, speed=%d, volume=%d, duration=%.3f)',
                   self.channel.name, str(self.file), self.agc,
@@ -176,7 +176,8 @@ class PlayJob(object):
 
             rc = lowlevel.sm_replay_status(status)
             if rc:
-                raise AculabSpeechError(rc, 'sm_replay_status')
+                raise AculabSpeechError(rc, 'sm_replay_status',
+                                        self.channel.name)
 
             # log.debug('%s replay status: %d', self.channel.name, status.status)
 
@@ -192,7 +193,8 @@ class PlayJob(object):
 
                 rc = lowlevel.sm_put_replay_data(self.data)
                 if rc and rc != lowlevel.ERR_SM_NO_CAPACITY:
-                    raise AculabSpeechError(rc, 'sm_put_replay_data')
+                    raise AculabSpeechError(rc, 'sm_put_replay_data',
+                                            self.channel.name)
 
     def stop(self):
         """Stop a PlayJob. The internal position will be updated based upon
@@ -202,7 +204,7 @@ class PlayJob(object):
         stop.channel = self.channel.channel
         rc = lowlevel.sm_replay_abort(stop)
         if rc:
-            raise AculabSpeechError(rc, 'sm_replay_abort')
+            raise AculabSpeechError(rc, 'sm_replay_abort', self.channel.name)
 
         # position is in seconds
         # Assumption: alaw/mulaw
@@ -273,7 +275,7 @@ class RecordJob(object):
 
         rc = lowlevel.sm_record_start(record)
         if rc:
-            raise AculabSpeechError(rc, 'sm_record_start')
+            raise AculabSpeechError(rc, 'sm_record_start', self.channel.name)
 
         log.debug('%s record(%s, max_octets=%d, max_time=%.3f, '
                   'max_silence=%.3f, elimination=%d, agc=%d, volume=%d)',
@@ -315,7 +317,8 @@ class RecordJob(object):
 
             rc = lowlevel.sm_record_status(status)
             if rc:
-                self.reason = AculabSpeechError(rc, 'sm_record_status')
+                self.reason = AculabSpeechError(rc, 'sm_record_status',
+                                                self.channel.name)
                 self.done()
                 return
 
@@ -331,7 +334,8 @@ class RecordJob(object):
 
                     rc = lowlevel.sm_record_how_terminated(how)
                     if rc:
-                        raise AculabSpeechError(rc, 'sm_record_how_terminated')
+                        raise AculabSpeechError(rc, 'sm_record_how_terminated',
+                                                self.channel.name)
 
                     term = how.termination_reason
                     silence = how.termination_octets
@@ -350,7 +354,8 @@ class RecordJob(object):
                 elif term == lowlevel.kSMRecordHowTerminatedAborted:
                     self.reason = AculabStopped()
                 elif term == lowlevel.kSMRecordHowTerminatedError:
-                    self.reason = AculabSpeechError(rc, 'RecordJob')
+                    self.reason = AculabSpeechError(rc, 'RecordJob',
+                                                    self.channel.name)
                     
                 self.done()
                 return
@@ -366,7 +371,7 @@ class RecordJob(object):
                         self.stop()
                     finally:
                         self.reason = AculabSpeechError(
-                            rc, 'sm_get_recorded_data')
+                            rc, 'sm_get_recorded_data', self.channel.name)
                     self.done()
 
                 # Assumption: alaw/mulaw
@@ -381,7 +386,7 @@ class RecordJob(object):
         abort.channel = self.channel.channel
         rc = lowlevel.sm_record_abort(abort)
         if rc:
-            raise AculabSpeechError(rc, 'sm_record_abort')
+            raise AculabSpeechError(rc, 'sm_record_abort', self.channel.name)
 
         log.debug('%s record_stop()', self.channel.name)
 
@@ -425,7 +430,7 @@ class DigitsJob(object):
 
         rc = lowlevel.sm_play_digits(dp)
         if rc:
-            raise AculabSpeechError(rc, 'sm_play_digits')
+            raise AculabSpeechError(rc, 'sm_play_digits', self.channel.name)
 
         log.debug('%s digits(%s, inter_digit_delay=%d, digit_duration=%d)',
                   self.channel.name, self.digits, self.inter_digit_delay,
@@ -444,7 +449,8 @@ class DigitsJob(object):
 
         rc = lowlevel.sm_play_digits_status(status)
         if rc:
-            raise AculabSpeechError(rc, 'sm_play_digits_status')
+            raise AculabSpeechError(rc, 'sm_play_digits_status',
+                                    self.channel.name)
 
         if status.status == lowlevel.kSMPlayDigitsStatusComplete:
 
@@ -525,7 +531,7 @@ class DCReadJob(object):
 
         rc = lowlevel.smdc_rx_control(control)
         if rc:
-            raise AculabSpeechError(rc, 'smdc_rx_control')
+            raise AculabSpeechError(rc, 'smdc_rx_control', self.channel.name)
 
         log.debug('%s dc_rx_control(cmd=%d, min_to_collect=%d, ' \
                   'min_idle=%d, blocking=%d)',
@@ -538,7 +544,7 @@ class DCReadJob(object):
     def stop(self):
         rc = lowlevel.smdc_stop(self.channel.channel)
         if rc:
-            raise AculabSpeechError(rc, 'smdc_stop')
+            raise AculabSpeechError(rc, 'smdc_stop', self.channel.name)
 
         # remove the write event from the reactor
         self.channel.reactor.remove(os_event(self.channel.event_read))
@@ -625,7 +631,7 @@ class SpeechChannel(Lockable):
 
         rc = lowlevel.sm_channel_info(self.info)
         if rc:
-            raise AculabSpeechError(rc, 'sm_channel_info')
+            raise AculabSpeechError(rc, 'sm_channel_info', self.name)
 
         # initialise our events
         self.event_read = self.set_event(lowlevel.kSMEventTypeReadData)
@@ -635,9 +641,8 @@ class SpeechChannel(Lockable):
         if version[0] >= 2:
             self._ting_connect()
             log.debug('%s out: %d:%d, in: %d:%d card: %d',
-                      self.name, self.info.ost,
-                      self.info.ots, self.info.ist, self.info.its,
-                      self.info.card)
+                      self.name, self.info.ost, self.info.ots,
+                      self.info.ist, self.info.its, self.info.card)
 
         self._listen()
 
@@ -685,7 +690,8 @@ class SpeechChannel(Lockable):
             if self.channel:
                 rc = lowlevel.sm_channel_release(self.channel)
                 if rc:
-                    raise AculabSpeechError(rc, 'sm_channel_release')
+                    raise AculabSpeechError(rc, 'sm_channel_release',
+                                            self.name)
                 self.channel = None
         finally:
             self.unlock()
@@ -717,7 +723,8 @@ class SpeechChannel(Lockable):
                 
             rc = lowlevel.sm_switch_channel_output(output)
             if (rc):
-                raise AculabSpeechError(rc, 'sm_switch_channel_output')
+                raise AculabSpeechError(rc, 'sm_switch_channel_output',
+                                        self.name)
 
             self.out_connection = SpeechEndpoint(self, 'out')
 
@@ -732,7 +739,8 @@ class SpeechChannel(Lockable):
 
             rc = lowlevel.sm_switch_channel_input(input)
             if (rc):
-                raise AculabSpeechError(rc, 'sm_switch_channel_input')
+                raise AculabSpeechError(rc, 'sm_switch_channel_input',
+                                        self.name)
             
             self.in_connection = SpeechEndpoint(self, 'in')
 
@@ -746,7 +754,7 @@ class SpeechChannel(Lockable):
         listen_for.map_tones_to_digits = lowlevel.kSMDTMFToneSetDigitMapping;
         rc = lowlevel.sm_listen_for(listen_for)
         if rc:
-            raise AculabSpeechError(rc, 'sm_listen_for')
+            raise AculabSpeechError(rc, 'sm_listen_for', self.name)
 
     def close(self):
         """Close the channel.
@@ -776,7 +784,7 @@ class SpeechChannel(Lockable):
         rc, handle = lowlevel.smd_ev_create(self.channel, _type,
                                             lowlevel.kSMChannelSpecificEvent)
         if rc:
-            raise AculabSpeechError(rc, 'smd_ev_create')
+            raise AculabSpeechError(rc, 'smd_ev_create', self.name)
 
         event = lowlevel.SM_CHANNEL_SET_EVENT_PARMS()
 
@@ -788,7 +796,7 @@ class SpeechChannel(Lockable):
         rc = lowlevel.sm_channel_set_event(event)
         if rc:
             lowlevel.smd_ev_free(event.handle)
-            raise AculabSpeechError(rc, 'sm_channel_set_event')
+            raise AculabSpeechError(rc, 'sm_channel_set_event', self.name)
 
         return handle
 
@@ -803,7 +811,7 @@ class SpeechChannel(Lockable):
 
         rc = lowlevel.sm_channel_get_datafeed(datafeed)
         if rc:
-            raise AculabSpeechError(rc, 'sm_channel_get_datafeed')
+            raise AculabSpeechError(rc, 'sm_channel_get_datafeed', self.name)
 
         self.datafeed = datafeed.datafeed
         
@@ -822,7 +830,8 @@ class SpeechChannel(Lockable):
 
             rc = lowlevel.sm_channel_datafeed_connect(connect)
             if rc:
-                raise AculabSpeechError(rc, 'sm_channel_datafeed_connect')
+                raise AculabSpeechError(rc, 'sm_channel_datafeed_connect',
+                                        self.name)
 
             log_switch.debug('%s := %s', self.name, source.name)
 
@@ -837,7 +846,7 @@ class SpeechChannel(Lockable):
             rc = lowlevel.sm_switch_channel_input(input)
             if (rc):
                 raise AculabSpeechError(rc, 'sm_switch_channel_input(%d:%d)' %
-                                        (input.st, input.ts))
+                                        (input.st, input.ts), self.name)
 
             log_switch.debug('%s := %d:%d', self.name,
                              source[0], source[1])
@@ -877,9 +886,9 @@ class SpeechChannel(Lockable):
 
             rc = lowlevel.sm_switch_channel_output(output)
             if rc:
-                return AculabSpeechError(rc,
-                                         'sm_switch_channel_output(%d:%d)' %
-                                         (output.st, output.ts))
+                return AculabSpeechError(
+                    rc, 'sm_switch_channel_output(%d:%d)' %
+                    (output.st, output.ts), self.name)
 
             log_switch.debug('%s speak_to(%d:%d)', self.name,
                              sink[0], sink[1])
@@ -929,7 +938,7 @@ class SpeechChannel(Lockable):
 
         rc = lowlevel.smdc_channel_config(config)
         if rc:
-            raise AculabSpeechError(rc, 'smdc_channel_config')
+            raise AculabSpeechError(rc, 'smdc_channel_config', self.name)
 
     def start(self, job):
         """Start a job.
@@ -996,7 +1005,7 @@ class SpeechChannel(Lockable):
 
             rc = lowlevel.sm_get_recognised(recog)
             if rc:
-                raise AculabSpeechError(rc, 'sm_get_recognised')
+                raise AculabSpeechError(rc, 'sm_get_recognised', self.name)
 
             if recog.type == lowlevel.kSMRecognisedNothing:
                 return
@@ -1093,7 +1102,8 @@ if version[0] >= 2:
 
                 rc = lowlevel.sm_tdmtx_datafeed_connect(connect)
                 if rc:
-                    raise AculabSpeechError(rc, 'sm_tdmtx_datafeed_connect')
+                    raise AculabSpeechError(
+                        rc, 'sm_tdmtx_datafeed_connect', self.name)
 
                 log_switch.debug('%s := %s', self.name, other.name)
             else:
@@ -1135,7 +1145,7 @@ if version[0] >= 2:
             datafeed.tdmrx = self.tdmrx
             rc = lowlevel.sm_tdmrx_get_datafeed(datafeed)
             if rc:
-                raise AculabSpeechError(rc, 'sm_tdmrx_get_datafeed')
+                raise AculabSpeechError(rc, 'sm_tdmrx_get_datafeed', self.name)
 
             self.datafeed = datafeed.datafeed
 
