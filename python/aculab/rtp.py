@@ -11,6 +11,7 @@ import lowlevel
 import names
 import sdp
 from speech import SpeechChannel, translate_card
+from busses import VMPtxEndpoint
 from reactor import SpeechReactor
 from snapshot import Snapshot
 from error import *
@@ -34,9 +35,9 @@ class VMPrx(Lockable):
     """An RTP receiver."""
         
     def __init__(self, controller, card = 0, module = 0, mutex = None,
-                 user_data = None, dispatcher = SpeechReactor):
+                 user_data = None, reactor = SpeechReactor):
         """Allocate an RTP receiver, configure alaw/mulaw and RFC 2833 codecs
-        and add the event to the dispatcher.
+        and add the event to the reactor.
 
         Note: the VMPrx is not ready to use until it has called 'ready' on its
         controller.
@@ -49,12 +50,13 @@ class VMPrx(Lockable):
 
         self.controller = controller
         self.card, self.module = translate_card(card, module)
-        self.dispatcher = dispatcher
+        self.reactor = reactor
         self.user_data = user_data
 
         # initialize early 
         self.vmprx = None
         self.event_vmprx = None
+        self.datafeed = None
         self.rtp_port = None
         self.rtcp_port = None
         self.sdp = None
@@ -81,7 +83,7 @@ class VMPrx(Lockable):
 
         self.event_vmprx = os_event(evmprx.event)
 
-        # log.debug('%s event fd: %d', self.name, self.event_vmprx.fd)
+        log.debug('%s event fd: %d', self.name, self.event_vmprx)
 
         # get the datafeed
         datafeed = lowlevel.SM_VMPRX_DATAFEED_PARMS()
@@ -93,19 +95,20 @@ class VMPrx(Lockable):
 
         self.datafeed = datafeed.datafeed
 
-        self.default_codecs()
-
-        self.dispatcher.add(self.event_vmprx, self.on_vmprx, select.POLLIN)
+        self.reactor.add(self.event_vmprx, self.on_vmprx, select.POLLIN)
         
-    def _close(self):
-        self.lock()
-        try:
-            if self.vmprx:
-                lowlevel.smd_vmprx_destroy(self.vmprx)
-                self.vmprx = None
-                self.event_vmprx = None
-        finally:
-            self.unlock()        
+    def close(self):
+        """Stop the receiver."""
+
+        if self.vmprx:
+            stopp = lowlevel.SM_VMPRX_STOP_PARMS()
+            stopp.vmprx = self.vmprx
+
+            rc = lowlevel.sm_vmprx_stop(stopp)
+            if rc:
+                raise AculabSpeechError(rc, 'sm_vmprx_stop')
+
+            log.debug("%s stopping", self.name)
 
     def on_vmprx(self):
         """Internal event handler."""
@@ -125,6 +128,8 @@ class VMPrx(Lockable):
             log.debug('%s vmprx: rtp address: %s rtp port: %d, rtcp port: %d',
                       self.name, self.address, self.rtp_port, self.rtcp_port)
 
+            self.default_codecs()
+        
             # Create the SDP
             md = sdp.MediaDescription()
             md.setLocalPort(self.rtp_port)
@@ -144,13 +149,24 @@ class VMPrx(Lockable):
             log.debug('%s vmprx: tone: %d, volume: %f', self.name,
                       tone, volume)
 
-            self.controller.dtmf(self, rfc2933_digits[tone], self.user_data)
+            self.controller.dtmf(self, rfc2833_digits[tone], self.user_data)
+            
+        elif status.status == lowlevel.kSMVMPrxStatusStopped:
+            self.reactor.remove(self.event_vmprx)
+            self.event_vmprx = None
+            self.datafeed = None
+            
+            rc = lowlevel.sm_vmprx_destroy(self.vmprx)
+            self.vmprx = None
+
+            if rc:
+                raise AculabSpeechError(rc, 'sm_vmprx_destroy')
 
     def get_datafeed(self):
         """Used internally by the switching protocol."""
         return self.datafeed
             
-    def config_tones(self, detect = 1, regen = 0):
+    def config_tones(self, detect = True, regen = False):
         """Configure RFC2833 tone detection/regeneration."""
         
         tones = lowlevel.SM_VMPRX_TONE_PARMS()
@@ -198,13 +214,13 @@ class VMPtx(Lockable):
     """An RTP transmitter."""
         
     def __init__(self, controller, card = 0, module = 0, mutex = None,
-                 user_data = None, dispatcher = SpeechReactor):
+                 user_data = None, reactor = SpeechReactor):
 
         Lockable.__init__(self, mutex)
 
         self.controller = controller
         self.card, self.module = translate_card(card, module)
-        self.dispatcher = dispatcher
+        self.reactor = reactor
         self.user_data = user_data
 
         # initialize early 
@@ -230,22 +246,25 @@ class VMPtx(Lockable):
 
         self.event_vmptx = os_event(evmptx.event)
 
-        # log.debug('vmptx event: %d', self.event_vmptx.fd)
+        log.debug('%s event fd: %d', self.name, self.event_vmptx)
 
-        self.dispatcher.add(self.event_vmptx, self.on_vmptx, select.POLLIN)
+        self.reactor.add(self.event_vmptx, self.on_vmptx, select.POLLIN)
 
-    def _close(self):
-        self.lock()
-        try:
-            if self.vmptx:
-                lowlevel.smd_vmptx_destroy(self.vmptx)
-                self.vmptx = None
-                self.event_vmptx = None
-        finally:
-            self.unlock()
-        
+    def close(self):
+        """Stop the transmitter."""
+
+        if self.vmptx:
+            stopp = lowlevel.SM_VMPTX_STOP_PARMS()
+            stopp.vmptx = self.vmptx
+
+            rc = lowlevel.sm_vmptx_stop(stopp)
+            if rc:
+                raise AculabSpeechError(rc, 'sm_vmptx_stop')
+
+            log.debug("%s stopping", self.name)
+
     def __del__(self):
-        self._close()
+        self.close()
 
     def on_vmptx(self):
         status = lowlevel.SM_VMPTX_STATUS_PARMS()
@@ -254,6 +273,13 @@ class VMPtx(Lockable):
         rc = lowlevel.sm_vmptx_status(status)
         log.debug('%s vmptx status: %s', self.name,
                   names.vmptx_status_names[status.status])
+
+        if status.status == lowlevel.kSMVMPtxStatusStopped:
+            self.reactor.remove(self.event_vmptx)
+            self.event_vmptx = None
+            
+            rc = lowlevel.sm_vmptx_destroy(self.vmptx)
+            self.vmptx = None
 
     def get_datafeed(self):
         """Used internally by the switching protocol."""
@@ -270,8 +296,7 @@ class VMPtx(Lockable):
 
         log.debug('%s destination: %s', self.name, addr)
         
-        # need to flatten the address tuple
-        config.set_destination_rtp(*addr)
+        config.set_destination_rtp(addr)
 
         rc = lowlevel.sm_vmptx_config(config)
         if rc:
@@ -320,6 +345,7 @@ class VMPtx(Lockable):
         codecp.vmptx = self.vmptx
         codecp.codec = codec
         codecp.payload_type = pt
+        codecp.ptime = ptime
     
         rc = lowlevel.sm_vmptx_config_codec(codecp)
         if rc:
@@ -347,6 +373,8 @@ class VMPtx(Lockable):
                 raise AculabSpeechError(rc, 'sm_vmptx_datafeed_connect')
 
             log_switch.debug('%s := %s', self.name, other.name)
+
+            return VMPtxEndpoint(self)
         else:
             raise ValueError('Cannot connect to instance without '\
                              'get_datafeed() method')

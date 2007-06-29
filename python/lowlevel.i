@@ -57,7 +57,7 @@ unsigned char bitrev[] = {
 	0x3f, 0xbf, 0x7f, 0xff
 };
 
-int set_inaddr(PyObject *address, struct sockaddr_in *addr);
+PyObject *set_inaddr(PyObject *address, struct sockaddr_in *addr);
 
 %}
 
@@ -234,6 +234,7 @@ BLOCKING(smfax_tx_page)
 %include "prosdc.h"
 %include "prospapi.h"
 %include "prosrtpapi.h"
+%include "error.h"
 #ifdef HAVE_FAX
 %include "actiff.h"
 %include "smfaxapi.h"
@@ -299,35 +300,83 @@ GET_SET_DATA(UUI_XPARMS, MAXUUI_INFO)
 GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 #endif
 
-PyObject *buffer_alloc(int size);
-
 %extend SM_TS_DATA_PARMS {
+    SM_TS_DATA_PARMS(int size = kSMMaxReplayDataBufferSize) {
+		SM_TS_DATA_PARMS *d = 
+			(SM_TS_DATA_PARMS*)calloc(1, sizeof(SM_TS_DATA_PARMS));
 
-	void usebuffer(PyObject *b)
-	{
-		if (!PyBuffer_Check(b)) {
-	    	PyErr_SetString(PyExc_TypeError,"Expected a buffer");
-			return;
-		}
-		self->length = b->ob_type->tp_as_buffer->
-			bf_getwritebuffer(b, 0, (void**)&self->data);
-	}
+		d->data = malloc(size);
 
-	void setdata(PyObject *s) {
+		return d;
+    }
+    ~ACU_SNAPSHOT_PARMS() {
+		if (self->data)
+			free(self->data);
+
+		free(self);
+    }
+
+	PyObject *setdata(PyObject *s) {
 		if (!PyString_Check(s)) {
 	    	PyErr_SetString(PyExc_TypeError,"Expected a string");
-			return;
+			return NULL;
 		}
 		if (PyString_GET_SIZE(s) > kSMMaxReplayDataBufferSize)
 		{
 	    	PyErr_SetString(PyExc_ValueError, 
 							"max size for name.data exceeded");
-			return;
+			return NULL;
 		}
 		self->length = PyString_GET_SIZE(s);
-		self->data = PyString_AS_STRING(s);
+		memcpy(self->data, PyString_AS_STRING(s), self->length);
+
+		Py_INCREF(Py_None);
+		return Py_None;
 	}
 	
+	PyObject *read(PyObject *fo)
+	{
+		FILE *f;
+		int rc;
+
+		if (!PyFile_Check(fo)) {
+	    	PyErr_SetString(PyExc_TypeError,"Expected a file object");
+			return NULL;
+		}
+		
+		f = PyFile_AsFile(fo);
+		rc = fread(self->data, 1, kSMMaxReplayDataBufferSize, f);
+		if (rc < 0)
+		{
+			PyErr_SetFromErrno(PyExc_OSError);
+			return NULL;
+		}
+		self->length = rc;
+
+		return PyInt_FromLong(rc);
+	}
+
+	PyObject *write(PyObject *fo)
+	{
+		FILE *f;
+		int rc;
+
+		if (!PyFile_Check(fo)) {
+	    	PyErr_SetString(PyExc_TypeError,"Expected a file object");
+			return NULL;
+		}
+		
+		f = PyFile_AsFile(fo);
+		rc = fwrite(self->data, 1, self->length, f);
+		if (rc < 0)
+		{
+			PyErr_SetFromErrno(PyExc_OSError);
+			return NULL;
+		}
+
+		return PyInt_FromLong(rc);;
+	}
+
 	PyObject *getdata() {
 		return PyBuffer_FromMemory(self->data, self->length);
 	}
@@ -400,17 +449,17 @@ PyObject *buffer_alloc(int size);
 }
 
 %extend SM_VMPTX_CONFIG_PARMS {
-	void set_destination_rtp(PyObject *args) {
-		set_inaddr(args, &self->destination_rtp);
+	PyObject *set_destination_rtp(PyObject *args) {
+		return set_inaddr(args, &self->destination_rtp);
 	}
-	void set_source_rtp(PyObject *args) {
-		set_inaddr(args, &self->source_rtp);
+	PyObject *set_source_rtp(PyObject *args) {
+		return set_inaddr(args, &self->source_rtp);
 	}
-	void set_destination_rtcp(PyObject *args) {
-		set_inaddr(args, &self->destination_rtcp);
+	PyObject *set_destination_rtcp(PyObject *args) {
+		return set_inaddr(args, &self->destination_rtcp);
 	}
-	void set_source_rtcp(PyObject *args) {
-		set_inaddr(args, &self->source_rtcp);
+	PyObject *set_source_rtcp(PyObject *args) {
+		return set_inaddr(args, &self->source_rtcp);
 	}
 }
 
@@ -453,11 +502,6 @@ void delete_ACTIFF_PAGE_HANDLE(ACTIFF_PAGE_HANDLE *self){
 }
 */
 
-PyObject *buffer_alloc(int size)
-{
-	return PyBuffer_New(size);
-}
-
 PyObject *add_result(PyObject *result, PyObject *o)
 {
 	if ((!result) || (result == Py_None)) 
@@ -482,7 +526,7 @@ PyObject *add_result(PyObject *result, PyObject *o)
 
    Code nicked from Python's socketmodule.c */
 
-int set_inaddr(PyObject *args, struct sockaddr_in *addr)
+PyObject *set_inaddr(PyObject *args, struct sockaddr_in *addr)
 {
 	int rc, port, af = AF_INET;
 	char *name;
@@ -493,9 +537,12 @@ int set_inaddr(PyObject *args, struct sockaddr_in *addr)
 
 	if (!PyArg_ParseTuple(args, "si|i:set_inaddr", &name, &port, &af))
 	{
-		PyErr_SetString(PyExc_TypeError, "expecting a tuple (string, int, int)");
-		return -1;
+		PyErr_SetString(PyExc_TypeError, 
+						"expecting a tuple (string, int, int)");
+		return NULL;
 	}
+
+	addr->sin_port = htons(port);
 
 	if (sscanf(name, "%d.%d.%d.%d%c", &d1, &d2, &d3, &d4, &ch) == 4 &&
 	    0 <= d1 && d1 <= 255 && 0 <= d2 && d2 <= 255 &&
@@ -505,7 +552,8 @@ int set_inaddr(PyObject *args, struct sockaddr_in *addr)
 			((long) d3 << 8) | ((long) d4 << 0));
 		addr->sin_family = AF_INET;
 
-		return 0;
+		Py_INCREF(Py_None);
+		return Py_None;
 	}
 
 	memset(&hints, 0, sizeof(hints));
@@ -518,13 +566,16 @@ int set_inaddr(PyObject *args, struct sockaddr_in *addr)
 		PyErr_SetObject(PyExc_RuntimeError, v);
 		Py_DECREF(v);
 		
-		return -1;
+		return NULL;
 	}
 
 	memcpy((char *) addr, res->ai_addr, sizeof(struct sockaddr_in));
 	freeaddrinfo(res);
 
-	return 0;
+	addr->sin_family = af;
+
+	Py_INCREF(Py_None);
+	return Py_None;
 }
 %}
 

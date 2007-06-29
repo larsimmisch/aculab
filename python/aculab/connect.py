@@ -133,3 +133,5 @@ class Glue(object):
             self.speech.close()
             self.speech = None
 
+        self.call = None
+

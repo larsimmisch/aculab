@@ -95,7 +95,7 @@ class SIPHandle(CallHandleBase):
 
         rc = lowlevel.sip_details(self.details)
         if rc:
-            raise AculabError(rc, 'call_details', self.handle)
+            raise AculabError(rc, 'call_details', self.name)
 
         return self.details
 
@@ -108,7 +108,7 @@ class SIPHandle(CallHandleBase):
         
         rc = lowlevel.sip_accept(accept)
         if rc:
-            raise AculabError(rc, 'sip_accept', self.handle)
+            raise AculabError(rc, 'sip_accept', self.name)
 
         log.debug('%s accept()', self.name)
 
@@ -119,23 +119,24 @@ class SIPHandle(CallHandleBase):
         
         rc = lowlevel.sip_incoming_ringing(ringing)
         if rc:
-            raise AculabError(rc, 'sip_incoming_ringing', self.handle)
+            raise AculabError(rc, 'sip_incoming_ringing', self.name)
 
         log.debug('%s incoming_ringing()', self.name)
 
         return ringing
 
     def disconnect(self, code = 200):
-        """Disconnect a call. Cause may be a CAUSE_XPARMS struct or an int"""
-        disconnect = lowlevel.SIP_DISCONNECT_PARMS()
-        disconnect.sip_code = code
-
+        """Disconnect a call. Code is 200 by default (which is probably
+        wrong)"""
+        
         if self.handle:
-            disconnect.handle = self.handle
+            disconnectp = lowlevel.SIP_DISCONNECT_PARMS()
+            disconnectp.handle = self.handle
+            disconnectp.sip_code = code
 
-            rc = lowlevel.sip_disconnect(disconnect)
+            rc = lowlevel.sip_disconnect(disconnectp)
             if rc:
-                raise AculabError(rc, 'sip_disconnect', self.handle)
+                raise AculabError(rc, 'sip_disconnect', self.name)
 
         log.debug('%s disconnect(%d)', self.name, code)
 
@@ -154,7 +155,7 @@ class SIPHandle(CallHandleBase):
             
             rc = lowlevel.xcall_release(disconnect)
             if rc:
-                raise AculabError(rc, 'call_release', self.handle)
+                raise AculabError(rc, 'call_release', self.name)
 
         log.debug('%s release()', self.name)
 
@@ -181,6 +182,9 @@ class SIPHandle(CallHandleBase):
 
     def ev_idle(self):
         self.release()
+
+    def ev_idle_post(self):
+        self.user_data = None
 
 class SIPCall(SIPHandle):
     """A SIPCall is a SIPCallHandle that does an automatic openin upon

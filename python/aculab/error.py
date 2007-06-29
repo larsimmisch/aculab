@@ -16,13 +16,13 @@ from names import error_names, sm_error_names, fax_error_names
 class AculabError(Exception):
     """Call Control exception. The error code is stored in value."""
     
-    def __init__(self, rc, function = '', handle = None):
-        self.handle = handle
+    def __init__(self, rc, function = '', name = None):
+        self.name = name
         self.value = rc
 
         if function:
-            if handle:
-                desc = '[0x%x] %s failed: ' % (handle, function)
+            if name:
+                desc = '%s %s failed: ' % (name, function)
             else:
                 desc = '%s() failed: ' % (function)
         else:

@@ -7,42 +7,6 @@ from error import AculabError
 
 log = logging.getLogger('switch')
 
-class Connection:
-    """A connection between two resources.
-
-    A connection consists of endpoints and timeslots.
-    
-    This class takes care of closing the contained endpoints and bus
-    timeslots in the proper order upon destruction."""
-
-    def __init__(self, bus):
-        """If bus is None, the default bus is used."""
-        if not bus:
-            self.bus = DefaultBus()
-        else:
-            self.bus = bus
-        self.endpoints = []
-        self.timeslots = []
-
-    def close(self):
-        """Close the connection and free all resources.
-
-        Closes the contained endpoints and frees the timeslots.
-        Endpoints are closed in reversed order to avoid clicks."""
-        for c in reversed(self.endpoints):
-            c.close()
-
-        self.endpoints = []
-
-        for t in self.timeslots:
-            self.bus.free(t)
-
-        self.timeslots = []
-
-    def __del__(self):
-        if self.endpoints or self.timeslots:
-            self.close()
-
 class CTBusEndpoint:
     """An endpoint on a bus.
 
@@ -158,8 +122,9 @@ class SpeechEndpoint(object):
         if self.channel:
             if self.direction == 'datafeed':
                 connect = lowlevel.SM_CHANNEL_DATAFEED_CONNECT_PARMS()
-                connect.channel = self.channel
-                connect.data_source= lowlevel.kSMNullDatafeedId
+                connect.channel = self.channel.channel
+                # kSMNullDatafeedId isn't wrapped for some reason
+                # connect.data_source= lowlevel.kSMNullDatafeedId
                 
                 rc = lowlevel.sm_channel_datafeed_connect(connect)
                 if rc:
@@ -192,8 +157,7 @@ class SpeechEndpoint(object):
 
     def __repr__(self):
         """Print a representation of the endpoint."""
-        return 'SpeechEndpoint(%s, %s)'% \
-               (self.channel.name, str(self.ts))
+        return 'SpeechEndpoint(%s, %s)'% (self.channel.name, self.direction)
 
 class VMPtxEndpoint(object):
     """An endpoint to a VMPtx (RTP transmitter).
@@ -207,21 +171,21 @@ class VMPtxEndpoint(object):
 
         @param vmptx: a L{VMPtx}.
         """
-        self.channel = channel
+        self.vmptx = vmptx
 
     def close(self):
         """Disconnect the endpoint."""
         
-        if self.channel:
+        if self.vmptx:
             connect = lowlevel.SM_VMPTX_DATAFEED_CONNECT_PARMS()
-            connect.vmptx = self.vmptx
-            connect.data_source= lowlevel.kSMNullDatafeedId
+            connect.vmptx = self.vmptx.vmptx
+            # connect.data_source= lowlevel.kSMNullDatafeedId
 
             rc = lowlevel.sm_vmptx_datafeed_connect(connect)
             if rc:
                 raise AculabSpeechError(rc, 'sm_vmptx_datafeed_connect')
 
-            self.channel = None
+            self.vmptx = None
 
     def __del__(self):
         """Close the endpoint if it is still open"""
@@ -385,6 +349,39 @@ def DefaultBus():
         _DefaultBus = MVIP()
     
     return _DefaultBus
+
+class Connection:
+    """A connection between two resources.
+
+    A connection consists of endpoints and timeslots.
+    
+    This class takes care of closing the contained endpoints and bus
+    timeslots in the proper order upon destruction."""
+
+    def __init__(self, bus = DefaultBus(), endpoints = [], timeslots = []):
+        """If bus is None, the default bus is used."""
+        self.bus = bus
+        self.endpoints = endpoints
+        self.timeslots = timeslots
+
+    def close(self):
+        """Close the connection and free all resources.
+
+        Closes the contained endpoints and frees the timeslots.
+        Endpoints are closed in reversed order to avoid clicks."""
+        for c in reversed(self.endpoints):
+            c.close()
+
+        self.endpoints = []
+
+        for t in self.timeslots:
+            self.bus.free(t)
+
+        self.timeslots = []
+
+    def __del__(self):
+        if self.endpoints or self.timeslots:
+            self.close()
 
 if __name__ == '__main__':
     print DefaultBus()

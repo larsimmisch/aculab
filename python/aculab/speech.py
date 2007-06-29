@@ -91,7 +91,9 @@ class PlayJob(object):
 
         # read the length of the file
         self.file.seek(0, 2)
-        self.buffer = lowlevel.SM_TS_DATA_PARMS()
+        
+        # use a single buffer
+        self.data = lowlevel.SM_TS_DATA_PARMS()
         self.length = self.file.tell()
         # Assumption: alaw or mulaw
         self.duration = self.length / 8000.0
@@ -126,7 +128,7 @@ class PlayJob(object):
             # Ok. We are not finished yet.
             # Add a reactor to self and add the write event to it.
             self.reactor = self.channel.reactor
-            self.reactor.add(self.channel.event_write,
+            self.reactor.add(os_event(self.channel.event_write),
                              self.fill_play_buffer)
 
         return self
@@ -136,7 +138,7 @@ class PlayJob(object):
         
         # remove the write event from the reactor
         if self.reactor:
-            self.reactor.remove(self.channel.event_write)
+            self.reactor.remove(os_event(self.channel.event_write))
 
         # Compute reason.
         reason = None
@@ -185,12 +187,10 @@ class PlayJob(object):
                 self.done()
                 return True
             else:
-                data = self.buffer
-                data.channel = self.channel.channel
-                data.setdata(self.file.read(
-                    lowlevel.kSMMaxReplayDataBufferSize))
+                self.data.channel = self.channel.channel
+                self.data.read(self.file)
 
-                rc = lowlevel.sm_put_replay_data(data)
+                rc = lowlevel.sm_put_replay_data(self.data)
                 if rc and rc != lowlevel.ERR_SM_NO_CAPACITY:
                     raise AculabSpeechError(rc, 'sm_put_replay_data')
 
@@ -244,11 +244,6 @@ class RecordJob(object):
             self.file = f
 
         self.data = lowlevel.SM_TS_DATA_PARMS()
-        # tell buffer to use our Python-buffer to store data
-        # it avoids a copy of the data
-        self.buffer = lowlevel.buffer_alloc(
-            lowlevel.kSMMaxRecordDataBufferSize)
-        self.data.usebuffer(self.buffer)
         # size in seconds
         self.duration = 0.0
         self.max_octets = max_octets
@@ -287,13 +282,14 @@ class RecordJob(object):
                   self.agc, self.volume)
                   
         # add the read event to the reactor
-        self.channel.reactor.add(self.channel.event_read, self.on_read)
+        self.channel.reactor.add(os_event(self.channel.event_read),
+                                 self.on_read)
 
     def done(self):                
         """Called internally upon completion."""
         
         # remove the read event from the reactor
-        self.channel.reactor.remove(self.channel.event_read)
+        self.channel.reactor.remove(os_event(self.channel.event_read))
 
         channel = self.channel
 
@@ -361,9 +357,8 @@ class RecordJob(object):
             elif status.status == lowlevel.kSMRecordStatusNoData:
                 return
             else:
-                data = self.data
-                data.channel = self.channel.channel
-                data.length = lowlevel.kSMMaxRecordDataBufferSize
+                self.data.channel = self.channel.channel
+                self.data.length = lowlevel.kSMMaxRecordDataBufferSize
 
                 rc = lowlevel.sm_get_recorded_data(data)
                 if rc:
@@ -374,11 +369,10 @@ class RecordJob(object):
                                                         'sm_get_recorded_data')
                     self.done()
 
-                l = data.length
                 # Assumption: alaw/mulaw
                 self.duration += l / 8000.0
                 
-                self.file.write(self.buffer[:l])
+                self.data.write(self.file)
 
     def stop(self):
         """Stop the recording."""
@@ -438,7 +432,8 @@ class DigitsJob(object):
                   self.digit_duration)
 
         # add the write event to the reactor
-        self.channel.reactor.add(self.channel.event_write, self.on_write)
+        self.channel.reactor.add(os_event(self.channel.event_write),
+                                 self.on_write)
 
     def on_write(self):
         if self.channel is None:
@@ -460,7 +455,7 @@ class DigitsJob(object):
                 reason = AculabStopped()
 
             # remove the write event from to the reactor
-            channel.reactor.remove(channel.event_write)
+            channel.reactor.remove(os_event(channel.event_write))
 
             log.debug('%s digits_done(reason=\'%s\')',
                       channel.name, reason)
@@ -474,7 +469,7 @@ class DigitsJob(object):
         log.debug('%s digits_stop()', self.channel.name)
 
         # remove the write event from the reactor
-        self.channel.reactor.remove(self.channel.event_write)
+        self.channel.reactor.remove(os_event(self.channel.event_write))
 
         # Position is only nonzero when play was stopped.
         channel = self.channel
@@ -525,7 +520,8 @@ class DCReadJob(object):
         control.blocking = self.blocking
 
         # add the read event to the reactor
-        self.channel.reactor.add(self.channel.event_read, self.on_read)
+        self.channel.reactor.add(os_event(self.channel.event_read),
+                                 self.on_read)
 
         rc = lowlevel.smdc_rx_control(control)
         if rc:
@@ -545,7 +541,7 @@ class DCReadJob(object):
             raise AculabSpeechError(rc, 'smdc_stop')
 
         # remove the write event from the reactor
-        self.channel.reactor.remove(self.channel.event_read)
+        self.channel.reactor.remove(os_event(self.channel.event_read))
 
         # Position is only nonzero when play was stopped.
         channel = self.channel
@@ -646,7 +642,7 @@ class SpeechChannel(Lockable):
         self._listen()
 
         # add the recog event to the reactor
-        self.reactor.add(self.event_recog, self.on_recog)
+        self.reactor.add(os_event(self.event_recog), self.on_recog)
 
     def __del__(self):
         """Close the channel if it is still open."""
@@ -658,6 +654,7 @@ class SpeechChannel(Lockable):
         """Finalizes the shutdown of a speech channel.
 
         I{Do not use directly, use L{SpeechChannel.close}}."""
+        self.user_data = None
         self.lock()
         try:
             if self.event_read:
@@ -667,8 +664,8 @@ class SpeechChannel(Lockable):
                 lowlevel.smd_ev_free(self.event_write)
                 self.event_write = None
             if self.event_recog:
+                self.reactor.remove(os_event(self.event_recog))
                 lowlevel.smd_ev_free(self.event_recog)
-                self.reactor.remove(self.event_recog)
                 self.event_recog = None
 
             if self.out_ts:
@@ -761,23 +758,6 @@ class SpeechChannel(Lockable):
 
         self._close()
         
-    def create_event(self, event):
-        """Create an event for use with the reactor.
-
-        I{Used internally.}
-
-        @param event: An object of type C{SM_CHANNEL_SET_EVENT_PARMS} that
-        is modified in place.
-        @returns: The handle of the event."""
-        
-        rc, ev = lowlevel.smd_ev_create(event.channel,
-                                        event.event_type,
-                                        event.issue_events)
-        if rc:
-            raise AculabSpeechError(rc, 'smd_ev_create')
-
-        return os_event(ev)
-
     def set_event(self, _type):
         """Create and set an event for the channel.
 
@@ -788,12 +768,17 @@ class SpeechChannel(Lockable):
          - lowlevel.kSMEventTypeWriteData
          - lowlevel.kSMEventTypeRecog
          """
+
+        rc, handle = lowlevel.smd_ev_create(self.channel, _type,
+                                            lowlevel.kSMChannelSpecificEvent)
+        if rc:
+            raise AculabSpeechError(rc, 'smd_ev_create')
+
         event = lowlevel.SM_CHANNEL_SET_EVENT_PARMS()
 
         event.channel = self.channel
         event.issue_events = lowlevel.kSMChannelSpecificEvent
         event.event_type = _type
-        handle = self.create_event(event)
         event.event = handle
 
         rc = lowlevel.sm_channel_set_event(event)
@@ -1062,4 +1047,101 @@ class Conference(Lockable):
             pass
         finally:
             self.unlock()
+
+if version[0] >= 2:
+
+    class TDMtx(object):
+        def __init__(self, controller, ts,
+                     ts_type = lowlevel.kSMTimeslotTypeALaw,
+                     card = 0, module = 0):
+            """Create a TDM transmitter.
+            
+            See U{sm_tdmtx_create
+            <http://www.aculab.com/support/TiNG/gen/\
+            apifn-sm_tdmtx_create.html>}.
+            """
+            
+            self.card, self.module = translate_card(card, module)
+            self.user_data = user_data
+
+            tdmtx = lowlevel.SM_TDMTX_CREATE_PARMS()
+            tdmtx.module = self.module.open.module_id
+            tdmtx.stream = ts[0]
+            tdmtx.timeslot = ts[1]
+            tdmtx.type = ts_type
+
+            rc = lowlevel.sm_tdmtx_create(tdmtx)
+            if rc:
+                raise AculabSpeechError(rc, 'sm_tdmtx_create')
+                
+            self.tdmtx = tdmtx.tdmtx
+
+        def close(self):
+            if self.tdmtx:
+                rc = lowlevel.smd_tdmtx_destroy(self.tdmtx)
+                self.tdmtx = None
+
+        def listen_to(self, other):
+            if hasattr(other, 'get_datafeed'):
+                connect = lowlevel.SM_TDMTX_DATAFEED_CONNECT_PARMS()
+                connect.tdmtx = self.tdmtx
+                connect.data_source = other.get_datafeed()
+
+                rc = lowlevel.sm_tdmtx_datafeed_connect(connect)
+                if rc:
+                    raise AculabSpeechError(rc, 'sm_tdmtx_datafeed_connect')
+
+                log_switch.debug('%s := %s', self.name, other.name)
+            else:
+                raise ValueError('Cannot connect to instance without '\
+                                 'get_datafeed() method')
+            
+    class TDMrx(object):
+        def __init__(self, controller, ts,
+                     ts_type = lowlevel.kSMTimeslotTypeALaw,
+                     card = 0, module = 0):
+            """Create a TDM transmitter.
+            
+            See U{sm_tdmrx_create
+            <http://www.aculab.com/support/TiNG/gen/\
+            apifn-sm_tdmrx_create.html>}.
+            """
+            
+            self.card, self.module = translate_card(card, module)
+            self.user_data = user_data
+            # Initialize early
+            self.tdmrx = None
+            self.datafeed = None
+
+            tdmrx = lowlevel.SM_TDMTX_CREATE_PARMS()
+            tdmrx.module = self.module.open.module_id
+            tdmrx.stream = ts[0]
+            tdmrx.timeslot = ts[1]
+            tdmrx.type = ts_type
+
+            rc = lowlevel.sm_tdmrx_create(tdmrx)
+            if rc:
+                raise AculabSpeechError(rc, 'sm_tdmrx_create')
+                
+            self.tdmrx = tdmrx.tdmrx
+
+            # get the datafeed
+            datafeed = lowlevel.SM_TDMRX_DATAFEED_PARMS()
+
+            datafeed.tdmrx = self.tdmrx
+            rc = lowlevel.sm_tdmrx_get_datafeed(datafeed)
+            if rc:
+                raise AculabSpeechError(rc, 'sm_tdmrx_get_datafeed')
+
+            self.datafeed = datafeed.datafeed
+
+        def close(self):
+            if self.tdmrx:
+                rc = lowlevel.smd_tdmrx_destroy(self.tdmrx)
+                self.datafeed = None
+                self.tdmrx = None
+
+        def get_datafeed(self):
+            """Used internally by the switching protocol."""
+            return self.datafeed
 

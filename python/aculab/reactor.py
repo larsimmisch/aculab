@@ -79,33 +79,34 @@ class _CallEventReactor:
                 if mutex:
                     mutex.acquire()
 
-                mcall = None
-                mcontroller = None
+                handlers = [] # tuple (handle, name, args)
+                handled = 'ignored'
 
                 try:
-                    mcall = getattr(call, ev, None)
-                    mcontroller = getattr(call.controllers[-1], ev, None)
+                    h = getattr(call, ev, None)
+                    if h:
+                        handlers.append((h, 'call', None))
+                    h = getattr(call.controllers[-1], ev, None)
+                    if h:
+                        handlers.append((h, 'controller',
+                                         (call, call.user_data)))
+                    h = getattr(call, ev + '_post', None)
+                    if h:
+                        handlers.append((h, 'post', None))
                     
-
                     # compute description of handlers
-                    if mcontroller and mcall:
-                        handled = '(call, controller)'
-                    elif mcontroller:
-                        handled = '(controller)'
-                    elif mcall:
-                        handled = '(call)'
-                    else:
-                        handled = '(ignored)'
+                    if handlers:
+                        l = [h[1] for h in handlers]
+                        handled = ','.join(l)
 
-                    log_call.debug('%s %s %s', call.name, ev, handled)
+                    log_call.debug('%s %s (%s)', call.name, ev, handled)
 
-                    # let the call handle events first
-                    if mcall:
-                        mcall()
-                    # pass the event on to the controller
-                    if mcontroller:
-                        mcontroller(call, call.user_data)
-
+                    for h, n, args in handlers:
+                        if args:
+                            h(*args)
+                        else:
+                            h()
+                        
                 finally:
                     # set call.last_event and call.last_extended_event
                     if event.state == lowlevel.EV_EXTENDED \
@@ -316,25 +317,24 @@ class PollSpeechEventReactor(threading.Thread):
     def add(self, handle, method, mask = select.POLLIN|select.POLLOUT):
         """Add a new handle to the reactor.
 
-        @param handle: Typically the C{tSMEventId} associated with the
-        event, but any object with an C{fd} attribute will work also.
+        @param handle: A file descriptor. On Unix, use the C{fd} member of the
+        C{tSMEventId} structure.
         @param method: This will be called when the event is fired.
         @param mask: Bitmask of POLLIN, POLLPRI, POLLOUT, POLLERR, POLLHUP
         or POLLNVAL or None for a default mask.
         
         This method blocks until I{handle} is added by reactor thread"""
-        h = handle.fd
         if threading.currentThread() == self or not self.isAlive():
-            # log.debug('adding fd: %d %s', h, method.__name__)
-            self.handles[h] = method
-            self.poll.register(h, mask)
+            # log.debug('adding fd: %d %s', handle, method.__name__)
+            self.handles[handle] = method
+            self.poll.register(handle, mask)
         else:
-            # log.debug('self adding: %d %s', h, method.__name__)
+            # log.debug('self adding: %d %s', handle, method.__name__)
             event = threading.Event()
             self.mutex.acquire()
-            self.handles[h] = method
+            self.handles[handle] = method
             # function 1 is add
-            self.queue.append((1, h, event, mask))
+            self.queue.append((1, handle, event, mask))
             self.mutex.release()
             self.pipe[1].write('1')
             event.wait()
@@ -346,20 +346,19 @@ class PollSpeechEventReactor(threading.Thread):
         event, but any object with an C{fd} attribute will work also.
         
         This method blocks until handle is removed by the reactor thread."""
-        h = handle.fd
         if threading.currentThread() == self or not self.isAlive():
-            # log.debug('removing fd: %d', h)
-            del self.handles[h]
-            self.poll.unregister(h)
+            # log.debug('removing fd: %d', handle)
+            del self.handles[handle]
+            self.poll.unregister(handle)
         else:
-            # log.debug('removing fd: %d', h)
+            # log.debug('removing fd: %d', handle)
             event = threading.Event()
             self.mutex.acquire()
-            del self.handles[h]
+            del self.handles[handle]
             # function 0 is remove
-            self.queue.append((0, h, event, None))
+            self.queue.append((0, handle, event, None))
             self.mutex.release()
-            self.pipe[1].write('0')        
+            self.pipe[1].write('0')
             event.wait()
 
     def run(self):

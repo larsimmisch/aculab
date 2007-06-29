@@ -16,8 +16,8 @@ def swig_value(s):
 def os_event(event):
     if os.name == 'nt':
         return pywintypes.HANDLE(event)
-    else:
-        return event
+
+    return event.fd
 
 class OrderedDict(dict):
     """A UserDict that preserves insert order whenever possible."""

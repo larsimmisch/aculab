@@ -4,14 +4,12 @@ import sys
 import getopt
 import logging
 from aculab import defaultLogging
-from aculab.error import AculabError
 from aculab.speech import SpeechChannel
 from aculab.reactor import SpeechReactor, CallReactor
+from aculab.busses import Connection
 from aculab.sip import SIPCall
 from aculab.rtp import VMPrx, VMPtx
 from aculab.sdp import SDP
-
-import aculab.lowlevel as ll
 
 class CallData:
     
@@ -23,16 +21,31 @@ class CallData:
         self.connection = None
 
     def connect(self):
-        self.connection = [self.vmptx.listen_to(self.channel),
-                           self.channel.listen_to(self.vmprx)]
+        eps = [self.vmptx.listen_to(self.channel),
+               self.channel.listen_to(self.vmprx)]
 
-        self.channel.play('asteria.al')
+        self.connection = Connection(endpoints = eps)
 
+    def close(self):
+        self.connection.close()
+        self.vmptx.close()
+        self.vmprx.close()
+        self.channel.close()
+        self.call = None
+        self.connection = None
+        self.vmprx = None
+        self.vmptx = None
+        self.channel = None
+    
 class IncomingCallController:
 
     def ready(self, vmprx, sdp, user_data):
         """Called when the vmprx is ready."""
+        vmprx.config_tones()
         user_data.call.accept(sdp)
+
+    def dtmf(self, channel, digit, user_data):
+        log.info('dtmf: %s', digit)
 
     def ev_incoming_call_det(self, call, user_data):
         call.user_data = CallData(self, call)
@@ -50,13 +63,20 @@ class IncomingCallController:
 
     def ev_call_connected(self, call, user_data):
         user_data.connect()
+        user_data.channel.play('asteria.al')
         
     def play_done(self, channel, f, reason, position, user_data):
-        pass
+        # The call might be gone already
+        if user_data.call:
+            user_data.call.disconnect()
 
+    def ev_idle(self, call, user_data):
+        user_data.close()
+        
 class RepeatedIncomingCallController(IncomingCallController):
 
-    def ev_idle(self, call, model):
+    def ev_idle(self, call, user_data):
+        user_data.close()
         call.openin()
 
 def usage():
@@ -86,3 +106,4 @@ if __name__ == '__main__':
 
     SpeechReactor.start()
     CallReactor.run()
+

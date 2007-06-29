@@ -216,7 +216,7 @@ class CallHandle(CallHandleBase):
 
         rc = lowlevel.call_feature_send(fp)
         if rc:
-            raise AculabError(rc, 'call_feature_send', self.handle)
+            raise AculabError(rc, 'call_feature_send', self.name)
 
         log.debug('%s call_feature_send(%d, %d)',
                   self.name, feature_type, message_control)
@@ -249,11 +249,11 @@ class CallHandle(CallHandleBase):
         if feature_type and feature:
             rc = lowlevel.call_feature_enquiry(outparms)
             if rc:
-                raise AculabError(rc, 'call_feature_enquiry', self.handle)
+                raise AculabError(rc, 'call_feature_enquiry', self.name)
         else:
             rc = lowlevel.call_enquiry(outparms)
             if rc:
-                raise AculabError(rc, 'call_enquiry', self.handle)
+                raise AculabError(rc, 'call_enquiry', self.name)
 
         # it is permissible to do an openout after an openin
         # we save the handle from openin in this case
@@ -285,7 +285,7 @@ class CallHandle(CallHandleBase):
         
         rc = lowlevel.call_transfer(transfer)
         if rc:
-            raise AculabError(rc, 'call_transfer', self.handle)
+            raise AculabError(rc, 'call_transfer', self.name)
         
         log.debug('%s transfer(%s)', self.name, call.name)
 
@@ -297,7 +297,7 @@ class CallHandle(CallHandleBase):
         """
         rc = lowlevel.call_hold(self.handle)
         if rc:
-            raise AculabError(rc, 'call_hold', self.handle)
+            raise AculabError(rc, 'call_hold', self.name)
 
         log.debug('%s hold()', self.name)
 
@@ -309,7 +309,7 @@ class CallHandle(CallHandleBase):
         """
         rc = lowlevel.call_reconnect(self.handle)
         if rc:
-            raise AculabError(rc, 'call_reconnect', self.handle)
+            raise AculabError(rc, 'call_reconnect', self.name)
 
         log.debug('%s reconnect()', self.name)
 
@@ -333,7 +333,7 @@ class CallHandle(CallHandleBase):
 
         rc = lowlevel.call_send_overlap(overlap)
         if rc:
-            raise AculabError(rc, 'call_send_overlap', self.handle)
+            raise AculabError(rc, 'call_send_overlap', self.name)
 
         log.debug('%s send_overlap(%s, %d)', self.name, addr, complete)
 
@@ -352,7 +352,7 @@ class CallHandle(CallHandleBase):
 
         rc = lowlevel.call_send_keypad_info(keypadx)
         if rc:
-            raise AculabError(rc, 'call_send_keypad_info')
+            raise AculabError(rc, 'call_send_keypad_info', self.name)
 
     def listen_to(self, source):
         """Listen to a timeslot on a L{CTbus}.
@@ -374,7 +374,7 @@ class CallHandle(CallHandleBase):
         if rc:
             raise AculabError(rc, 'sw_set_output(%d:%d := %d:%d)' %
                               (output.ost, output.ots, source[0], source[1]),
-                              self.handle)
+                              self.name)
 
         log_switch.debug('%s [%d] %d:%d := %d:%d', self.name,
                          self.switch,
@@ -404,7 +404,7 @@ class CallHandle(CallHandleBase):
         if rc:
             raise AculabError(rc, 'sw_set_output(%d:%d := %d:%d)' %
                               (sink[0], sink[1], output.ist, output.its),
-                              self.handle)
+                              self.name)
 
         log_switch.debug('%s [%d] %d:%d := %d:%d', self.name,
                          self.switch,
@@ -425,7 +425,7 @@ class CallHandle(CallHandleBase):
         cause.handle = self.handle
         rc = lowlevel.call_getcause(cause)
         if rc:
-            raise AculabError(rc, 'call_details', self.handle)
+            raise AculabError(rc, 'call_details', self.name)
 
         return cause
     
@@ -442,7 +442,7 @@ class CallHandle(CallHandleBase):
 
         rc = lowlevel.call_details(self.details)
         if rc:
-            raise AculabError(rc, 'call_details', self.handle)
+            raise AculabError(rc, 'call_details', self.name)
 
         return self.details
 
@@ -461,7 +461,7 @@ class CallHandle(CallHandleBase):
 
         rc = lowlevel.call_feature_details(self.feature_details)
         if rc:
-            raise AculabError(rc, 'call_feature_details', self.handle)
+            raise AculabError(rc, 'call_feature_details', self.name)
 
         return self.feature_details
 
@@ -473,7 +473,7 @@ class CallHandle(CallHandleBase):
         """
         rc = lowlevel.call_accept(self.handle)
         if rc:
-            raise AculabError(rc, 'call_accept', self.handle)
+            raise AculabError(rc, 'call_accept', self.name)
 
         log.debug('%s accept()', self.name)
 
@@ -486,7 +486,7 @@ class CallHandle(CallHandleBase):
         """
         rc = lowlevel.call_incoming_ringing(self.handle)
         if rc:
-            raise AculabError(rc, 'call_incoming_ringing', self.handle)
+            raise AculabError(rc, 'call_incoming_ringing', self.name)
 
         log.debug('%s incoming_ringing()', self.name)
 
@@ -513,7 +513,7 @@ class CallHandle(CallHandleBase):
 
             rc = lowlevel.call_disconnect(xcause)
             if rc:
-                raise AculabError(rc, 'call_disconnect', self.handle)
+                raise AculabError(rc, 'call_disconnect', self.name)
 
         log.debug('%s disconnect(%d)', self.name, xcause.cause)
 
@@ -545,7 +545,7 @@ class CallHandle(CallHandleBase):
             
             rc = lowlevel.call_release(xcause)
             if rc:
-                raise AculabError(rc, 'call_release', self.handle)
+                raise AculabError(rc, 'call_release', self.name)
 
         log.debug('%s release(%d)', self.name, xcause.cause)
 
@@ -587,7 +587,7 @@ class CallHandle(CallHandleBase):
         self.get_details()
 
     def ev_idle(self):
-        """Internal event handler for C{EV_EXT_HOLD_REQUEST}.
+        """Internal event handler for C{EV_IDLE}.
 
         This method calls:
          - L{get_details} to update the details
@@ -597,11 +597,25 @@ class CallHandle(CallHandleBase):
         """        
         self.get_feature_details(lowlevel.FEATURE_FACILITY)
         self.get_details()
+
+    def ev_idle_post(self):
+        """Internal event handler for C{EV_IDLE}.
+
+        This method:
+         - sets the call's user_data to C{None}
+         - calls L{release}
+         - calls U{idle_net_ts
+         <http://www.aculab.com/Support/v6_api/CallControl/idle_net_ts.htm>}
+         to assert a suitable idle pattern (for ISDN, see Q.522, section 2.12).
+        """        
+
+        self.user_data = None
+        self.release()
+        
         # Assert idle pattern according to Q.522, section 2.12
         rc = lowlevel.idle_net_ts(self.port, self.details.ts)
         if rc:
-            raise AculabError(rc, 'idle_net_ts', self.handle)
-        self.release()
+            raise AculabError(rc, 'idle_net_ts', self.name)
 
 class Call(CallHandle):
     """A Call is a CallHandle that does an automatic L{openin} upon
