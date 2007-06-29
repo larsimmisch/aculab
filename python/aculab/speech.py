@@ -360,17 +360,17 @@ class RecordJob(object):
                 self.data.channel = self.channel.channel
                 self.data.length = lowlevel.kSMMaxRecordDataBufferSize
 
-                rc = lowlevel.sm_get_recorded_data(data)
+                rc = lowlevel.sm_get_recorded_data(self.data)
                 if rc:
                     try:
                         self.stop()
                     finally:
-                        self.reason = AculabSpeechError(rc,
-                                                        'sm_get_recorded_data')
+                        self.reason = AculabSpeechError(
+                            rc, 'sm_get_recorded_data')
                     self.done()
 
                 # Assumption: alaw/mulaw
-                self.duration += l / 8000.0
+                self.duration += self.data.length / 8000.0
                 
                 self.data.write(self.file)
 

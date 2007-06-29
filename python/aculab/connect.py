@@ -1,7 +1,7 @@
 '''Connect two duplex entity or tuples of simplex entities.'''
 
 from switching import DefaultBus, Connection
-from speech import SpeechChannel
+from speech import SpeechChannel, version
 from callcontrol import CallHandle
 
 def connect(a, b, bus=DefaultBus()):
@@ -29,6 +29,14 @@ def connect(a, b, bus=DefaultBus()):
 
     # SpeechChannel to SpeechChannel
     if isinstance(a, SpeechChannel) and isinstance(b, SpeechChannel):
+
+        if version[0] >= 2:
+            # version 2: make datafeed connections
+            if a.info.card == b.info.card:
+                c.connections = [a.listen_to(b), b.listen_to(a)]
+
+                return c
+        
         if a.info.card == b.info.card:
             if a == b:
                 c.timeslots = [ bus.allocate() ]

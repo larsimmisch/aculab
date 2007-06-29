@@ -119,7 +119,7 @@ class SpeechEndpoint(object):
     def close(self):
         """Disconnect the endpoint."""
         
-        if self.channel:
+        if not self.channel is None:
             if self.direction == 'datafeed':
                 connect = lowlevel.SM_CHANNEL_DATAFEED_CONNECT_PARMS()
                 connect.channel = self.channel.channel
@@ -176,7 +176,7 @@ class VMPtxEndpoint(object):
     def close(self):
         """Disconnect the endpoint."""
         
-        if self.vmptx:
+        if not self.vmptx is None:
             connect = lowlevel.SM_VMPTX_DATAFEED_CONNECT_PARMS()
             connect.vmptx = self.vmptx.vmptx
             # connect.data_source= lowlevel.kSMNullDatafeedId
