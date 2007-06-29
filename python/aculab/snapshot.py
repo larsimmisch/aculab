@@ -9,8 +9,14 @@ _singletons = {}
 class Card(object):
     """Base class for an Aculab card.
 
-    card is a ACU_OPEN_CARD_PARMS struct.
-    info is ACU_CARD_INFO_PARMS struct. """
+    The member C{card} has the type U{ACU_OPEN_CARD_PARMS
+    http://www.aculab.com/Support/v6_api/Resources/acu_open_card.htm}.
+
+    The member C{info} has the type U{ACU_CARD_INFO_PARMS
+    http://www.aculab.com/Support/v6_api/Resources/acu_get_card_info.htm}.
+
+    Prosody X cards have a member C{ip_address} that is not C{None}.
+    """
     
     def __init__(self, card, info):
         self.card_id = card.card_id
@@ -23,6 +29,9 @@ class SwitchCard(Card):
 
     Cards typically have other functions than just switching, but all cards
     that support switching will also represented by an instance of this class.
+
+    The member C{open} has the type U{ACU_OPEN_SWITCH_PARMS
+    http://www.aculab.com/support/v6_api/Resources/acu_open_switch.htm}.
     """
     def __init__(self, card, info):
         Card.__init__(self, card, info)
@@ -39,7 +48,11 @@ class SwitchCard(Card):
         return 'SwitchCard(%s)' % self.card.serial_no
 
 class Port(object):
-    """A port on an Aculab call control card."""
+    """A port on an Aculab call control card.
+
+    The member C{open} has the type U{OPEN_PORT_PARMS
+    http://www.aculab.com/support/v6_api/callcontrol/call_open_port.htm}.
+    """
     def __init__(self, card, index):
         self.index = index
         open_portp = lowlevel.OPEN_PORT_PARMS()
@@ -65,7 +78,15 @@ class Port(object):
         return 'Port(%d)' % self.index
 
 class CallControlCard(Card):
-    """An Aculab card capable of call control."""
+    """An Aculab card capable of call control.
+
+       The member C{open} has the type U{ACU_OPEN_CALL_PARMS
+       http://www.aculab.com/support/v6_api/Resources/acu_open_call.htm}.
+
+       The member C{info} has the type U{CARD_INFO_PARMS
+       http://www.aculab.com/Support/v6_api/CallControl/\
+       call_get_card_info.htm}.
+       """
     def __init__(self, card, info):
         Card.__init__(self, card, info)
 
@@ -80,6 +101,8 @@ class CallControlCard(Card):
         rc = lowlevel.call_get_card_info(infop)
         if rc:
             raise AculabError(rc, 'call_get_card_info')
+
+        self.info = infop
 
         if infop.card_type == lowlevel.ACU_PROSODY_X_CARD:
             ipinfo = lowlevel.ACU_PROSODY_IP_CARD_REGISTRATION_PARMS()
@@ -103,7 +126,14 @@ class CallControlCard(Card):
             return 'CallControlCard(%s)' % self.card.serial_no
             
 class Module(object):
-    """A DSP module on an Aculab Prosody (speech processing) card."""
+    """A DSP module on an Aculab Prosody (speech processing) card.
+
+    The member C{open} has the type U{SM_OPEN_MODULE_PARMS
+    http://www.aculab.com/support/TiNG/gen/apifn-sm_open_module.html}.    
+
+    The member C{info} has the type U{SM_MODULE_INFO_PARMS
+    http://www.aculab.com/support/TiNG/gen/apifn-sm_get_module_info.html}.    
+    """
     def __init__(self, card, index):
         sm_openp = lowlevel.SM_OPEN_MODULE_PARMS()
 
@@ -126,7 +156,8 @@ class Module(object):
         self.timeslots = ProsodyTimeslots(self.info.min_stream)
 
 class ProsodyCard(Card):
-    """An Aculab Prosody (speech processing) card."""
+    """An Aculab Prosody (speech processing) card.
+    """
     def __init__(self, card, info):
         Card.__init__(self, card, info)
         
