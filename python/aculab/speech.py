@@ -646,7 +646,7 @@ class SpeechChannel(Lockable):
 
     def __del__(self):
         """Close the channel if it is still open."""
-        self._close()
+        self.close()
         if self.channel is None:
             log.debug('%s deleted', self.name)
 
@@ -654,6 +654,10 @@ class SpeechChannel(Lockable):
         """Finalizes the shutdown of a speech channel.
 
         I{Do not use directly, use L{SpeechChannel.close}}."""
+
+        if self.close_pending:
+            return
+        
         self.user_data = None
         self.lock()
         try:
@@ -749,10 +753,10 @@ class SpeechChannel(Lockable):
 
         If the channel is active, all pending jobs will be stopped before
         the channel is freed."""
-        self.lock()
-        self.close_pending = 1
-        self.unlock()
         if self.job:
+            self.lock()
+            self.close_pending = True
+            self.unlock()
             self.job.stop()
             return
 
