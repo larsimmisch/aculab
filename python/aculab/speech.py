@@ -600,8 +600,8 @@ class SpeechChannel(Lockable):
         self.in_ts = None
         self.out_ts = None
         self.channel = None
-        self.name = None
         self.datafeed = None
+        self.name = 'sc-0000'
 
         self.card, self.module = translate_card(card, module)
 
@@ -647,7 +647,7 @@ class SpeechChannel(Lockable):
     def __del__(self):
         """Close the channel if it is still open."""
         self._close()
-        if self.name:
+        if self.channel is None:
             log.debug('%s deleted', self.name)
 
     def _close(self):

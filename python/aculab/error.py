@@ -16,27 +16,15 @@ from names import error_names, sm_error_names, fax_error_names
 class AculabError(Exception):
     """Call Control exception. The error code is stored in value."""
     
-    def __init__(self, rc, function = '', name = None):
-        self.name = name
+    def __init__(self, rc, function = 'unknown', name = '',
+                 names = error_names):
         self.value = rc
 
-        if function:
-            if name:
-                desc = '%s %s failed: ' % (name, function)
-            else:
-                desc = '%s() failed: ' % (function)
+        if name:
+            self.desc = '%s %s failed: %s' % \
+                        (name, function, names.get(rc, str(rc)))
         else:
-            if handle:
-                desc = '[0x%x]: ' % handle
-            else:
-                desc = ''
-
-        if rc in error_names.keys():
-            desc = desc + error_names[rc]
-        else:
-            desc = desc + str(rc)
-            
-        self.desc = desc
+            self.desc = '%s failed: %s' % (function, names.get(rc, str(rc)))
 
     def __repr__(self):
         return self.desc
@@ -47,34 +35,14 @@ class AculabError(Exception):
 class AculabSpeechError(AculabError):
     """Prosody exception. The error code is stored in value."""
     
-    def __init__(self, rc, function = ''):
-        if rc in sm_error_names.keys():
-            self.value = rc
-            if function:
-                self.desc = function + '() failed: ' + sm_error_names[rc]
-            else:
-                self.desc = sm_error_names[rc]
-        else:
-            if function:
-                self.desc = function + '() failed: ' + str(rc)
-            else:
-                self.desc = 'unknown error: ' + str(rc)
+    def __init__(self, rc, function = 'unknown', name = ''):
+        AculabError.__init__(self, rc, function, name, sm_error_names)
             
 class AculabFAXError(AculabError):
     """FAX exception. The error code is stored in value."""
 
-    def __init__(self, rc, function = ''):
-        if rc in fax_error_names.keys():
-            self.value = rc
-            if function:
-                self.desc = function + '() failed: ' + fax_error_names[rc]
-            else:
-                self.desc = fax_error_names[rc]
-        else:
-            if function:
-                self.desc = function + '() failed: ' + str(rc)
-            else:
-                self.desc = 'unknown error: ' + str(rc)
+    def __init__(self, rc, function = 'unknown', name = ''):
+        AculabError.__init__(self, rc, function, name, fax_error_names)
 
 class AculabStopped(Exception):
     """Termination reason: stopped."""
