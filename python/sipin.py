@@ -6,7 +6,7 @@ import logging
 from aculab import defaultLogging
 from aculab.speech import SpeechChannel
 from aculab.reactor import SpeechReactor, CallReactor
-from aculab.busses import Connection
+from aculab.switching import Connection
 from aculab.sip import SIPCall
 from aculab.rtp import VMPrx, VMPtx
 from aculab.sdp import SDP

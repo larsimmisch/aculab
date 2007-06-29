@@ -13,7 +13,7 @@ from aculab.snapshot import Snapshot
 from aculab.callcontrol import Call
 from aculab.speech import SpeechChannel, Glue
 from aculab.reactor import CallReactor, SpeechReactor
-from aculab.busses import DefaultBus
+from aculab.switching import DefaultBus
 
 class IncomingCallController:
 

@@ -3,8 +3,9 @@
 import logging
 import logging.handlers
 
-__all__ = ['_lowlevel', 'lowlevel', 'names', 'error',
-           'busses', 'callcontrol', 'speech']
+__all__ = ['_lowlevel', 'lowlevel', 'names', 'error', 'util',
+           'switching', 'callcontrol', 'speech', 'sip', 'sdp', 'rtp',
+           'connect', 'daemonize', 'defaultLogging']
 
 # From: http://aspn.activestate.com/ASPN/Cookbook/Python/Recipe/66012
 

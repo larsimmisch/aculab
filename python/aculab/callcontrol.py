@@ -11,7 +11,7 @@ import lowlevel
 import aculab
 import logging
 from reactor import CallReactor
-from busses import Connection, CTBusEndpoint, NetEndpoint, DefaultBus
+from switching import Connection, CTBusEndpoint, NetEndpoint, DefaultBus
 from error import AculabError
 
 log = logging.getLogger('call')

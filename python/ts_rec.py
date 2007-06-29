@@ -13,7 +13,7 @@ from aculab.error import AculabError
 from aculab.snapshot import Snapshot
 from aculab.speech import SpeechChannel, Glue
 from aculab.reactor import SpeechReactor
-from aculab.busses import DefaultBus
+from aculab.switching import DefaultBus
 
 class RecordController:
 

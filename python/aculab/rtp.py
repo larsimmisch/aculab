@@ -11,7 +11,7 @@ import lowlevel
 import names
 import sdp
 from speech import SpeechChannel, translate_card
-from busses import VMPtxEndpoint
+from switching import VMPtxEndpoint
 from reactor import SpeechReactor
 from snapshot import Snapshot
 from error import *

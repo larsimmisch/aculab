@@ -4,7 +4,7 @@ import sys
 import getopt
 import lowlevel
 import logging
-from busses import Connection, CTBusEndpoint, NetEndpoint, DefaultBus
+from switching import Connection, CTBusEndpoint, NetEndpoint, DefaultBus
 from error import AculabError
 from names import event_names
 from callcontrol import CallHandleBase

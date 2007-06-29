@@ -2,7 +2,6 @@
 
 from pprint import PrettyPrinter
 import lowlevel
-from busses import ProsodyTimeslots
 from error import AculabError
 
 _singletons = {}
@@ -121,6 +120,8 @@ class Module(object):
         rc = lowlevel.sm_get_module_info(self.info)
         if rc:
             raise AculabError(rc, 'sm_get_module_info')
+
+        from switching import ProsodyTimeslots
 
         self.timeslots = ProsodyTimeslots(self.info.min_stream)
 

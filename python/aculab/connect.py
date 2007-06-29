@@ -1,6 +1,6 @@
 '''Connect two duplex entity or tuples of simplex entities.'''
 
-from busses import DefaultBus, Connection
+from switching import DefaultBus, Connection
 from speech import SpeechChannel
 from callcontrol import CallHandle
 

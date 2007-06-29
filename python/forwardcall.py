@@ -6,7 +6,7 @@ import sys
 import getopt
 from aculab.error import AculabError
 from aculab.callcontrol import *
-from aculab.busses import MVIP
+from aculab.switching import MVIP
 from aculab.names import event_names
 from aculab.reactor import CallReactor
 import aculab.lowlevel as lowlevel

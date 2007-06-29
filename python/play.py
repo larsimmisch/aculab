@@ -8,7 +8,7 @@ import aculab
 from aculab.error import AculabError
 from aculab.callcontrol import Call
 from aculab.speech import SpeechChannel, PlayJob
-from aculab.busses import DefaultBus
+from aculab.switching import DefaultBus
 from aculab.timer import TimerThread
 from aculab.snapshot import Snapshot
 from aculab.connect import connect, Glue
