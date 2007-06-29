@@ -20,7 +20,7 @@ import names
 from util import Lockable
 from fax import FaxRxJob
 from reactor import SpeechReactor
-from busses import Connection, CTBusEndpoint, SpeechEndpoint, DefaultBus
+from switching import Connection, CTBusEndpoint, SpeechEndpoint, DefaultBus
 from util import swig_value, os_event
 from error import *
 
