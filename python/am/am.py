@@ -10,11 +10,10 @@ import logging
 import aculab
 from aculab.error import AculabError
 from aculab.callcontrol import Call
-from aculab.speech import SpeechChannel, PlayJob, RecordJob
+from aculab.speech import SpeechChannel, PlayJob, RecordJob, Glue
 from aculab.reactor import CallReactor, SpeechReactor
-from aculab.busses import DefaultBus
+from aculab.switching import DefaultBus, connect
 from aculab.timer import TimerThread
-from aculab.connect import Glue
 import aculab.lowlevel as lowlevel
 from mail import AsyncEmail
 from slim import async_cli_display
@@ -29,15 +28,16 @@ portmap = { '41': 'am', '42': 'am', '43': 8, '44': 8,
 
 class AnsweringMachine(Glue):
     def __init__(self, controller, module, call):
-        super(self.__class__, self).__init__(controller, module, call)
+        Glue.__init__(self, controller, module, call)
 
         # start a timer to accept the call later
         self.timer = timer.add(wait_accept, self.on_timer)
 
     def close(self):
-        super(self.__class__, self).close()
+        Glue.close(self)
         if self.timer:
             timer.cancel(self.timer)
+            self.timer = None
 
     def on_timer(self):
         self.timer = None
@@ -101,7 +101,6 @@ class AMController(object):
     def ev_idle(self, call, user_data):
         if user_data:
             user_data.close()
-        call.user_data = None
         call.pop_controller()
         call.openin()
 
@@ -175,7 +174,7 @@ class Forward:
     def __init__(self, incall):
         self.incall = incall
         self.outcall = None
-        self.connections = []
+        self.connection = None
 
         self.route()
 
@@ -183,7 +182,7 @@ class Forward:
         self.incall.user_data = self
 
         if self.outcall:
-            # warning: untested (and probably flawed)
+            # warning: untested (and hence probably broken)
             print hex(self.outcall.handle), 'sending:', d.destination_addr
             self.outcall.send_overlap(d.destination_addr,
                                       d.sending_complete)
@@ -211,22 +210,13 @@ class Forward:
     def connect(self):
         """Connects incoming and outgoing call. Can be called more than
         once, but will create the connection only on the first invocation."""
-        if not self.connections:
-            slots = [bus.allocate(), bus.allocate()]
-
-            c = [self.incall.speak_to(slots[0]),
-                 self.outcall.listen_to(bus.invert(slots[0])),
-                 self.outcall.speak_to(slots[1]),
-                 self.incall.listen_to(bus.invert(slots[1]))]
-
-            self.connections.extend(c)
+        if not self.connection:
+            self.connection = connect(self.incall, self.outcall)
 
     def disconnect(self):
-        for c in self.connections:
-            if c.ts[0] < 16:
-                bus.free(c.ts)
-
-        self.connections = []
+        if self.connection:
+            self.connection.close()
+            self.connection = None
         
 class ForwardCallController:
     "controls a single incoming call and its corresponding outgoing call"

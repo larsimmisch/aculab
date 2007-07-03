@@ -776,7 +776,7 @@ class SpeechChannel(Lockable):
         """Return a unique identifier for module comparisons.
         Used by switching."""
         if TiNG_version[0] < 2:
-            return (self.card, self.module, 'speech')
+            return (self.card, self.module)
 
         return self.module
 
@@ -825,7 +825,7 @@ class SpeechChannel(Lockable):
 
         Used internally. Applications should use L{switching.connect}."""
 
-        if hasattr(source, 'get_datafeed'):
+        if hasattr(source, 'get_datafeed') and source.get_datafeed():
             connect = lowlevel.SM_CHANNEL_DATAFEED_CONNECT_PARMS()
             connect.channel = self.channel
             connect.data_source = source.get_datafeed()
@@ -835,7 +835,7 @@ class SpeechChannel(Lockable):
                 raise AculabSpeechError(rc, 'sm_channel_datafeed_connect',
                                         self.name)
 
-            log_switch.debug('%s := %s', self.name, source.name)
+            log_switch.debug('%s := %s (datafeed)', self.name, source.name)
 
             return SpeechEndpoint(self, 'datafeed')
 
@@ -851,7 +851,7 @@ class SpeechChannel(Lockable):
                 raise AculabSpeechError(rc, 'sm_switch_channel_input(%d:%d)' %
                                         (input.st, input.ts), self.name)
 
-            log_switch.debug('%s := %d:%d', self.name,
+            log_switch.debug('%s := %d:%d (sm)', self.name,
                              source[0], source[1])
 
             return SpeechEndpoint(self, 'rx')

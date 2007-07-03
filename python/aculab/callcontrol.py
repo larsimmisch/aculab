@@ -87,9 +87,6 @@ class CallHandle(CallHandleBase):
     def get_module(self):
         """Return a unique identifier for module comparisons.
         Used by switching."""
-        if lowlevel.cc_version < 6:
-            return (self.card, self.port, 'call')
-        
         return self.port
 
     def get_switch(self):
@@ -623,27 +620,25 @@ class CallHandle(CallHandleBase):
         """Internal event handler for C{EV_IDLE}.
 
         This method calls:
-         - L{get_details} to update the details
-         - U{idle_net_ts
-         <http://www.aculab.com/Support/v6_api/CallControl/idle_net_ts.htm>}
-         to assert a suitable idle pattern (for ISDN, see Q.522, section 2.12).
+         - L{get_details}() to update the details.
+         - L{get_feature_details}(lowlevel.FEATURE_FACILITY)
+         - calls L{release}.
         """        
         self.get_feature_details(lowlevel.FEATURE_FACILITY)
         self.get_details()
+        self.release()
 
     def ev_idle_post(self):
         """Internal event handler for C{EV_IDLE}.
 
         This method:
          - sets the call's user_data to C{None}
-         - calls L{release}
          - calls U{idle_net_ts
          <http://www.aculab.com/Support/v6_api/CallControl/idle_net_ts.htm>}
          to assert a suitable idle pattern (for ISDN, see Q.522, section 2.12).
         """        
 
         self.user_data = None
-        self.release()
         
         # Assert idle pattern according to Q.522, section 2.12
         rc = lowlevel.idle_net_ts(self.port, self.details.ts)

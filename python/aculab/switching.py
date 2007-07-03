@@ -30,7 +30,7 @@ class CTBusEndpoint:
             raise AculabError(rc, 'sw_set_output(%d:%d, DISABLE_MODE)'
                               % (self.ts[0], self.ts[1]))
 
-        log.debug('%02d:%02d disabled' % self.ts)
+        log.debug('%02d:%02d disabled', self.ts[0], self.ts[1])
 
         self.sw = None
         self.ts = None
@@ -87,7 +87,7 @@ class NetEndpoint:
                     rc, 'sw_set_output(%d:%d, PATTERN_MODE, 0x%x)'
                     % (self.ts[0], self.ts[1], output.pattern))
 
-            log.debug('%02d:%02d silenced' % self.ts)
+            log.debug('%02d:%02d silenced', self.ts[0], self.ts[1])
 
             self.sw = None
             self.ts = None
@@ -537,39 +537,61 @@ def connect(a, b, bus=DefaultBus()):
 
     # Connectable classes must implement:
     # 
-    # - get_module: a SpeechModule instance for TiNG >= 2, and
-    #   a tuple (card, module, 'speech') on older TiNG versions
+    # - get_module: a unique identifier for the port/module. Care must be taken
+    #   that call control and DSPs don't accidentally return interchangeable
+    #   identifiers. The current scheme is:
+    #
+    #   On DSP entities, a SpeechModule instance is used for TiNG >= 2, and
+    #   a tuple (card, module) on older TiNG versions
+    #   Call control cards return the port offset on V5 or a Port instance
+    #   on V6.
     #
     # - get_switch: a SwitchCard instance on V6, and a switch card offset on V5
     #
-    # - get_datafeed: None or a datafeed
+    # - get_datafeed: None or the datafeed
     #
-    # - get_timeslot: None or a transmit timeslot
+    # - get_timeslot: None or the transmit timeslot
 
     c = Connection(bus)
 
     # Optimizations first
+
+    # TiNG version 2: same module, make datafeed connections
+    # Doesn't apply to calls because they have to datafeeds
     if a.get_module() == b.get_module() \
            and a.get_datafeed() and b.get_datafeed():
-        # version 2: same module, make datafeed connections
         c.connections = [a.listen_to(b), b.listen_to(a)]
         
         return c
 
+    # Same card or module, connect directly
     if a.get_switch() == b.get_switch() or a.get_module() == b.get_module():
-        # on the same card or module, no need to switch across the bus
         c.endpoints = [a.listen_to(b.get_timeslot()),
                        b.listen_to(a.get_timeslot())]
         return c
         
-    # The general case: connect across the bus and allocate two timeslots
+    # The general case: allocate two timeslots...
     c.timeslots = [ bus.allocate(), bus.allocate() ]
-    # make endpoints
+
+    # ...and connect across the bus
+    if isinstance(bus, MVIP):
+        # we are brave, we even support MVIP
+
+        # ad-hoc: Prosody ISA daughterboards don't obey the funny
+        # MVIP stream numbering scheme
+        if a.get_switch() != -1 and b.get_switch() != -1:
+            c.endpoints = [ b.speak_to(c.timeslots[0]),
+                            a.listen_to(bus.invert(c.timeslots[0])),
+                            a.speak_to(c.timeslots[1]),
+                            b.listen_to(bus.invert(c.timeslots[1])) ]
+
+            return c
+        
+    # nonpathological case
     c.endpoints = [ b.speak_to(c.timeslots[0]),
                     a.listen_to(c.timeslots[0]),
                     a.speak_to(c.timeslots[1]),
-                    b.listen_to(c.timeslots[1]) ]
-    
+                    b.listen_to(c.timeslots[1]) ]    
     return c
 
 if __name__ == '__main__':
