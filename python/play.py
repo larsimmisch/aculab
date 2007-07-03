@@ -108,13 +108,6 @@ if __name__ == '__main__':
     if not args:
         usage()
 
-    unblock = lowlevel.PORT_BLOCKING_XPARMS()
-    unblock.net = Snapshot().call[card].ports[port].open.port_id
-    unblock.flags = lowlevel.ACU_MAINT_ETS_D_CHAN
-    unblock.ts_mask = 0x7ffff
-
-    lowlevel.call_maint_port_unblock(unblock)
-
     fplay = args[0]
 
     controller = PlayController()
