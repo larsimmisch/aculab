@@ -276,19 +276,22 @@ BLOCKING(smfax_tx_page)
 										  self->length);
 	}
 
-	void setdata(PyObject *s) {
+	PyObject *setdata(PyObject *s) {
 		if (!PyString_Check(s)) {
 	    	PyErr_SetString(PyExc_TypeError,"Expected a string");
-			return;
+			return NULL;
 		}
 		if (PyString_GET_SIZE(s) > maxsize)
 		{
 	    	PyErr_SetString(PyExc_ValueError, 
 							"max size for name.data exceeded");
-			return;
+			return NULL;
 		}
 		self->length = PyString_GET_SIZE(s);
 		memcpy(self->data, PyString_AS_STRING(s), self->length);
+
+		Py_INCREF(Py_None);
+		return Py_None;
 	}
 };
 %enddef

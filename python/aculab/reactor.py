@@ -402,6 +402,8 @@ class PollSpeechEventReactor(threading.Thread):
             except:
                 log.error('error in PollSpeechEventReactor main loop',
                           exc_info=1)
+                raise
+
 
 if os.name == 'nt':
     SpeechReactor = Win32SpeechEventReactor()

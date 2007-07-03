@@ -17,41 +17,18 @@ import time
 import logging
 import lowlevel
 import names
-from util import Lockable
+from util import Lockable, translate_card
 from fax import FaxRxJob
 from reactor import SpeechReactor
-from switching import Connection, CTBusEndpoint, SpeechEndpoint, DefaultBus
-from util import swig_value, os_event
+from switching import (Connection, CTBusEndpoint, SpeechEndpoint, TDMrx, TDMtx,
+                       DefaultBus, connect)
+from util import os_event, TiNG_version
 from error import *
 
-__all__ = ['PlayJob', 'RecordJob', 'DigitsJob', 'SpeechChannel', 'version']
+__all__ = ['PlayJob', 'RecordJob', 'DigitsJob', 'SpeechChannel']
 
 log = logging.getLogger('speech')
 log_switch = logging.getLogger('switch')
-
-# check driver info and create prosody streams if TiNG detected
-_driver_info = lowlevel.SM_DRIVER_INFO_PARMS()
-lowlevel.sm_get_driver_info(_driver_info)
-version = (_driver_info.major, _driver_info.minor)
-del _driver_info
-
-def translate_card(card, module):
-    if version[0] < 2:
-        return card, module
-
-    from snapshot import Snapshot
-
-    if type(card) == type(0):
-        c = Snapshot().prosody[card]
-    else:
-        c = card
-
-    if type(module) == type(0):
-        m = c.modules[module]
-    else:
-        m = module
-
-    return c, m
 
 class PlayJob(object):
     """A PlayJob plays a file through its L{SpeechChannel}."""
@@ -323,7 +300,7 @@ class RecordJob(object):
                 return
 
             if status.status == lowlevel.kSMRecordStatusComplete:
-                if version[0] >= 2:
+                if TiNG_version[0] >= 2:
                     term = status.termination_reason
                     silence = status.termination_octets
                     # Todo check
@@ -564,7 +541,8 @@ class SpeechChannel(Lockable):
     DTMF detection is started by default."""
         
     def __init__(self, controller, card = 0, module = 0, mutex = None,
-                 user_data = None, reactor = SpeechReactor):
+                 user_data = None, ts_type = lowlevel.kSMTimeslotTypeALaw,
+                 reactor = SpeechReactor):
         """Allocate a full duplex Prosody channel.
 
         @param controller: This object will receive notifications about
@@ -599,12 +577,12 @@ class SpeechChannel(Lockable):
         self.user_data = user_data
         self.job = None
         self.close_pending = None
+        self.ts_type = ts_type
         # initialize early 
         self.event_read = None
         self.event_write = None
         self.event_recog = None
-        self.in_ts = None
-        self.out_ts = None
+        self.tdm = None
         self.channel = None
         self.datafeed = None
         self.name = 'sc-0000'
@@ -613,7 +591,7 @@ class SpeechChannel(Lockable):
 
         alloc = lowlevel.SM_CHANNEL_ALLOC_PLACED_PARMS()
         alloc.type = lowlevel.kSMChannelTypeFullDuplex
-        if version[0] >= 2:
+        if TiNG_version[0] >= 2:
             alloc.module = self.module.open.module_id
         else:
             alloc.module = self.module
@@ -638,12 +616,6 @@ class SpeechChannel(Lockable):
         self.event_write = self.set_event(lowlevel.kSMEventTypeWriteData)
         self.event_recog = self.set_event(lowlevel.kSMEventTypeRecog)
 
-        if version[0] >= 2:
-            self._ting_connect()
-            log.debug('%s out: %d:%d, in: %d:%d card: %d',
-                      self.name, self.info.ost, self.info.ots,
-                      self.info.ist, self.info.its, self.info.card)
-
         self._listen()
 
         # add the recog event to the reactor
@@ -662,10 +634,13 @@ class SpeechChannel(Lockable):
 
         if self.close_pending:
             return
-        
+
         self.user_data = None
         self.lock()
         try:
+            if self.tdm:
+                self.tdm.close()
+
             if self.event_read:
                 lowlevel.smd_ev_free(self.event_read)
                 self.event_read = None
@@ -676,16 +651,6 @@ class SpeechChannel(Lockable):
                 self.reactor.remove(os_event(self.event_recog))
                 lowlevel.smd_ev_free(self.event_recog)
                 self.event_recog = None
-
-            if self.out_ts:
-                # attribute out_ts implies attribute module
-                self.module.timeslots.free(self.out_ts)
-                self.out_ts = None
-
-            if self.in_ts:
-                # attribute in_ts implies attribute module
-                self.module.timeslots.free(self.in_ts)
-                self.in_ts = None
 
             if self.channel:
                 rc = lowlevel.sm_channel_release(self.channel)
@@ -703,47 +668,6 @@ class SpeechChannel(Lockable):
 
 ##     def __hash__(self):
 ##         return self.channel
-
-    def _ting_connect(self):
-        """Connect the channel to a timeslot on its DSPs timeslot range.
-
-        See L{ProsodyTimeslots}.
-
-        I{Used internally}."""
-
-        # switch to local timeslots for TiNG
-        if self.info.ost == -1:
-            self.out_ts = self.module.timeslots.allocate()
-            self.info.ost, self.info.ots = self.out_ts
-
-            output = lowlevel.SM_SWITCH_CHANNEL_PARMS()
-
-            output.channel = self.channel
-            output.st, output.ts = self.out_ts
-                
-            rc = lowlevel.sm_switch_channel_output(output)
-            if (rc):
-                raise AculabSpeechError(rc, 'sm_switch_channel_output',
-                                        self.name)
-
-            self.out_connection = SpeechEndpoint(self, 'out')
-
-        if self.info.ist == -1:
-            self.in_ts = self.module.timeslots.allocate()
-            self.info.ist, self.info.its = self.in_ts
-
-            input = lowlevel.SM_SWITCH_CHANNEL_PARMS()
-
-            input.channel = self.channel
-            input.st, input.ts = self.in_ts
-
-            rc = lowlevel.sm_switch_channel_input(input)
-            if (rc):
-                raise AculabSpeechError(rc, 'sm_switch_channel_input',
-                                        self.name)
-            
-            self.in_connection = SpeechEndpoint(self, 'in')
-
 
     def _listen(self):
         """Start DTMF detection."""
@@ -800,8 +724,84 @@ class SpeechChannel(Lockable):
 
         return handle
 
+    def tdm_connect(self):
+        """Connect the channel to a timeslot on its DSP's timeslot range.
+
+        See L{ProsodyTimeslots}.
+
+        I{Used internally}."""
+
+        # switch to local timeslots for TiNG
+        if self.info.ost == -1 or self.info.ist == -1:
+            self.tdm = Connection(self.module.timeslots)
+            
+            tx = self.module.timeslots.allocate(self.ts_type)
+            self.info.ost = tx[0]
+            self.info.ots = tx[1]
+
+            output = lowlevel.SM_SWITCH_CHANNEL_PARMS()
+
+            output.channel = self.channel
+            output.st = tx[0]
+            output.ts = tx[1]
+                
+            rc = lowlevel.sm_switch_channel_output(output)
+            if (rc):
+                raise AculabSpeechError(rc, 'sm_switch_channel_output',
+                                        self.name)
+
+            self.tdm.add(SpeechEndpoint(self, 'tx'), tx)
+
+            rx = self.module.timeslots.allocate(self.ts_type)
+            self.info.ist = rx[0]
+            self.info.its = rx[1]
+
+            input = lowlevel.SM_SWITCH_CHANNEL_PARMS()
+
+            input.channel = self.channel
+            input.st = rx[0]
+            input.ts = rx[1]
+
+            rc = lowlevel.sm_switch_channel_input(input)
+            if (rc):
+                raise AculabSpeechError(rc, 'sm_switch_channel_input',
+                                        self.name)
+            
+            self.tdm.add(SpeechEndpoint(self, 'rx'), rx)
+
+        log.debug('%s tx: %d:%d, rx: %d:%d card: %d',
+                  self.name, self.info.ost, self.info.ots,
+                  self.info.ist, self.info.its, self.info.card)
+
+    def get_module(self):
+        """Return a unique identifier for module comparisons.
+        Used by switching."""
+        if TiNG_version[0] < 2:
+            return (self.card, self.module, 'speech')
+
+        return self.module
+
+    def get_switch(self):
+        """Return a unique identifier for switch card comparisons.
+        Used by switching."""
+        if TiNG_version[0] < 2:
+            return self.info.card
+
+        return self.card.card_id
+        
+    def get_timeslot(self):
+        """Get the tx timeslot for TDM switch connections."""
+        
+        if self.info.ost == -1:
+            self.tdm_connect()
+
+        return (self.info.ost, self.info.ots, self.ts_type)
+            
     def get_datafeed(self):
         """Get the datafeed."""
+
+        if TiNG_version[0] < 2:
+            return None
 
         if self.datafeed:
             return self.datafeed
@@ -820,13 +820,16 @@ class SpeechChannel(Lockable):
     def listen_to(self, source):
         """Listen to a timeslot or a tx instance.
         
-        @param source: a tuple (stream, timeslot) or a transmitter instance
-            (VMPtx, FMPtx or TDMtx)"""
+        @param source: a tuple (stream, timeslot, [timeslot_type]) or a
+        transmitter instance (VMPtx, FMPtx or TDMtx), which must be on
+        the same module.
+
+        Used internally. Applications should use L{switching.connect}."""
 
         if hasattr(source, 'get_datafeed'):
             connect = lowlevel.SM_CHANNEL_DATAFEED_CONNECT_PARMS()
             connect.channel = self.channel
-            connect.data_source= source.get_datafeed()
+            connect.data_source = source.get_datafeed()
 
             rc = lowlevel.sm_channel_datafeed_connect(connect)
             if rc:
@@ -841,7 +844,8 @@ class SpeechChannel(Lockable):
             input = lowlevel.SM_SWITCH_CHANNEL_PARMS()
 
             input.channel = self.channel
-            input.st, input.ts = source
+            input.st = source[0]
+            input.ts = source[1]
 
             rc = lowlevel.sm_switch_channel_input(input)
             if (rc):
@@ -851,16 +855,20 @@ class SpeechChannel(Lockable):
             log_switch.debug('%s := %d:%d', self.name,
                              source[0], source[1])
 
-            return SpeechEndpoint(self, 'in')
+            return SpeechEndpoint(self, 'rx')
         
+        if self.info.ist == -1:
+            self.tdm_connect()
+
         output = lowlevel.OUTPUT_PARMS()
 
         output.ost = self.info.ist		# sink
         output.ots = self.info.its
         output.mode = lowlevel.CONNECT_MODE
-        output.ist, output.its = source
+        output.ist = source[0]
+        output.its = source[1]
 
-        rc = lowlevel.sw_set_output(self.card.card_id, output)
+        rc = lowlevel.sw_set_output(self.get_switch(), output)
         if (rc):
             raise AculabError(rc, 'sw_set_output(%d, %d:%d := %d:%d)' %
                               (self.info.card, output.ost, output.ots,
@@ -876,13 +884,16 @@ class SpeechChannel(Lockable):
     def speak_to(self, sink):
         """Speak to a timeslot.
 
-        @param sink: a tuple (stream, timeslot)."""
+        @param sink: a tuple (stream, timeslot).
+        
+        Used internally. Applications should use L{switching.connect}."""
 
         if self.info.card == -1:
             output = lowlevel.SM_SWITCH_CHANNEL_PARMS()
 
             output.channel = self.channel
-            output.st, output.ts = sink
+            output.st = sink[0]
+            output.ts = sink[1]
 
             rc = lowlevel.sm_switch_channel_output(output)
             if rc:
@@ -893,16 +904,20 @@ class SpeechChannel(Lockable):
             log_switch.debug('%s speak_to(%d:%d)', self.name,
                              sink[0], sink[1])
 
-            return SpeechEndpoint(self, 'out')
+            return SpeechEndpoint(self, 'tx')
+
+        if self.info.ost == -1:
+            self.tdm_connect()
         
         output = lowlevel.OUTPUT_PARMS()
 
-        output.ost, output.ots = sink       # sink
+        output.ost = sink[0]                # sink
+        output.ots = sink[1] 
         output.mode = lowlevel.CONNECT_MODE
         output.ist = self.info.ost			# source
         output.its = self.info.ots
 
-        rc = lowlevel.sw_set_output(self.card.card_id, output)
+        rc = lowlevel.sw_set_output(self.get_switch(), output)
         if rc:
             raise AculabError(rc, 'sw_set_output(%d, %d:%d := %d:%d)' %
                               (self.info.card, output.ost, output.ots,
@@ -1061,101 +1076,46 @@ class Conference(Lockable):
         finally:
             self.unlock()
 
-if version[0] >= 2:
+class Glue(object):
+    """Glue logic to tie a SpeechChannel to a Call.
 
-    class TDMtx(object):
-        def __init__(self, controller, ts,
-                     ts_type = lowlevel.kSMTimeslotTypeALaw,
-                     card = 0, module = 0):
-            """Create a TDM transmitter.
+    This class is meant to be a base-class for the data of a single call
+    with a Prosody channel for speech processing.
+
+    It will allocate a I{SpeechChannel} upon creation and connect it to the
+    call.
+    When deleted, it will close and disconnect the I{SpeechChannel}."""
+    
+    def __init__(self, controller, module, call):
+        """Allocate a speech channel on module and connect it to the call.
+
+        @param controller: The controller will be passed to the SpeechChannel
+        @param module: The module to open the SpeechChannel on. May be either
+            a C{tSMModuleId} or an offset.
+        @param call: The call that the SpeechChannel will be connected to."""
+        
+        self.call = call
+        # initialize to None in case an exception is raised
+        self.speech = None
+        self.connection = None
+        call.user_data = self
+        self.speech = SpeechChannel(controller, module, user_data = self)
+        self.connection = connect(call, self.speech)
+
+    def __del__(self):
+        self.close()
+
+    def close(self):
+        """Disconnect and close the SpeechChannel.
+
+        If you do not call this method, you may end up with a memory leak
+        of uncollectable cyclic references."""
+        if self.connection:
+            self.connection.close()
+            self.connection = None
             
-            See U{sm_tdmtx_create
-            <http://www.aculab.com/support/TiNG/gen/\
-            apifn-sm_tdmtx_create.html>}.
-            """
-            
-            self.card, self.module = translate_card(card, module)
-            self.user_data = user_data
+        if self.speech:
+            self.speech.close()
+            self.speech = None
 
-            tdmtx = lowlevel.SM_TDMTX_CREATE_PARMS()
-            tdmtx.module = self.module.open.module_id
-            tdmtx.stream = ts[0]
-            tdmtx.timeslot = ts[1]
-            tdmtx.type = ts_type
-
-            rc = lowlevel.sm_tdmtx_create(tdmtx)
-            if rc:
-                raise AculabSpeechError(rc, 'sm_tdmtx_create')
-                
-            self.tdmtx = tdmtx.tdmtx
-
-        def close(self):
-            if self.tdmtx:
-                rc = lowlevel.smd_tdmtx_destroy(self.tdmtx)
-                self.tdmtx = None
-
-        def listen_to(self, other):
-            if hasattr(other, 'get_datafeed'):
-                connect = lowlevel.SM_TDMTX_DATAFEED_CONNECT_PARMS()
-                connect.tdmtx = self.tdmtx
-                connect.data_source = other.get_datafeed()
-
-                rc = lowlevel.sm_tdmtx_datafeed_connect(connect)
-                if rc:
-                    raise AculabSpeechError(
-                        rc, 'sm_tdmtx_datafeed_connect', self.name)
-
-                log_switch.debug('%s := %s', self.name, other.name)
-            else:
-                raise ValueError('Cannot connect to instance without '\
-                                 'get_datafeed() method')
-            
-    class TDMrx(object):
-        def __init__(self, controller, ts,
-                     ts_type = lowlevel.kSMTimeslotTypeALaw,
-                     card = 0, module = 0):
-            """Create a TDM transmitter.
-            
-            See U{sm_tdmrx_create
-            <http://www.aculab.com/support/TiNG/gen/\
-            apifn-sm_tdmrx_create.html>}.
-            """
-            
-            self.card, self.module = translate_card(card, module)
-            self.user_data = user_data
-            # Initialize early
-            self.tdmrx = None
-            self.datafeed = None
-
-            tdmrx = lowlevel.SM_TDMTX_CREATE_PARMS()
-            tdmrx.module = self.module.open.module_id
-            tdmrx.stream = ts[0]
-            tdmrx.timeslot = ts[1]
-            tdmrx.type = ts_type
-
-            rc = lowlevel.sm_tdmrx_create(tdmrx)
-            if rc:
-                raise AculabSpeechError(rc, 'sm_tdmrx_create')
-                
-            self.tdmrx = tdmrx.tdmrx
-
-            # get the datafeed
-            datafeed = lowlevel.SM_TDMRX_DATAFEED_PARMS()
-
-            datafeed.tdmrx = self.tdmrx
-            rc = lowlevel.sm_tdmrx_get_datafeed(datafeed)
-            if rc:
-                raise AculabSpeechError(rc, 'sm_tdmrx_get_datafeed', self.name)
-
-            self.datafeed = datafeed.datafeed
-
-        def close(self):
-            if self.tdmrx:
-                rc = lowlevel.smd_tdmrx_destroy(self.tdmrx)
-                self.datafeed = None
-                self.tdmrx = None
-
-        def get_datafeed(self):
-            """Used internally by the switching protocol."""
-            return self.datafeed
-
+        self.call = None

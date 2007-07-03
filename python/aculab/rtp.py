@@ -1,7 +1,7 @@
 """RTP and speech processing functions.
 
-This module contains RTPChannel. RTPChannel is a subclass of SpeechChannel,
-with additional RTP capabilities."""
+This module contains speech RTP transmitters and receivers (L{VMPtx} and
+L{VMPrx})."""
 
 import sys
 import os
@@ -10,12 +10,11 @@ import logging
 import lowlevel
 import names
 import sdp
-from speech import SpeechChannel, translate_card
-from switching import VMPtxEndpoint
+from switching import VMPtxEndpoint, TDMrx
 from reactor import SpeechReactor
 from snapshot import Snapshot
 from error import *
-from util import Lockable, os_event
+from util import Lockable, os_event, translate_card
 
 import select
 
@@ -31,11 +30,60 @@ rfc2833_digits = {
     41: 'CRdi', 42: 'CRdr', 43: 'CRe', 44: 'ESi', 45: 'ESr', 46: 'MRdi',
     47: 'MRdr', 48: 'MRe', 49: 'CT' }
 
-class VMPrx(Lockable):
+class RTPBase(Lockable):
+    """Internal baseclass for RTP tx/rx classes that manages connections
+    to the TDM bus"""
+    
+    def __init__(self, card, module, mutex, user_data, ts_type):
+        Lockable.__init__(self, mutex)
+        self.card, self.module = translate_card(card, module)
+        self.user_data = user_data
+        self.ts_type = ts_type
+        self.tdm = None
+
+    def close(self):
+        """Close the TDM connection."""
+        if self.tdm:
+            self.tdm.close()
+            self.tdm = None
+
+    def get_module(self):
+        """Return a unique identifier for module comparisons.
+        Used by switching."""
+
+        return self.module
+
+    def get_switch(self):
+        """Return a unique identifier for switch card comparisons.
+        Used by switching."""
+
+        return self.card
+
+    def get_timeslot(self):
+        """Return the tx timeslot for TDM switch connections."""
+        if not self.tdm:
+            self.tdm_connect()
+
+        return self.tdm.timeslots[0]
+
+    def get_module(self):
+        """Return a unique identifier for module comparisons.
+        Used by switching."""
+
+        return self.module
+
+    def get_switch(self):
+        """Return a unique identifier for switch card comparisons.
+        Used by switching."""
+
+        return self.card
+
+class VMPrx(RTPBase):
     """An RTP receiver."""
-        
+
     def __init__(self, controller, card = 0, module = 0, mutex = None,
-                 user_data = None, reactor = SpeechReactor):
+                 user_data = None, ts_type = lowlevel.kSMTimeslotTypeALaw,
+                 reactor = SpeechReactor):
         """Allocate an RTP receiver, configure alaw/mulaw and RFC 2833 codecs
         and add the event to the reactor.
 
@@ -46,20 +94,19 @@ class VMPrx(Lockable):
          - ready(vmprx, sdp, user_data)
          - dtmf(vmprx, digit, user_data)."""
 
-        Lockable.__init__(self, mutex)
-
+        RTPBase.__init__(self, card, module, mutex, user_data, ts_type)
+        
         self.controller = controller
-        self.card, self.module = translate_card(card, module)
         self.reactor = reactor
-        self.user_data = user_data
 
-        # initialize early 
+        # initialize early
         self.vmprx = None
         self.event_vmprx = None
         self.datafeed = None
         self.rtp_port = None
         self.rtcp_port = None
         self.sdp = None
+        self.tdm = None
 
         # create vmprx
         vmprx = lowlevel.SM_VMPRX_CREATE_PARMS()
@@ -99,6 +146,8 @@ class VMPrx(Lockable):
         
     def close(self):
         """Stop the receiver."""
+
+        RxBase.close(self)
 
         if self.vmprx:
             stopp = lowlevel.SM_VMPRX_STOP_PARMS()
@@ -162,6 +211,23 @@ class VMPrx(Lockable):
             if rc:
                 raise AculabSpeechError(rc, 'sm_vmprx_destroy')
 
+    def tdm_connect(self):
+        """Connect the Receiver to a timeslot on its DSP's timeslot range.
+        This method internally allocates a L{TDMtx} on the module's
+        timeslot range.
+
+        See L{ProsodyTimeslots}.
+
+        I{Used internally}."""
+        self.tdm = Connection(self.module.timeslots)
+
+        ts = self.module.timeslots.allocate(self.ts_type)
+
+        tx = TDMtx(ts, self.card, self.module)
+        tx.listen_to(self)
+
+        self.tdm.add(tx, ts)
+
     def get_datafeed(self):
         """Used internally by the switching protocol."""
         return self.datafeed
@@ -210,18 +276,17 @@ class VMPrx(Lockable):
         self.config_codec(lowlevel.kSMCodecTypeMulaw, 8)
         self.config_rfc2833()
 
-class VMPtx(Lockable):
+class VMPtx(RTPBase):
     """An RTP transmitter."""
         
     def __init__(self, controller, card = 0, module = 0, mutex = None,
-                 user_data = None, reactor = SpeechReactor):
+                 user_data = None, ts_type = lowlevel.kSMTimeslotTypeALaw,
+                 reactor = SpeechReactor):
 
-        Lockable.__init__(self, mutex)
+        RTPBase.__init__(self, card, module, mutex, user_data, ts_type)
 
         self.controller = controller
-        self.card, self.module = translate_card(card, module)
         self.reactor = reactor
-        self.user_data = user_data
 
         # initialize early 
         self.event_vmptx = None
@@ -280,6 +345,23 @@ class VMPtx(Lockable):
             
             rc = lowlevel.sm_vmptx_destroy(self.vmptx)
             self.vmptx = None
+
+    def tdm_connect(self):
+        """Connect the Tranmitter to a timeslot on its DSP's timeslot range.
+        This method internally allocates a L{TDMtx} on the module's
+        timeslot range.
+
+        See L{ProsodyTimeslots}.
+
+        I{Used internally}."""
+        self.tdm = Connection(self.module.timeslots)
+
+        ts = self.module.timeslots.allocate(self.ts_type)
+
+        rx = TDMrx(ts, self.card, self.module)
+        self.listen_to(rx)
+
+        self.tdm.add(rx, ts)
 
     def get_datafeed(self):
         """Used internally by the switching protocol."""
@@ -376,5 +458,16 @@ class VMPtx(Lockable):
 
             return VMPtxEndpoint(self)
         else:
-            raise ValueError('Cannot connect to instance without '\
-                             'get_datafeed() method')
+            tdm = TDMrx(other, self.card, self.module)
+            
+            connect = lowlevel.SM_VMPTX_DATAFEED_CONNECT_PARMS()
+            connect.vmptx = self.vmptx
+            connect.data_source = tdm.get_datafeed()
+
+            rc = lowlevel.sm_vmptx_datafeed_connect(connect)
+            if rc:
+                raise AculabSpeechError(rc, 'sm_vmptx_datafeed_connect')
+
+            log_switch.debug('%s := %s', self.name, other.name)
+
+            return VMPtxEndpoint(self, tdm)

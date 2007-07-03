@@ -53,7 +53,7 @@ class CallHandle(CallHandleBase):
     internally to maintain the state."""
 
     def __init__(self, controller, user_data = None, card = 0, port = 0,
-                 timeslot = None, reactor = CallReactor):
+                 timeslot = None, ts_type = None, reactor = CallReactor):
 
         CallHandleBase.__init__(self, controller, user_data, port, reactor)
         
@@ -62,17 +62,53 @@ class CallHandle(CallHandleBase):
             if type(port) == type(0) and type(card) == type(0):
                 from snapshot import Snapshot
                 self.port = Snapshot().call[card].ports[port].open.port_id
-            
+
         if not timeslot:
             self.timeslot = -1
         else:
             self.timeslot = timeslot
 
+        # guess timeslot type if not None
+        if ts_type is None:
+            if lowlevel.call_line(port) == lowlevel.L_E1:
+                self.ts_type = lowlevel.kSMTimeslotTypeALaw
+            else:
+                self.ts_type = lowlevel.kSMTimeslotTypeMuLaw
+        else:
+            self.ts_type = ts_type
+
         self.switch = lowlevel.call_port_2_swdrvr(self.port)
         if self.switch < 0:
             raise AculabError(self.switch, 'call_port_2_swdrvr')
+
             
         self.details = lowlevel.DETAIL_XPARMS()
+
+    def get_module(self):
+        """Return a unique identifier for module comparisons.
+        Used by switching."""
+        if lowlevel.cc_version < 6:
+            return (self.card, self.port, 'call')
+        
+        return self.port
+
+    def get_switch(self):
+        """Return a unique identifier for module comparisons.
+        Used by switching."""
+        return self.switch
+
+    def get_datafeed(self):
+        """Return the datafeed (always None). Used by switching."""
+        return None
+    
+    def get_timeslot(self):
+        """Get the transmit timeslot for TDM switch connections."""
+
+        if self.details.stream == 0:
+            raise RuntimeError('%s invalid state: no timeslot available yet',
+                               self.name)
+
+        return (self.details.stream, self.details.ts, self.ts_type)
 
     def openin(self, unique=None, cnf=None):
         """Open a call handle for incoming calls.
@@ -338,7 +374,7 @@ class CallHandle(CallHandleBase):
         log.debug('%s send_overlap(%s, %d)', self.name, addr, complete)
 
     def send_keypad_info(self, keypad = '', display = ''):
-        """Untested/undocumented.
+        """Untested.
 
         See U{call_send_keypad_info
         <http://www.aculab.com/Support/v6_api/CallControl/\
@@ -359,9 +395,8 @@ class CallHandle(CallHandleBase):
         
         @param source: a tuple of (stream, timeslot).
         @returns a NetEndpoint.
-        
-        B{Note:} Do not ignore the return value - it will dissolve
-        the connection when it is garbage collected"""
+
+        Used internally. Applications should use L{switching.connect}."""
 
         output = lowlevel.OUTPUT_PARMS()
         output.ost = self.details.stream
@@ -376,8 +411,7 @@ class CallHandle(CallHandleBase):
                               (output.ost, output.ots, source[0], source[1]),
                               self.name)
 
-        log_switch.debug('%s [%d] %d:%d := %d:%d', self.name,
-                         self.switch,
+        log_switch.debug('%s %d:%d := %d:%d', self.name,
                          output.ost, output.ots,
                          output.ist, output.its)
 
@@ -390,8 +424,7 @@ class CallHandle(CallHandleBase):
         @param source: a tuple of (stream, timeslot).
         @returns a L{CTBusEndpoint}.
         
-        B{Note:} Do not ignore the return value - it will dissolve
-        the connection when it is garbage collected"""
+        Used internally. Applications should use L{switching.connect}."""
 
         output = lowlevel.OUTPUT_PARMS()
         output.ost = sink[0]
@@ -622,11 +655,11 @@ class Call(CallHandle):
     creation."""
 
     def __init__(self, controller, user_data = None, card = 0, port = 0,
-                 timeslot = -1, reactor = CallReactor):
+                 timeslot = -1, ts_type = None, reactor = CallReactor):
         """Create a L{CallHandle} and open it for incoming calls.
         """
         
         CallHandle.__init__(self, controller, user_data,
-                            card, port, timeslot, reactor)
+                            card, port, timeslot, ts_type, reactor)
 
         self.openin()

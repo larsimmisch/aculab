@@ -7,17 +7,17 @@ import threading
 import logging
 import struct
 import time
-import aculab
 import traceback
+from aculab import defaultLogging
 from aculab.error import AculabError
 from aculab.speech import SpeechChannel
 from aculab.reactor import SpeechReactor
-from aculab.connect import connect
+from aculab.switching import connect
 
 class DTMFLoopController:
 
     def dtmf(self, channel, digit, user_data):
-        log.info('dtmf: %s', digit)
+        log.info('%s dtmf: %s', channel.name, digit)
 
     def record_done(self, channel, file, reason, size, user_data):
         raise StopIteration
@@ -31,7 +31,7 @@ def usage():
 
 if __name__ == '__main__':
 
-    log = aculab.defaultLogging(logging.DEBUG)
+    log = defaultLogging(logging.DEBUG)
 
     card = 0
     module = 0
@@ -50,12 +50,9 @@ if __name__ == '__main__':
             usage()
 
     channels = [SpeechChannel(controller, card, module),
-                SpeechChannel(controller, card, module)]
+                SpeechChannel(controller, card, module+1)]
 
     connection = connect(channels[0], channels[1])
-
-    for i in (0, 1):
-        log.debug("[%d] %d:%d", i, channels[i].info.ost, channels[i].info.ots)
 
     channels[0].record('dtmf.al', max_silence = 1000)
     channels[1].digits('0123456789')

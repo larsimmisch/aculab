@@ -7,26 +7,25 @@ import logging
 import aculab
 from aculab.error import AculabError
 from aculab.callcontrol import Call
-from aculab.speech import SpeechChannel, PlayJob
-from aculab.switching import DefaultBus
+from aculab.speech import SpeechChannel, PlayJob, Glue
+from aculab.switching import DefaultBus, connect
 from aculab.timer import TimerThread
 from aculab.snapshot import Snapshot
-from aculab.connect import connect, Glue
 from aculab.reactor import CallReactor, SpeechReactor
 import aculab.lowlevel as lowlevel
 
 class PlayApp(Glue):
 
     def __init__(self, controller, module, call):
-        super(PlayApp, self).__init__(controller, module, call)
+        Glue.__init__(self, controller, module, call)
         self.timer = None
 
     def start(self):
-        # start a timer to accept the call later
+        # start a timer to play the prompt in 2 seconds
         self.timer = timer.add(2.0, self.timed_switch)
 
     def close(self):
-        super(PlayApp, self).close()
+        Glue.close(self)
         if self.timer:
             timer.cancel(self.timer)
 

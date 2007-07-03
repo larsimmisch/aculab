@@ -3,7 +3,8 @@
 import sys
 import lowlevel
 import logging
-from error import AculabError
+from error import AculabError, AculabSpeechError
+from util import translate_card
 
 log = logging.getLogger('switch')
 
@@ -72,22 +73,24 @@ class NetEndpoint:
         The silence pattern (alaw or mulaw) is inferred from the line type
         via C{call_line}. E1 ports are assumed to be alaw, everything else
         mulaw."""
-        
-        output = lowlevel.OUTPUT_PARMS()
-        output.ost = self.ts[0]
-        output.ots = self.ts[1]
-        output.mode = lowlevel.PATTERN_MODE
-        output.pattern = self.pattern
 
-        rc = lowlevel.sw_set_output(self.sw, output)
-        if rc:
-            raise AculabError(rc, 'sw_set_output(%d:%d, PATTERN_MODE, 0x%x)'
-                              % (self.ts[0], self.ts[1], output.pattern))
+        if self.ts:
+            output = lowlevel.OUTPUT_PARMS()
+            output.ost = self.ts[0]
+            output.ots = self.ts[1]
+            output.mode = lowlevel.PATTERN_MODE
+            output.pattern = self.pattern
 
-        log.debug('%02d:%02d silenced' % self.ts)
+            rc = lowlevel.sw_set_output(self.sw, output)
+            if rc:
+                raise AculabError(
+                    rc, 'sw_set_output(%d:%d, PATTERN_MODE, 0x%x)'
+                    % (self.ts[0], self.ts[1], output.pattern))
 
-        self.sw = None
-        self.ts = None
+            log.debug('%02d:%02d silenced' % self.ts)
+
+            self.sw = None
+            self.ts = None
 
     def __del__(self):
         """Close the endpoint if it is still open"""
@@ -109,17 +112,17 @@ class SpeechEndpoint(object):
         """Initialize an endpoint to a L{SpeechChannel}.
 
         @param channel: a L{SpeechChannel}.
-        @param direction: Either I{in} or I{out}. Only used for logging.
+        @param direction: Either C{'rx'} or C{'tx'}. Only used for logging.
         """
         self.channel = channel
         self.direction = direction
-        if direction not in ['in', 'out', 'datafeed']:
-            raise ValueError("direction must be 'in', 'out' or 'datafeed'")
+        if direction not in ['rx', 'tx', 'datafeed']:
+            raise ValueError("direction must be 'rx', 'tx' or 'datafeed'")
 
     def close(self):
         """Disconnect the endpoint."""
         
-        if not self.channel is None:
+        if self.channel:
             if self.direction == 'datafeed':
                 connect = lowlevel.SM_CHANNEL_DATAFEED_CONNECT_PARMS()
                 connect.channel = self.channel.channel
@@ -137,7 +140,7 @@ class SpeechEndpoint(object):
                 input.st = -1
                 input.ts = -1
                 
-                if self.direction == 'in':
+                if self.direction == 'rx':
                     rc = lowlevel.sm_switch_channel_input(input)
                     if rc:
                         raise AculabSpeechError(rc, 'sm_switch_channel_input')
@@ -166,20 +169,26 @@ class VMPtxEndpoint(object):
     C{close} or upon destruction (which calls C{close}).
     """
     
-    def __init__(self, vmptx):
+    def __init__(self, vmptx, tdmrx = None):
         """Initialize a datafeed endpoint to a L{VMPtx}.
 
         @param vmptx: a L{VMPtx}.
+        @param tdmrx: an optional L{TDMrx}.
         """
         self.vmptx = vmptx
+        self.tdmrx = tdmrx
 
     def close(self):
         """Disconnect the endpoint."""
+
+        if self.tdmrx:
+            self.tdmrx.close()
+            self.tdmrx = None
         
-        if not self.vmptx is None:
+        if self.vmptx:
             connect = lowlevel.SM_VMPTX_DATAFEED_CONNECT_PARMS()
             connect.vmptx = self.vmptx.vmptx
-            # connect.data_source= lowlevel.kSMNullDatafeedId
+            # connect.data_source = lowlevel.kSMNullDatafeedId
 
             rc = lowlevel.sm_vmptx_datafeed_connect(connect)
             if rc:
@@ -197,17 +206,130 @@ class VMPtxEndpoint(object):
         
         return 'VMPtxEndpoint(%s)'% self.vmptx.name    
 
+type_abbr = {lowlevel.kSMTimeslotTypeALaw: 'a',
+             lowlevel.kSMTimeslotTypeMuLaw: 'm',
+             lowlevel.kSMTimeslotTypeData: 'd' }
+
+class TDMtx(object):
+    def __init__(self, ts, card = 0, module = 0):
+        """Create a TDM transmitter.
+
+        @param ts: a tuple (stream, timeslot, [timeslot_type])
+        timeslot_type is optional.
+
+        See U{sm_tdmtx_create
+        <http://www.aculab.com/support/TiNG/gen/\
+        apifn-sm_tdmtx_create.html>}.
+        """
+
+        self.card, self.module = translate_card(card, module)
+
+        tdmtx = lowlevel.SM_TDMTX_CREATE_PARMS()
+        tdmtx.module = self.module.open.module_id
+        tdmtx.stream = ts[0]
+        tdmtx.timeslot = ts[1]
+        tdmtx.type = lowlevel.kSMTimeslotTypeALaw
+        if len(ts) > 2:
+            tdmtx.type = ts[2]
+
+        rc = lowlevel.sm_tdmtx_create(tdmtx)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_tdmtx_create')
+
+        self.tdmtx = tdmtx.tdmtx
+        self.name = 'tx-%d:%d%s' % (ts[0], ts[1], type_abbr[tdmtx.type])
+
+    def close(self):
+        if self.tdmtx:
+            rc = lowlevel.smd_tdmtx_destroy(self.tdmtx)
+            self.tdmtx = None
+
+    def listen_to(self, other):
+        if hasattr(other, 'get_datafeed'):
+            connect = lowlevel.SM_TDMTX_DATAFEED_CONNECT_PARMS()
+            connect.tdmtx = self.tdmtx
+            connect.data_source = other.get_datafeed()
+
+            rc = lowlevel.sm_tdmtx_datafeed_connect(connect)
+            if rc:
+                raise AculabSpeechError(
+                    rc, 'sm_tdmtx_datafeed_connect(%s)' % other.name,
+                    self.name)
+
+            log_switch.debug('%s := %s', self.name, other.name)
+        else:
+            raise ValueError('%s := %s: cannot connect to instance without '\
+                             'get_datafeed() method' % (self.name, other.name))
+
+    def __repr__(self):
+        return self.name
+
+class TDMrx(object):
+    def __init__(self, ts, card = 0, module = 0):
+        """Create a TDM transmitter.
+
+        @param ts: a tuple (stream, timeslot, [timeslot_type])
+        timeslot_type is optional.
+
+        See U{sm_tdmrx_create
+        <http://www.aculab.com/support/TiNG/gen/\
+        apifn-sm_tdmrx_create.html>}.
+        """
+
+        self.card, self.module = translate_card(card, module)
+        # Initialize early
+        self.tdmrx = None
+        self.datafeed = None
+
+        tdmrx = lowlevel.SM_TDMRX_CREATE_PARMS()
+        tdmrx.module = self.module.open.module_id
+        tdmrx.stream = ts[0]
+        tdmrx.timeslot = ts[1]
+        tdmrx.type = lowlevel.kSMTimeslotTypeALaw
+        if len(ts) > 2:
+            tdmrx.type = ts[2]
+
+        rc = lowlevel.sm_tdmrx_create(tdmrx)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_tdmrx_create')
+
+        self.tdmrx = tdmrx.tdmrx
+        self.name = 'rx-%d:%d%s' % (ts[0], ts[1], type_abbr[tdmrx.type])
+
+        # get the datafeed
+        datafeed = lowlevel.SM_TDMRX_DATAFEED_PARMS()
+
+        datafeed.tdmrx = self.tdmrx
+        rc = lowlevel.sm_tdmrx_get_datafeed(datafeed)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_tdmrx_get_datafeed', self.name)
+
+        self.datafeed = datafeed.datafeed
+
+    def close(self):
+        if self.tdmrx:
+            rc = lowlevel.smd_tdmrx_destroy(self.tdmrx)
+            self.datafeed = None
+            self.tdmrx = None
+
+    def get_datafeed(self):
+        """Used internally by the switching protocol."""
+        return self.datafeed
+
+    def __repr__(self):
+        return self.name
+
 class CTBus(object):
     """Base class for an isochronous, multiplexed bus.
     An instance represents a collection of available timeslots."""
 
-    def allocate(self):
+    def allocate(self, ts_type = None):
         """Allocate a timeslot."""
-        return self.slots.pop(0)
+        return self.slots.pop(0) + (ts_type,)
 
     def free(self, slot):
         """Free a timeslot"""
-        self.slots.append(slot)
+        self.slots.append(slot[:2])
 
     def listen_to(self, switch, sink, source):
         """sink and source are tuples of (stream, timeslots).
@@ -358,19 +480,32 @@ class Connection:
     This class takes care of closing the contained endpoints and bus
     timeslots in the proper order upon destruction."""
 
-    def __init__(self, bus = DefaultBus(), endpoints = [], timeslots = []):
+    def __init__(self, bus = DefaultBus(), endpoints = None, timeslots = None):
         """If bus is None, the default bus is used."""
         self.bus = bus
-        self.endpoints = endpoints
-        self.timeslots = timeslots
+        if endpoints is None:
+            self.endpoints = []
+        else:
+            self.endpoints = endpoints
+        if timeslots is None:
+            self.timeslots = []
+        else:
+            self.timeslots = timeslots
+
+    def add(self, endpoint, timeslot = None):
+        if endpoint:
+            self.endpoints.append(endpoint)
+
+        if timeslot:
+            self.timeslots.append(timeslot)
 
     def close(self):
         """Close the connection and free all resources.
 
         Closes the contained endpoints and frees the timeslots.
         Endpoints are closed in reversed order to avoid clicks."""
-        for c in reversed(self.endpoints):
-            c.close()
+        for e in reversed(self.endpoints):
+            e.close()
 
         self.endpoints = []
 
@@ -382,6 +517,60 @@ class Connection:
     def __del__(self):
         if self.endpoints or self.timeslots:
             self.close()
+
+def connect(a, b, bus=DefaultBus()):
+    """Create a duplex connection between a and b.
+
+    @param a: a duplex capable entity (like a CallHandle or a SpeechChannel)
+    or a tuple of (tx, rx).
+        
+    @param b: a duplex capable entity (like a CallHandle or a SpeechChannel)
+    or a tuple of (tx, rx).
+
+    @return: A L{Connection} object containing all endpoints and timeslots
+    allocated for the connection. This object will dissolve the
+    connection when it is deleted.
+
+    B{Note}: Ignoring the return value will immediately dissolve the
+    connection. Don't do that.
+    """
+
+    # Connectable classes must implement:
+    # 
+    # - get_module: a SpeechModule instance for TiNG >= 2, and
+    #   a tuple (card, module, 'speech') on older TiNG versions
+    #
+    # - get_switch: a SwitchCard instance on V6, and a switch card offset on V5
+    #
+    # - get_datafeed: None or a datafeed
+    #
+    # - get_timeslot: None or a transmit timeslot
+
+    c = Connection(bus)
+
+    # Optimizations first
+    if a.get_module() == b.get_module() \
+           and a.get_datafeed() and b.get_datafeed():
+        # version 2: same module, make datafeed connections
+        c.connections = [a.listen_to(b), b.listen_to(a)]
+        
+        return c
+
+    if a.get_switch() == b.get_switch() or a.get_module() == b.get_module():
+        # on the same card or module, no need to switch across the bus
+        c.endpoints = [a.listen_to(b.get_timeslot()),
+                       b.listen_to(a.get_timeslot())]
+        return c
+        
+    # The general case: connect across the bus and allocate two timeslots
+    c.timeslots = [ bus.allocate(), bus.allocate() ]
+    # make endpoints
+    c.endpoints = [ b.speak_to(c.timeslots[0]),
+                    a.listen_to(c.timeslots[0]),
+                    a.speak_to(c.timeslots[1]),
+                    b.listen_to(c.timeslots[1]) ]
+    
+    return c
 
 if __name__ == '__main__':
     print DefaultBus()

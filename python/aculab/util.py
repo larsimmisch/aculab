@@ -1,6 +1,13 @@
 """Utility classes: L{OrderedDict} and L{Lockable}."""
 
 import os
+import lowlevel
+
+# check driver info and create prosody streams if TiNG detected
+_driver_info = lowlevel.SM_DRIVER_INFO_PARMS()
+lowlevel.sm_get_driver_info(_driver_info)
+TiNG_version = (_driver_info.major, _driver_info.minor)
+del _driver_info
 
 if os.name == 'nt':
     import pywintypes
@@ -18,6 +25,24 @@ def os_event(event):
         return pywintypes.HANDLE(event)
 
     return event.fd
+
+def translate_card(card, module):
+    if TiNG_version[0] < 2:
+        return card, module
+
+    from snapshot import Snapshot
+
+    if type(card) == type(0):
+        c = Snapshot().prosody[card]
+    else:
+        c = card
+
+    if type(module) == type(0):
+        m = c.modules[module]
+    else:
+        m = module
+
+    return c, m
 
 class OrderedDict(dict):
     """A UserDict that preserves insert order whenever possible."""

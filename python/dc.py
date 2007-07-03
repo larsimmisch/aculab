@@ -12,8 +12,7 @@ from aculab.error import AculabError
 from aculab.snapshot import Snapshot
 from aculab.speech import SpeechChannel, DCReadJob
 from aculab.reactor import SpeechReactor
-from aculab.connect import connect
-
+from aculab.switching import connect
 
 
 f = open('raw.al', 'w')
