@@ -135,7 +135,7 @@ class PlayJob(object):
             self.file = None
             f = self.filename
 
-        # no locks held - maybe too cautious
+        # no locks held 
         log.debug('%s play_done(reason=\'%s\', duration=%.3f)',
                   self.channel.name, reason, self.duration)
 
@@ -278,7 +278,7 @@ class RecordJob(object):
             self.file = None
             f = self.filename
         
-        # no locks held - maybe too cautious
+        # no locks held
         log.debug('%s record_done(reason=\'%s\', length=%.3fs)',
                   channel.name, self.reason, self.duration)
 
@@ -467,7 +467,7 @@ class DigitsJob(object):
             # Assumption: alaw or mulaw
             pos = self.length / 8000.0
 
-        # no locks held - maybe too cautious
+        # no locks held
         log.debug('%s digits_done(reason=\'%s\', pos=%.3f)',
                   channel.name, reason, pos)
 
@@ -529,7 +529,7 @@ class DCReadJob(object):
         # Position is only nonzero when play was stopped.
         channel = self.channel
         
-        # no locks held - maybe too cautious
+        # no locks held
         log.debug('%s dc_read stopped',
                   channel.name)
 
@@ -623,23 +623,22 @@ class SpeechChannel(Lockable):
 
     def __del__(self):
         """Close the channel if it is still open."""
-        self.close()
         if self.channel is None:
             log.debug('%s deleted', self.name)
+        else:
+            self.close()
 
     def _close(self):
         """Finalizes the shutdown of a speech channel.
 
         I{Do not use directly, use L{SpeechChannel.close}}."""
 
-        if self.close_pending:
-            return
-
         self.user_data = None
         self.lock()
         try:
             if self.tdm:
                 self.tdm.close()
+                self.tdm = None
 
             if self.event_read:
                 lowlevel.smd_ev_free(self.event_read)
@@ -662,7 +661,21 @@ class SpeechChannel(Lockable):
             self.unlock()
             if hasattr(self, 'name'):
                 log.debug('%s closed', self.name)
-            
+
+    def close(self):
+        """Close the channel.
+
+        If the channel is active, all pending jobs will be stopped before
+        the channel is freed."""
+        if self.job:
+            self.lock()
+            self.close_pending = True
+            self.unlock()
+            self.job.stop()
+            return
+
+        self._close()
+                    
 ##     def __cmp__(self, other):
 ##         return self.channel.__cmp__(other.channel)
 
@@ -680,20 +693,6 @@ class SpeechChannel(Lockable):
         if rc:
             raise AculabSpeechError(rc, 'sm_listen_for', self.name)
 
-    def close(self):
-        """Close the channel.
-
-        If the channel is active, all pending jobs will be stopped before
-        the channel is freed."""
-        if self.job:
-            self.lock()
-            self.close_pending = True
-            self.unlock()
-            self.job.stop()
-            return
-
-        self._close()
-        
     def set_event(self, _type):
         """Create and set an event for the channel.
 
@@ -1042,8 +1041,10 @@ class SpeechChannel(Lockable):
         self.lock()
         self.job = None
         if self.close_pending:
-            self.close()
-        self.unlock()
+            self.unlock()
+            self._close()
+        else:
+            self.unlock()
 
         f = getattr(self.controller, fn)
         f(self, reason, *args, **kwargs)

@@ -147,7 +147,7 @@ class VMPrx(RTPBase):
     def close(self):
         """Stop the receiver."""
 
-        RxBase.close(self)
+        RTPBase.close(self)
 
         if self.vmprx:
             stopp = lowlevel.SM_VMPRX_STOP_PARMS()
@@ -317,6 +317,8 @@ class VMPtx(RTPBase):
 
     def close(self):
         """Stop the transmitter."""
+
+        RTPBase.close(self)
 
         if self.vmptx:
             stopp = lowlevel.SM_VMPTX_STOP_PARMS()
