@@ -261,6 +261,10 @@ BLOCKING(smfax_tx_page)
 #define cc_version 6
 #else
 #define cc_version 5
+/* Timeslot type constants didn't exit back then. Fake them */
+#define kSMTimeslotTypeALaw 0
+#define kSMTimeslotTypeMuLaw 1
+#define kSMTimeslotTypeData 2
 /* Some constants were renamed in v6. Make the new names available */
 #define kSMDataFormatULawPCM kSMDataFormat8KHzULawPCM	
 #define kSMDataFormatALawPCM kSMDataFormat8KHzALawPCM
