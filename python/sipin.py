@@ -17,26 +17,22 @@ class CallData:
         self.call = call
         self.vmptx = VMPtx(controller, user_data=self)
         self.vmprx = VMPrx(controller, user_data=self)
-        self.channel = SpeechChannel(controller, user_data=self)
+        self.speech = SpeechChannel(controller, user_data=self)
         self.connection = None
 
     def connect(self):
-        eps = [self.vmptx.listen_to(self.channel),
-               self.channel.listen_to(self.vmprx)]
+        eps = [self.vmptx.listen_to(self.speech),
+               self.speech.listen_to(self.vmprx)]
 
         self.connection = Connection(endpoints = eps)
 
     def close(self):
-        self.connection.close()
-        self.vmptx.close()
-        self.vmprx.close()
-        self.channel.close()
-        self.call = None
-        self.connection = None
-        self.vmprx = None
-        self.vmptx = None
-        self.channel = None
-    
+        for attr in ['connection', 'call', 'speech', 'vmprx', 'vmptx']:
+            o = getattr(self, attr)
+            if hasattr(o, 'close'):
+                o.close()
+            setattr(self, attr, None)
+
 class IncomingCallController:
 
     def ready(self, vmprx, sdp, user_data):
@@ -63,7 +59,7 @@ class IncomingCallController:
 
     def ev_call_connected(self, call, user_data):
         user_data.connect()
-        user_data.channel.play('asteria.al')
+        user_data.speech.play('asteria.al')
         
     def play_done(self, channel, f, reason, position, user_data):
         # The call might be gone already

@@ -590,7 +590,7 @@ class CallHandle(CallHandleBase):
         else:
             self.handle = None
             self.name = 'cc-0000'
-            
+
     def ev_incoming_call_det(self):
         """Internal event handler for C{EV_INCOMING_CALL_DETECTED}.
 

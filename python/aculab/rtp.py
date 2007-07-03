@@ -36,13 +36,16 @@ class RTPBase(Lockable):
     
     def __init__(self, card, module, mutex, user_data, ts_type):
         Lockable.__init__(self, mutex)
-        self.card, self.module = translate_card(card, module)
         self.user_data = user_data
         self.ts_type = ts_type
         self.tdm = None
+        self.card, self.module = translate_card(card, module)
 
     def close(self):
         """Close the TDM connection."""
+        if self.user_data:
+            self.user_data = None
+            
         if self.tdm:
             self.tdm.close()
             self.tdm = None
