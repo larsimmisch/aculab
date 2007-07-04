@@ -157,7 +157,6 @@ BLOCKING(smfax_tx_page)
 
 // The typedef name doesn't work here. 
 %ignore sm_ts_data_parms::data;
-%immutable sm_ts_data_parms::length;
 
 %apply char[ANY] { ACU_UCHAR[ANY] };
 
