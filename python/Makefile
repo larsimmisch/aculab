@@ -39,7 +39,7 @@ sized_struct.i: $(DTK)/include/cl_lib.h $(DTK)/include/sw_lib.h
 	rm lowlevel_wrap.xml
 
 lowlevel_wrap.c aculab/lowlevel.py: lowlevel.i cl_lib.h2 sized_struct.i
-	$(SWIG) $(DEFINES) $(SWIG_DEFINES) -modern -new_repr -python $(ACULAB_INCLUDE) $<
+	$(SWIG) $(DEFINES) $(SWIG_DEFINES) -O -new_repr -python $(ACULAB_INCLUDE) $<
 	mv lowlevel.py aculab
 
 else

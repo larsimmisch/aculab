@@ -518,7 +518,7 @@ class Connection:
         if self.endpoints or self.timeslots:
             self.close()
 
-def connect(a, b, bus=DefaultBus()):
+def connect(a, b, bus=DefaultBus(), force_bus=False):
     """Create a duplex connection between a and b.
 
     @param a: a duplex capable entity (like a CallHandle or a SpeechChannel)
@@ -554,21 +554,23 @@ def connect(a, b, bus=DefaultBus()):
 
     c = Connection(bus)
 
-    # Optimizations first
+    if not force_bus:
+        # Optimizations first
 
-    # TiNG version 2: same module, make datafeed connections
-    # Doesn't apply to calls because they have to datafeeds
-    if a.get_module() == b.get_module() \
-           and a.get_datafeed() and b.get_datafeed():
-        c.connections = [a.listen_to(b), b.listen_to(a)]
-        
-        return c
+        # TiNG version 2: same module, make datafeed connections
+        # Doesn't apply to calls because they have to datafeeds
+        if a.get_module() == b.get_module() \
+               and a.get_datafeed() and b.get_datafeed():
+            c.connections = [a.listen_to(b), b.listen_to(a)]
 
-    # Same card or module, connect directly
-    if a.get_switch() == b.get_switch() or a.get_module() == b.get_module():
-        c.endpoints = [a.listen_to(b.get_timeslot()),
-                       b.listen_to(a.get_timeslot())]
-        return c
+            return c
+
+        # Same card or module, connect directly
+        if a.get_switch() == b.get_switch() \
+               or a.get_module() == b.get_module():
+            c.endpoints = [a.listen_to(b.get_timeslot()),
+                           b.listen_to(a.get_timeslot())]
+            return c
         
     # The general case: allocate two timeslots...
     c.timeslots = [ bus.allocate(), bus.allocate() ]

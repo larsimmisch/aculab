@@ -155,6 +155,10 @@ BLOCKING(smfax_tx_page)
 %ignore FORMAT_EVENT;
 %ignore FORMAT_SOCKADDR_IN;
 
+// The typedef name doesn't work here. 
+%ignore sm_ts_data_parms::data;
+%immutable sm_ts_data_parms::length;
+
 %apply char[ANY] { ACU_UCHAR[ANY] };
 
 #ifdef WIN32
@@ -220,9 +224,17 @@ BLOCKING(smfax_tx_page)
 }
 
 #ifdef TiNG_USE_V6
+// immutable size attributes for the next headers
+// See also sized_struct.{i,py}
+%immutable *::size;
+
 %include "cl_lib.h2"
 %include "res_lib.h"
 %include "sw_lib.h"
+
+%mutable *::size;
+// end immutable size attributes
+
 %include "smtypes.h"
 %include "visdecl.h"
 %include "smcore.h"
@@ -316,7 +328,7 @@ GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 
 		return d;
     }
-    ~ACU_SNAPSHOT_PARMS() {
+    ~SM_TS_DATA_PARMS() {
 		if (self->data)
 			free(self->data);
 
