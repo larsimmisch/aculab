@@ -222,7 +222,8 @@ class RecordJob(object):
         else:
             self.file = f
 
-        self.data = lowlevel.SM_TS_DATA_PARMS()
+        self.data = lowlevel.SM_TS_DATA_PARMS(
+            lowlevel.kSMMaxRecordDataBufferSize)
         # size in seconds
         self.duration = 0.0
         self.max_octets = max_octets
