@@ -221,42 +221,46 @@ class Forward:
 class ForwardCallController:
     "controls a single incoming call and its corresponding outgoing call"
 
-    def ev_outgoing_ringing(self, call, model):
-        if model.incall and model.outcall:
-            model.connect()
+    def ev_outgoing_ringing(self, call, user_data):
+        if user_data.incall and user_data.outcall:
+            user_data.connect()
 
-    def ev_call_connected(self, call, model):
-        if call != model.incall:
-            model.connect()
-            model.incall.accept()
+    def ev_call_connected(self, call, user_data):
+        if call != user_data.incall:
+            user_data.connect()
+            user_data.incall.accept()
 
-    def ev_remote_disconnect(self, call, model):
+    def ev_remote_disconnect(self, call, user_data):
         # if both calls hang up at the same time, disconnect will be called
         # twice, because the calls are set to None only in ev_idle.
         # This should not matter, however.
 
         # pass on cause values
         cause = call.get_cause()
-        if model:
-            if call == model.incall:
-                if model.outcall:
-                    model.outcall.disconnect(cause)
-            elif call == model.outcall:
-                if model.incall:
-                    model.incall.disconnect(cause)
+        if user_data:
+            if call == user_data.incall:
+                if user_data.outcall:
+                    user_data.outcall.disconnect(cause)
+                user_data.incall = None
+            elif call == user_data.outcall:
+                if user_data.incall:
+                    user_data.incall.disconnect(cause)
+                user_data.outcall = None
 
         call.disconnect()
 
-    def ev_idle(self, call, model):
-        if model:
-            model.disconnect()
+    def ev_idle(self, call, user_data):
+        if user_data:
+            user_data.disconnect()
         
-            if call == model.incall:
-                if model.outcall:
-                    model.outcall.disconnect()            
-            elif call == model.outcall:
-                if model.incall:
+            if call == user_data.incall:
+                if user_data.outcall:
+                    user_data.outcall.disconnect()
+                user_data.incall = None
+            elif call == user_data.outcall:
+                if user_data.incall:
                     call.user_data.incall.disconnect()
+                user_data.outcall = None
                 
             call.user_data = None
 
