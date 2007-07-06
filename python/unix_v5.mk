@@ -11,13 +11,13 @@ PYTHON := python
 
 # Determine Python paths and version from installed python executable via 
 # distutils. 
-PYTHON_INCLUDE := -I$(shell $(PYTHON) install.py -i)
+PYTHON_INCLUDE := -I$(shell $(PYTHON) disthelper.py -i)
 # avoid multiple warnings if python is not found
 ifneq ($(PYTHON_INCLUDE),) 
-PYTHON_LIBDIR := -L$(shell $(PYTHON) install.py -L)
-PYTHON_VERSION := $(shell $(PYTHON) install.py -v)
+PYTHON_LIBDIR := -L$(shell $(PYTHON) disthelper.py -L)
+PYTHON_VERSION := $(shell $(PYTHON) disthelper.py -v)
 PYTHON_LIBS := -lpython$(PYTHON_VERSION)
-PYTHON_SITEDIR := $(shell $(PYTHON) install.py -l)
+PYTHON_SITEDIR := $(shell $(PYTHON) disthelper.py -l)
 endif
 
 

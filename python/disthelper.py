@@ -10,7 +10,7 @@ from distutils.errors import DistutilsFileError
 import compileall
 
 def usage():
-    print "install.py -i | -l | -L | -v | <file>+"
+    print "disthelper.py -i | -l | -L | -v | <file>+"
     sys.exit(2)
 
 # copied from distutils.dir_utils. 

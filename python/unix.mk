@@ -14,13 +14,13 @@ PYTHON := python
 
 # Determine Python paths and version from installed python executable via 
 # distutils. 
-PYTHON_INCLUDE := -I$(shell $(PYTHON) install.py -i)
+PYTHON_INCLUDE := -I$(shell $(PYTHON) disthelper.py -i)
 # avoid multiple warnings if python is not found
 ifneq ($(PYTHON_INCLUDE),) 
-PYTHON_LIBDIR := -L$(shell $(PYTHON) install.py -L)
-PYTHON_VERSION := $(shell $(PYTHON) install.py -v)
+PYTHON_LIBDIR := -L$(shell $(PYTHON) disthelper.py -L)
+PYTHON_VERSION := $(shell $(PYTHON) disthelper.py -v)
 PYTHON_LIBS := -lpython$(PYTHON_VERSION)
-PYTHON_SITEDIR := $(shell $(PYTHON) install.py -l)
+PYTHON_SITEDIR := $(shell $(PYTHON) disthelper.py -l)
 
 endif
 
@@ -39,7 +39,7 @@ ACULAB_LIBS = -lacu_cl -lacu_sw -lacu_res -lacu_common -lTiNG
 
 ifneq ($(HAVE_FAX),)
 ACULAB_LIBDIR += -L$(DTK)/$(FAX)/lib
-ACULAB_LIBS += -lfaxlib -lactiff -lfontconfig -lstdc++
+ACULAB_LIBS += -lfaxlib -lactiff -lfontconfig
 endif
 
 LDFLAGS := -g -shared
@@ -53,6 +53,6 @@ EXTRA_OBJS =  $(DTK)/ting/libutil/gen-$(TiNGTYPE)_V6/aculog.o \
               $(DTK)/ting/libutil/gen-$(TiNGTYPE)_V6/vseprintf.o \
               $(DTK)/ting/libutil/gen-$(TiNGTYPE)_V6/bfile.o \
               $(DTK)/ting/libutil/gen-$(TiNGTYPE)_V6/bfopen.o \
-			  -Xlinker -R$(DTK)/lib  \
+			  /usr/lib/libstdc++.so.5 -Xlinker -R$(DTK)/lib  \
 
 endif
