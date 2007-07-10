@@ -125,6 +125,7 @@ def routing_table(port, details):
     If cause is not none, hangup"""
     
     if not details.destination_addr and details.sending_complete:
+        log.debug('returning LC_CALL_REJECTED')
         return (lowlevel.LC_CALL_REJECTED, None, None, None)
 
     if port == 0:
@@ -154,7 +155,7 @@ def routing_table(port, details):
                 return (None, p, ts, details.destination_addr,
                         details.originating_addr)
             else:
-                return (None, 0, details.ts,
+                return (None, 0, None,
                         details.destination_addr, details.originating_addr)
     else:
         return (lowlevel.LC_NUMBER_BUSY, None, None, None, None)
@@ -184,6 +185,7 @@ class Forward:
         if self.outcall:
             # warning: untested (and hence probably broken)
             print hex(self.outcall.handle), 'sending:', d.destination_addr
+            log.debug('sending %s' % d.destination_addr)
             self.outcall.send_overlap(d.destination_addr,
                                       d.sending_complete)
         else:
@@ -193,9 +195,12 @@ class Forward:
             if port != None and number:
                 print hex(self.incall.handle), \
                       'making outgoing call on port %d to %s' % (port,  number)
+                log.debug('making outgoing call on port %d to %s' % (port, number))
+                
                 self.outcall = find_available_call(port, timeslot, self.incall)
                 if not self.outcall:
                     print hex(self.incall.handle), 'no call available'
+                    log.debug('no call available')
                     self.incall.disconnect(lowlevel.LC_NUMBER_BUSY)
                 else:
                     self.outcall.push_controller(fwcontroller)
@@ -206,6 +211,7 @@ class Forward:
             else:
                 print hex(self.incall.handle), \
                       'waiting - no destination address'
+                log.debug('waiting -no destination address')
 
     def connect(self):
         """Connects incoming and outgoing call. Can be called more than
