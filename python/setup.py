@@ -134,7 +134,7 @@ elif os.name == 'posix':
     # crude detection of V5 vs v6
     if os.path.exists(dtk + '/include/cl_lib.h'):
         # Version 6
-        version = '$Id'
+        version = '$Id$'
         fax = '/ProsodyLibraries/Group3Fax/API'
         if not os.path.exists(dtk + fax):
             fax = None
