@@ -16,7 +16,9 @@ def macroify(m):
 
 class FindStruct(xml.sax.handler.ContentHandler):
     '''Helper class to find all structs that have a size member from
-    the a SWIG generated XML file.'''
+    the a SWIG generated XML file.
+
+    This is pretty ugly, but it does the job (and I am no XML expert).'''
 
     def __init__(self, file, exclude = []):
         self.in_class = 0
@@ -132,7 +134,7 @@ elif os.name == 'posix':
     # crude detection of V5 vs v6
     if os.path.exists(dtk + '/include/cl_lib.h'):
         # Version 6
-        version = '6.0'
+        version = '$Id'
         fax = '/ProsodyLibraries/Group3Fax/API'
         if not os.path.exists(dtk + fax):
             fax = None
@@ -185,7 +187,7 @@ swig_opts = ['-modern', '-new_repr'] + \
 
 setup(name = "pyAculab",
       version = version,
-      description = "Aculab Python wrapper",
+      description = "Aculab Python wrappers",
       author = "Lars Immisch",
       author_email = "lars@ibp.de",
       cmdclass = { 'build_ext' : build_ext_swig_in_package },
