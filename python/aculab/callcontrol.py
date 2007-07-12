@@ -1,6 +1,6 @@
 """Call Control - a thin layer on top of the Aculab API.
 
-See U{http://ibp.de/projects/aculab/browser/trunk/python/callin.py callin.py}
+See U{callin.py <http://ibp.de/projects/aculab/browser/trunk/python/callin.py>}
 for an example how to use this module.
 
 I{Terminology: what is called a 'call' in this module should be called a
