@@ -11,15 +11,15 @@ Nicked from shtoom.
 
 This is a quick example on how to parse an SDP and access various fields:
 
->>> s = '''v=0\r
-... o=root 6194 6194 IN IP4 192.168.11.224\r
-... s=pyaculab\r
-... c=IN IP4 192.168.11.224\r
-... t=0 0\r
-... m=audio 8092 RTP/AVP 0 8 101\r
-... a=rtpmap:0 PCMU/8000/1\r
-... a=rtpmap:8 PCMA/8000/1\r
-... a=rtpmap:101 telephone-event/8000\r
+>>> s = '''v=0
+... o=root 6194 6194 IN IP4 192.168.11.224
+... s=pyaculab
+... c=IN IP4 192.168.11.224
+... t=0 0
+... m=audio 8092 RTP/AVP 0 8 101
+... a=rtpmap:0 PCMU/8000/1
+... a=rtpmap:8 PCMA/8000/1
+... a=rtpmap:101 telephone-event/8000
 ... '''
 
 >>> sdp = SDP(s)

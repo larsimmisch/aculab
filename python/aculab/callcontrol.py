@@ -1,8 +1,11 @@
 """Call Control - a thin layer on top of the Aculab API.
 
-Terminology: what is called a 'call' in this module should be called a
+See U{http://ibp.de/projects/aculab/browser/trunk/python/callin.py callin.py}
+for an example how to use this module.
+
+I{Terminology: what is called a 'call' in this module should be called a
 'call leg' according to international treaties, but in Aculab's nomenclature,
-it's a call, so we stick with that.
+it's a call, so we stick with that}.
 """
 
 import sys

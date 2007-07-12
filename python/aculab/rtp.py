@@ -1,7 +1,7 @@
 """RTP and speech processing functions.
 
-This module contains speech RTP transmitters and receivers (L{VMPtx} and
-L{VMPrx})."""
+This module contains RTP transmitters and receivers for speech (L{VMPtx} and
+L{VMPrx}) and T.38 (L{FMPtx} and L{FMPrx})."""
 
 import sys
 import os
