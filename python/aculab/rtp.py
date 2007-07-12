@@ -82,7 +82,9 @@ class RTPBase(Lockable):
         return self.card
 
 class VMPrx(RTPBase):
-    """An RTP speech receiver."""
+    """An RTP speech receiver.
+
+    Logging: output from a VMPrx is prefixed with C{vrx-}"""
 
     def __init__(self, controller, card = 0, module = 0, mutex = None,
                  user_data = None, ts_type = lowlevel.kSMTimeslotTypeALaw,
@@ -280,7 +282,9 @@ class VMPrx(RTPBase):
         self.config_rfc2833()
 
 class VMPtx(RTPBase):
-    """An RTP speech data transmitter."""
+    """An RTP speech data transmitter.
+
+    Logging: output from a VMPtx is prefixed with C{vtx-}"""
         
     def __init__(self, controller, card = 0, module = 0, mutex = None,
                  user_data = None, ts_type = lowlevel.kSMTimeslotTypeALaw,
@@ -478,7 +482,9 @@ class VMPtx(RTPBase):
             return VMPtxEndpoint(self, tdm)
 
 class FMPrx(RTPBase):
-    """An RTP T.38 receiver (untested/incomplete)."""
+    """An RTP T.38 receiver (untested/incomplete).
+
+    Logging: output from a FMPrx is prefixed with C{frx-}"""
 
     def __init__(self, controller, card = 0, module = 0, mutex = None,
                  user_data = None, ts_type = lowlevel.kSMTimeslotTypeALaw,
@@ -623,8 +629,10 @@ class FMPrx(RTPBase):
         return self.datafeed
             
 class FMPtx(RTPBase):
-    """An RTP T.38 transmitter (untested/incomplete)."""
-        
+    """An RTP T.38 transmitter (untested/incomplete).
+
+    Logging: output from a FMPrx is prefixed with C{frx-}"""
+
     def __init__(self, controller, card = 0, module = 0, mutex = None,
                  user_data = None, ts_type = lowlevel.kSMTimeslotTypeALaw,
                  reactor = SpeechReactor):

@@ -72,7 +72,9 @@ class CallHandle(CallHandleBase):
     """An Aculab call handle, and common operations on it.
 
     All events are delegated to the controller; some events are handled
-    internally to maintain the state."""
+    internally to maintain the state.
+
+    Logging: output from a CallHandle is prefixed with C{cc-}"""
 
     def __init__(self, controller, user_data = None, card = 0, port = 0,
                  timeslot = None, ts_type = None, reactor = CallReactor):
@@ -374,15 +376,15 @@ class CallHandle(CallHandleBase):
     def send_overlap(self, addr, complete = False):
         """Send overlap digits.
 
+        See U{call_send_overlap <http://www.aculab.com/Support/v6_api/\
+        CallControl/call_send_overlap.htm>}.
+
         @param sending_complete: Set this to C{True} if you know that the
         number is complete. This is of limited use: if you know the entire
         number, you don't need overlap sending, and if you use overlap sending,
         you typically don't know when the number is complete.
         @param addr: I don't remember whether this should be the entire number
         so far or incremental digits. Aculab's tech writers don't know either.
-
-        See U{call_send_overlap <http://www.aculab.com/Support/v6_api/\
-        CallControl/call_send_overlap.htm>}.
         """
         overlap = lowlevel.OVERLAP_XPARMS()
         overlap.handle = self.handle
@@ -471,10 +473,10 @@ class CallHandle(CallHandleBase):
     def get_cause(self):
         """Return the cause for a disconnected or failed call.
 
-        @returns: a C{CAUSE_XPARMS} structure.
-
         See U{call_getcause
         <http://www.aculab.com/Support/v6_api/CallControl/call_getcause.htm>}.
+
+        @returns: a C{CAUSE_XPARMS} structure.
         """
         cause = lowlevel.CAUSE_XPARMS()
         cause.handle = self.handle
@@ -487,10 +489,10 @@ class CallHandle(CallHandleBase):
     def get_details(self):
         """Return (and cache) the details of a call.
 
-        @returns: a C{DETAIL_XPARMS} structure.
-
         See U{call_details
         <http://www.aculab.com/Support/v6_api/CallControl/call_details.htm>}.
+        
+        @returns: a C{DETAIL_XPARMS} structure.
         """
         self.details = lowlevel.DETAIL_XPARMS()
         self.details.handle = self.handle
@@ -547,13 +549,14 @@ class CallHandle(CallHandleBase):
 
     def disconnect(self, cause = None):
         """Disconnect a call.
-        @param cause: this may be a C{CAUSE_XPARMS} struct or an
-        int for an Aculab cause value.
-        
+
         See U{call_disconnect
         <http://www.aculab.com/Support/v6_api/CallControl/\
         call_disconnect.htm>}.
-        """
+        
+        @param cause: this may be a C{CAUSE_XPARMS} struct or an
+        int for an Aculab cause value.
+                """
         if cause is None:
             xcause = lowlevel.CAUSE_XPARMS()
             xcause.cause = lowlevel.LC_NORMAL
@@ -574,12 +577,12 @@ class CallHandle(CallHandleBase):
 
     def release(self, cause = None):
         """Release the call.
+
+        See U{call_release
+        <http://www.aculab.com/Support/v6_api/CallControl/call_release.htm>}.
         
         @param cause: this may be a C{CAUSE_XPARMS} struct or an
         int for an Aculab cause value.
-        
-        See U{call_release
-        <http://www.aculab.com/Support/v6_api/CallControl/call_release.htm>}.
         """
 
         self.reactor.remove(self)

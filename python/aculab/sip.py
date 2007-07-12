@@ -17,7 +17,10 @@ class SIPHandle(CallHandleBase):
     """An Aculab SIP call handle, and common operations on it.
 
     Some events are handled to maintain the internal state, but in general,
-    event handling is delegated to the controller."""
+    event handling is delegated to the controller.
+
+    Logging: output from a SIPHandle is prefixed with C{sip-}"""
+    """
 
     def __init__(self, controller, user_data = None,
                  reactor = CallReactor):
