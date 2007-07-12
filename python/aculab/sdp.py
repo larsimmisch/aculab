@@ -523,8 +523,29 @@ if __name__ == '__main__':
     
     s = str(sdp)
 
-    print s
+    # print s
 
     sdp = SDP(s)
     print sdp.getMediaDescription('audio').rtpmap
     print sdp.getAddress('audio')
+
+    t38 = '''v=0
+o=THOR 0 0 IN IP4 192.168.11.111
+s=session
+c=IN IP4 192.168.11.111
+b=CT:116
+t=0 0
+m=image 10026 udptl t38
+a=T38FaxVersion:3
+a=T38maxBitRate:9600
+a=T38FaxFillBitRemoval:0
+a=T38FaxTranscodingMMR:0
+a=T38FaxTranscodingJBIG:0
+a=T38FaxRateManagement:transferredTCF
+a=T38FaxMaxBuffer:284
+a=T38FaxMaxDatagram:128
+a=T38FaxUdpEC:t38UDPRedundancy'''
+
+    sdp = SDP(t38)
+    print sdp.getAddress('image')
+    print sdp.getMediaDescription('image')._a['T38FaxVersion']

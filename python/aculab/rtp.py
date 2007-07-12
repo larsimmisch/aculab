@@ -730,11 +730,12 @@ class FMPtx(RTPBase):
 
         config = lowlevel.SM_FMPTX_CONFIG_PARMS()
         config.fmptx = self.fmptx
-        addr = sdp.getAddress('audio')
+        addr = sdp.getAddress('image')
 
         log.debug('%s destination: %s', self.name, addr)
         
-        config.set_destination_rtp(addr)
+        config.set_destination(addr)
+        config.RecoveryLevel = 1
 
         rc = lowlevel.sm_fmptx_config(config)
         if rc:

@@ -16,6 +16,7 @@
 #include "smdc_sync.h"
 #include "smdc_hdlc.h"
 #include "smrtp.h"
+#include "smfmp.h"
 #include "bfile.h"
 #include "bfopen.h"
 #else
@@ -245,6 +246,7 @@ BLOCKING(smfax_tx_page)
 %include "prosdc.h"
 %include "prospapi.h"
 %include "prosrtpapi.h"
+%include "prosfmpapi.h"
 %include "error.h"
 #ifdef HAVE_FAX
 %include "actiff.h"
@@ -481,6 +483,14 @@ GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 	}
 }
 
+%extend SM_FMPTX_CONFIG_PARMS {
+	PyObject *set_destination(PyObject *args) {
+		return set_inaddr(args, &self->destination);
+	}
+	PyObject *set_source(PyObject *args) {
+		return set_inaddr(args, &self->source);
+	}
+}
 #endif
 
 %define SIZED_STRUCT(name) 
