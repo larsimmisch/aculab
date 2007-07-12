@@ -10,7 +10,7 @@ import logging
 import lowlevel
 import names
 import sdp
-from switching import VMPtxEndpoint, TDMrx
+from switching import VMPtxEndpoint, FMPtxEndpoint, TDMrx
 from reactor import SpeechReactor
 from snapshot import Snapshot
 from error import *
@@ -82,7 +82,7 @@ class RTPBase(Lockable):
         return self.card
 
 class VMPrx(RTPBase):
-    """An RTP receiver."""
+    """An RTP speech receiver."""
 
     def __init__(self, controller, card = 0, module = 0, mutex = None,
                  user_data = None, ts_type = lowlevel.kSMTimeslotTypeALaw,
@@ -280,7 +280,7 @@ class VMPrx(RTPBase):
         self.config_rfc2833()
 
 class VMPtx(RTPBase):
-    """An RTP transmitter."""
+    """An RTP speech data transmitter."""
         
     def __init__(self, controller, card = 0, module = 0, mutex = None,
                  user_data = None, ts_type = lowlevel.kSMTimeslotTypeALaw,
@@ -476,3 +476,286 @@ class VMPtx(RTPBase):
             log_switch.debug('%s := %s', self.name, other.name)
 
             return VMPtxEndpoint(self, tdm)
+
+class FMPrx(RTPBase):
+    """An RTP T.38 receiver (untested/incomplete)."""
+
+    def __init__(self, controller, card = 0, module = 0, mutex = None,
+                 user_data = None, ts_type = lowlevel.kSMTimeslotTypeALaw,
+                 reactor = SpeechReactor):
+        """Allocate an RTP FAX receiver, and add the event to the reactor.
+
+        Note: the FMPrx is not ready to use until it has called 'ready' on its
+        controller.
+        
+        Controllers must implement:
+         - ready(vmprx, sdp, user_data)
+        """
+
+        RTPBase.__init__(self, card, module, mutex, user_data, ts_type)
+        
+        self.controller = controller
+        self.reactor = reactor
+
+        # initialize early
+        self.vmprx = None
+        self.event_fmprx = None
+        self.datafeed = None
+        self.rtp_port = None
+        self.rtcp_port = None
+        self.sdp = None
+        self.tdm = None
+
+        # create vmprx
+        fmprx = lowlevel.SM_FMPRX_CREATE_PARMS()
+        fmprx.module = self.module.open.module_id
+        # vmprx.set_address(self.card.ip_address)
+        rc = lowlevel.sm_fmprx_create(vmprx)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_fmprx_create')
+
+        self.fmprx = fmprx.fmprx
+
+        self.name = 'frx-%08x' % self.vmprx
+
+        # get the event
+        efmprx = lowlevel.SM_FMPRX_EVENT_PARMS()
+        efmprx.fmprx = self.fmprx
+
+        rc = lowlevel.sm_fmprx_get_event(efmprx)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_fmprx_get_event')
+
+        self.event_fmprx = os_event(efmprx.event)
+
+        log.debug('%s event fd: %d', self.name, self.event_fmprx)
+
+        # get the datafeed
+        datafeed = lowlevel.SM_FMPRX_DATAFEED_PARMS()
+
+        datafeed.fmprx = self.fmprx
+        rc = lowlevel.sm_fmprx_get_datafeed(datafeed)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_fmprx_get_datafeed')
+
+        self.datafeed = datafeed.datafeed
+
+        self.reactor.add(self.event_fmprx, self.on_fmprx, select.POLLIN)
+        
+    def close(self):
+        """Stop the receiver."""
+
+        RTPBase.close(self)
+
+        if self.fmprx:
+            stopp = lowlevel.SM_FMPRX_STOP_PARMS()
+            stopp.fmprx = self.fmprx
+
+            rc = lowlevel.sm_fmprx_stop(stopp)
+            if rc:
+                raise AculabSpeechError(rc, 'sm_fmprx_stop')
+
+            log.debug("%s stopping", self.name)
+
+    def on_fmprx(self):
+        """Internal event handler."""
+        
+        status = lowlevel.SM_FMPRX_STATUS_PARMS()
+        status.fmprx = self.fmprx
+
+        rc = lowlevel.sm_fmprx_status(status)
+        log.debug('%s fmprx status: %s', self.name,
+                  names.fmprx_status_names[status.status])
+        
+        if status.status == lowlevel.kSMFMPrxStatusGotPorts:
+            self.rtp_port = status.u.ports.RTP_Port
+            self.rtcp_port = status.u.ports.RTCP_Port
+            self.address = status.get_ports_address()
+            # self.rtp_address = status.ports_address()
+            log.debug('%s fmprx: rtp address: %s rtp port: %d, rtcp port: %d',
+                      self.name, self.address, self.rtp_port, self.rtcp_port)
+
+            self.default_codecs()
+        
+            # Create the SDP
+            md = sdp.MediaDescription()
+            md.setLocalPort(self.rtp_port)
+            md.addRtpMap(sdp.PT_PCMU)
+            md.addRtpMap(sdp.PT_PCMA)
+            md.addRtpMap(sdp.PT_NTE)
+    
+            self.sdp = sdp.SDP()
+            self.sdp.setServerIP(self.address)
+            self.sdp.addMediaDescription(md)
+
+            self.controller.ready(self, self.sdp, self.user_data)
+
+        elif status.status == lowlevel.kSMFMPrxStatusStopped:
+            self.reactor.remove(self.event_fmprx)
+            self.event_fmprx = None
+            self.datafeed = None
+            
+            rc = lowlevel.sm_fmprx_destroy(self.fmprx)
+            self.fmprx = None
+
+            if rc:
+                raise AculabSpeechError(rc, 'sm_fmprx_destroy')
+
+    def tdm_connect(self):
+        """Connect the Receiver to a timeslot on its DSP's timeslot range.
+        This method internally allocates a L{TDMtx} on the module's
+        timeslot range.
+
+        See L{ProsodyTimeslots}.
+
+        I{Used internally}."""
+        self.tdm = Connection(self.module.timeslots)
+
+        ts = self.module.timeslots.allocate(self.ts_type)
+
+        tx = TDMtx(ts, self.card, self.module)
+        tx.listen_to(self)
+
+        self.tdm.add(tx, ts)
+
+    def get_datafeed(self):
+        """Used internally by the switching protocol."""
+        return self.datafeed
+            
+class FMPtx(RTPBase):
+    """An RTP T.38 transmitter (untested/incomplete)."""
+        
+    def __init__(self, controller, card = 0, module = 0, mutex = None,
+                 user_data = None, ts_type = lowlevel.kSMTimeslotTypeALaw,
+                 reactor = SpeechReactor):
+
+        RTPBase.__init__(self, card, module, mutex, user_data, ts_type)
+
+        self.controller = controller
+        self.reactor = reactor
+
+        # initialize early 
+        self.event_fmptx = None
+        self.event_fmprx = None
+
+        # create fmptx
+        fmptx = lowlevel.SM_FMPTX_CREATE_PARMS()
+        fmptx.module = self.module.open.module_id
+        rc = lowlevel.sm_fmptx_create(fmptx)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_fmptx_create')
+
+        self.fmptx = fmptx.fmptx
+        self.name = 'ftx-%08x' % self.fmptx
+
+        efmptx = lowlevel.SM_FMPTX_EVENT_PARMS()
+        efmptx.fmptx = self.fmptx
+
+        rc = lowlevel.sm_fmptx_get_event(efmptx)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_fmptx_get_event')
+
+        self.event_fmptx = os_event(efmptx.event)
+
+        log.debug('%s event fd: %d', self.name, self.event_fmptx)
+
+        self.reactor.add(self.event_fmptx, self.on_fmptx, select.POLLIN)
+
+    def close(self):
+        """Stop the transmitter."""
+
+        RTPBase.close(self)
+
+        if self.fmptx:
+            stopp = lowlevel.SM_FMPTX_STOP_PARMS()
+            stopp.fmptx = self.fmptx
+
+            rc = lowlevel.sm_fmptx_stop(stopp)
+            if rc:
+                raise AculabSpeechError(rc, 'sm_fmptx_stop')
+
+            log.debug("%s stopping", self.name)
+
+    def __del__(self):
+        self.close()
+
+    def on_fmptx(self):
+        status = lowlevel.SM_FMPTX_STATUS_PARMS()
+        status.fmptx = self.fmptx
+
+        rc = lowlevel.sm_fmptx_status(status)
+        log.debug('%s fmptx status: %s', self.name,
+                  names.fmptx_status_names[status.status])
+
+        if status.status == lowlevel.kSMFMPtxStatusStopped:
+            self.reactor.remove(self.event_fmptx)
+            self.event_fmptx = None
+            
+            rc = lowlevel.sm_fmptx_destroy(self.fmptx)
+            self.fmptx = None
+
+    def tdm_connect(self):
+        """Connect the Tranmitter to a timeslot on its DSP's timeslot range.
+        This method internally allocates a L{TDMtx} on the module's
+        timeslot range.
+
+        See L{ProsodyTimeslots}.
+
+        I{Used internally}."""
+        self.tdm = Connection(self.module.timeslots)
+
+        ts = self.module.timeslots.allocate(self.ts_type)
+
+        rx = TDMrx(ts, self.card, self.module)
+        self.listen_to(rx)
+
+        self.tdm.add(rx, ts)
+
+    def get_datafeed(self):
+        """Used internally by the switching protocol."""
+        return self.datafeed
+
+    def configure(self, sdp):
+        """Configure the Transmitter according to the SDP.
+
+        @param sdp: An instance of class L{SDP}."""
+
+        config = lowlevel.SM_FMPTX_CONFIG_PARMS()
+        config.fmptx = self.fmptx
+        addr = sdp.getAddress('audio')
+
+        log.debug('%s destination: %s', self.name, addr)
+        
+        config.set_destination_rtp(addr)
+
+        rc = lowlevel.sm_fmptx_config(config)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_fmptx_config')
+
+    def listen_to(self, other):
+        if hasattr(other, 'get_datafeed'):
+            connect = lowlevel.SM_FMPTX_DATAFEED_CONNECT_PARMS()
+            connect.fmptx = self.fmptx
+            connect.data_source = other.get_datafeed()
+
+            rc = lowlevel.sm_fmptx_datafeed_connect(connect)
+            if rc:
+                raise AculabSpeechError(rc, 'sm_fmptx_datafeed_connect')
+
+            log_switch.debug('%s := %s', self.name, other.name)
+
+            return FMPtxEndpoint(self)
+        else:
+            tdm = TDMrx(other, self.card, self.module)
+            
+            connect = lowlevel.SM_FMPTX_DATAFEED_CONNECT_PARMS()
+            connect.fmptx = self.fmptx
+            connect.data_source = tdm.get_datafeed()
+
+            rc = lowlevel.sm_fmptx_datafeed_connect(connect)
+            if rc:
+                raise AculabSpeechError(rc, 'sm_fmptx_datafeed_connect')
+
+            log_switch.debug('%s := %s', self.name, other.name)
+
+            return FMPtxEndpoint(self, tdm)

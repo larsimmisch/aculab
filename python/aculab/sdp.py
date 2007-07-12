@@ -5,7 +5,32 @@
 
 # Nicked from shtoom
 
-"""SDP, aka Session Description Protocol, as described in RFC 2327"""
+"""SDP, aka Session Description Protocol, as described in RFC 2327.
+
+Nicked from shtoom. 
+
+This is a quick example on how to parse an SDP and access various fields:
+
+>>> s = '''v=0\r
+... o=root 6194 6194 IN IP4 192.168.11.224\r
+... s=pyaculab\r
+... c=IN IP4 192.168.11.224\r
+... t=0 0\r
+... m=audio 8092 RTP/AVP 0 8 101\r
+... a=rtpmap:0 PCMU/8000/1\r
+... a=rtpmap:8 PCMA/8000/1\r
+... a=rtpmap:101 telephone-event/8000\r
+... '''
+
+>>> sdp = SDP(s)
+>>> sdp.getAddress('audio')
+('192.168.11.224', 8092)
+>>> sdp.getMediaDescription('audio').rtpmap   
+{0: ('0 PCMU/8000/1', <AudioPTMarker PCMU(0)/8000/1 at b715918c>),
+8: ('8 PCMA/8000/1', <AudioPTMarker PCMA(8)/8000/1 at b715926c>),
+101: ('101 telephone-event/8000',
+<PTMarker telephone-event(dynamic)/8000/None at b715954c>)}
+"""
 
 from util import OrderedDict
 
@@ -342,7 +367,10 @@ class SDP:
             if isinstance(text, list):
                 self.parse(text)
             elif isinstance(text, str):
-                self.parse(text.split('\r\n'))
+                if text.find('\r\n') > -1:
+                    self.parse(text.split('\r\n'))
+                else:
+                    self.parse(text.split('\n'))
             else:
                 raise ValueError('text must be list of strings or string')
             self.assertSanity()
@@ -495,7 +523,7 @@ if __name__ == '__main__':
     
     s = str(sdp)
 
-    # print repr(s)
+    print s
 
     sdp = SDP(s)
     print sdp.getMediaDescription('audio').rtpmap

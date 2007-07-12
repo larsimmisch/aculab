@@ -206,6 +206,50 @@ class VMPtxEndpoint(object):
         
         return 'VMPtxEndpoint(%s)'% self.vmptx.name    
 
+class FMPtxEndpoint(object):
+    """An endpoint to a FMPtx (RTP T.38 transmitter).
+
+    Endpoints are used to close a L{Connection}. They do all their work in
+    C{close} or upon destruction (which calls C{close}).
+    """
+    
+    def __init__(self, vmptx, tdmrx = None):
+        """Initialize a datafeed endpoint to a L{FMPtx}.
+
+        @param fmptx: a L{FMPtx}.
+        @param tdmrx: an optional L{TDMrx}.
+        """
+        self.fmptx = fmptx
+        self.tdmrx = tdmrx
+
+    def close(self):
+        """Disconnect the endpoint."""
+
+        if self.tdmrx:
+            self.tdmrx.close()
+            self.tdmrx = None
+        
+        if self.fmptx:
+            connect = lowlevel.SM_FMPTX_DATAFEED_CONNECT_PARMS()
+            connect.vmptx = self.fmptx.vmptx
+            # connect.data_source = lowlevel.kSMNullDatafeedId
+
+            rc = lowlevel.sm_fmptx_datafeed_connect(connect)
+            if rc:
+                raise AculabSpeechError(rc, 'sm_fmptx_datafeed_connect')
+
+            self.fmptx = None
+
+    def __del__(self):
+        """Close the endpoint if it is still open"""
+        
+        self.close()
+
+    def __repr__(self):
+        """Print a representation of the endpoint."""
+        
+        return 'FMPtxEndpoint(%s)'% self.fmptx.name    
+
 type_abbr = {lowlevel.kSMTimeslotTypeALaw: 'a',
              lowlevel.kSMTimeslotTypeMuLaw: 'm',
              lowlevel.kSMTimeslotTypeData: 'd' }
