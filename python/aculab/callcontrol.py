@@ -23,10 +23,22 @@ log_switch = logging.getLogger('switch')
 class CallHandleBase:
     """Base class for Call Handles.
 
-    Holds common members and the controller stack."""
+    Holds the controller stack and common attributes.
+
+    The controller stack allows to pass calls from one controller (application)
+    to another.
+
+    For example, one controller could be responsible for looking at all
+    incoming calls. When it gets a call, it decides which application should
+    receive the call, and the applications can install different controllers
+    for their needs.
+
+    This is not normally needed.
+    """
 
     def __init__(self, controller, user_data = None, port = 0,
                  reactor = CallReactor):
+        """Initialise the controller stack and common attributes."""
 
         self.user_data = user_data
         # this is a stack of controllers
@@ -44,9 +56,16 @@ class CallHandleBase:
         self.last_extended_event = None
 
     def push_controller(self, controller):
+        """Push a new controller onto the controller stack.
+
+        The new controller will receive all events from now on."""
         self.controllers.append(controller)
 
     def pop_controller(self):
+        """Pop a controller from the stack.
+
+        The previously active controller will receive all events
+        from now on."""
         self.controllers.pop()
 
 class CallHandle(CallHandleBase):
@@ -57,6 +76,8 @@ class CallHandle(CallHandleBase):
 
     def __init__(self, controller, user_data = None, card = 0, port = 0,
                  timeslot = None, ts_type = None, reactor = CallReactor):
+        """Initialise the CallHandle, guess the timeslot type and determine
+        the switch card to use with this handle."""
 
         CallHandleBase.__init__(self, controller, user_data, port, reactor)
         
@@ -98,7 +119,8 @@ class CallHandle(CallHandleBase):
         return self.switch
 
     def get_datafeed(self):
-        """Return the datafeed (always None). Used by switching."""
+        """Return the datafeed (always None for a CallHandle).
+        Used by switching."""
         return None
     
     def get_timeslot(self):
