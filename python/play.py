@@ -19,6 +19,11 @@ class PlayApp(Glue):
     def __init__(self, controller, module, call):
         Glue.__init__(self, controller, module, call)
         self.timer = None
+        self.jobs = [PlayJob(self.speech, fn) for fn in fplay]
+
+    def next_job(self):
+        for j in self.jobs:
+            yield j
 
     def start(self):
         # start a timer to play the prompt in 2 seconds
@@ -31,7 +36,9 @@ class PlayApp(Glue):
 
     def timed_switch(self):
         self.connections = connect(self.call, self.speech)
-        self.speech.start(PlayJob(self.speech, fplay))
+        j = self.next_job()
+        if j:
+            self.speech.start(j)
 
         # self.timer = timer.add(2.0, self.timed_unswitch)
 
@@ -44,8 +51,12 @@ class PlayApp(Glue):
 
     def job_done(self, job, reason):
         log.debug('play done')
-        del self.connections
-        self.timer = timer.add(2.0, self.timed_disconnect)
+        j = self.next_job()
+        if j:
+            self.speech.start(j)
+        else:
+            del self.connections
+            self.timer = timer.add(2.0, self.timed_disconnect)
         
 class PlayController(object):
 
@@ -81,7 +92,7 @@ class PlayController(object):
         log.info('got DTMF: %s', digit)
 
 def usage():
-    print 'usage: play.py [-c <card>] [-p <port>] [-m <module>] <file>'
+    print 'usage: play.py [-c <card>] [-p <port>] [-m <module>] <file>+'
     sys.exit(2)
 
 if __name__ == '__main__':
@@ -108,7 +119,7 @@ if __name__ == '__main__':
     if not args:
         usage()
 
-    fplay = args[0]
+    fplay = args
 
     controller = PlayController()
 
