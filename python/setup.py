@@ -8,6 +8,13 @@ from distutils.command.build_ext import build_ext
 from distutils import log
 import shutil
 
+def svnversion():
+    cmd = os.popen('svnversion -n .')
+    revision = cmd.read()
+    cmd.close()
+
+    return revision
+
 def macroify(m):
     if m[1]:
         return '-D%s=s' % m
@@ -186,7 +193,7 @@ swig_opts = ['-modern', '-new_repr'] + \
             ['-I%s' % i for i in include_dirs]
 
 setup(name = "pyAculab",
-      version = version,
+      version = svnversion(),
       description = "Aculab Python wrappers",
       author = "Lars Immisch",
       author_email = "lars@ibp.de",
