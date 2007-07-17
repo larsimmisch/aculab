@@ -542,7 +542,6 @@ class SpeechChannel(Lockable):
     DTMF detection is started by default.
 
     Logging: output from a SpeechChannel is prefixed with C{sc-}"""
-    """
         
     def __init__(self, controller, card = 0, module = 0, mutex = None,
                  user_data = None, ts_type = lowlevel.kSMTimeslotTypeALaw,

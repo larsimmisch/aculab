@@ -20,8 +20,9 @@ class PlayApp(Glue):
         Glue.__init__(self, controller, module, call)
         self.timer = None
         self.jobs = [PlayJob(self.speech, fn) for fn in fplay]
+        self.iter = self.job_generator()
 
-    def next_job(self):
+    def job_generator(self):
         for j in self.jobs:
             yield j
 
@@ -36,7 +37,7 @@ class PlayApp(Glue):
 
     def timed_switch(self):
         self.connections = connect(self.call, self.speech)
-        j = self.next_job()
+        j = self.iter.next()
         if j:
             self.speech.start(j)
 
@@ -51,10 +52,10 @@ class PlayApp(Glue):
 
     def job_done(self, job, reason):
         log.debug('play done')
-        j = self.next_job()
-        if j:
+        try:
+            j = self.iter.next()
             self.speech.start(j)
-        else:
+        except StopIteration:
             del self.connections
             self.timer = timer.add(2.0, self.timed_disconnect)
         
