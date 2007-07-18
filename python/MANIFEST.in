@@ -1,4 +1,4 @@
 include *.patch
 include *.mk
 include Makefile
-include disthelper.py play.py sipin.py callin.py callout.py unblock.py tests.py
+include disthelper.py play.py sipin.py callin.py callout.py unblock.py tests.py sized_struct.py

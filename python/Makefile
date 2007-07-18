@@ -67,5 +67,5 @@ install:
 
 clean:
 	rm -f aculab/*$(SO) *$(O) aculab/*.pyc \
-		lowlevel.py *_wrap.c *_wrap.doc $(CRUFT)
+		lowlevel.py *_wrap.c *_wrap.doc MANIFEST $(CRUFT)
 	rm -rf build dist
