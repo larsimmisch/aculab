@@ -17,7 +17,7 @@ import aculab.lowlevel as lowlevel
 class PlayApp(Glue):
 
     def __init__(self, controller, module, call):
-        Glue.__init__(self, controller, module, call)
+        Glue.__init__(self, controller, module, call, False)
         self.timer = None
         self.jobs = [PlayJob(self.speech, fn) for fn in fplay]
         self.iter = self.job_generator()
@@ -36,7 +36,7 @@ class PlayApp(Glue):
             timer.cancel(self.timer)
 
     def timed_switch(self):
-        self.connections = connect(self.call, self.speech)
+        self.connection = connect(self.call, self.speech)
         j = self.iter.next()
         if j:
             self.speech.start(j)
@@ -44,7 +44,8 @@ class PlayApp(Glue):
         # self.timer = timer.add(2.0, self.timed_unswitch)
 
     def timed_unswitch(self):
-        del self.connections
+        self.connection.close()
+        self.connection = None
         self.timer = timer.add(2.0, self.timed_disconnect)
 
     def timed_disconnect(self):
@@ -53,10 +54,14 @@ class PlayApp(Glue):
     def job_done(self, job, reason):
         log.debug('play done')
         try:
+            # disconnect and reconnect for Bob, to show silent switching
+            self.connection.close()
+            self.connection = connect(self.call, self.speech)
             j = self.iter.next()
             self.speech.start(j)
         except StopIteration:
-            del self.connections
+            self.connection.close()
+            self.connection = None
             self.timer = timer.add(2.0, self.timed_disconnect)
         
 class PlayController(object):

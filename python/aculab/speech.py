@@ -1123,13 +1123,16 @@ class Glue(object):
     call.
     When deleted, it will close and disconnect the I{SpeechChannel}."""
     
-    def __init__(self, controller, module, call):
+    def __init__(self, controller, module, call, auto_connect = True):
         """Allocate a speech channel on module and connect it to the call.
 
         @param controller: The controller will be passed to the SpeechChannel
         @param module: The module to open the SpeechChannel on. May be either
             a C{tSMModuleId} or an offset.
-        @param call: The call that the SpeechChannel will be connected to."""
+        @param call: The call that the SpeechChannel will be connected to.
+        @param auto_connect: Set to False if call and speech channel should
+        not be connected automatically.
+        """
         
         self.call = call
         # initialize to None in case an exception is raised
@@ -1137,7 +1140,8 @@ class Glue(object):
         self.connection = None
         call.user_data = self
         self.speech = SpeechChannel(controller, module, user_data = self)
-        self.connection = connect(call, self.speech)
+        if auto_connect:
+            self.connection = connect(call, self.speech)
 
     def __del__(self):
         self.close()
