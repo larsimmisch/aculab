@@ -30,23 +30,42 @@ __all__ = ['PlayJob', 'RecordJob', 'DigitsJob', 'SpeechChannel']
 log = logging.getLogger('speech')
 log_switch = logging.getLogger('switch')
 
+def guess_filetype(fn):
+    ext = os.path.splitext(fn)[1]
+    if ext == '.al':
+        return (lowlevel.kSMDataFormatALawPCM, 8000, 8000)
+    elif ext == '.ul':
+        return (lowlevel.kSMDataFormatULawPCM, 8000, 8000)
+    elif ext == '.sw':
+        return (lowlevel.kSMDataFormat16bit, 8000, 16000)
+
+    return lowlevel.kSMDataFormatALawPCM
+
 class PlayJob(object):
     """A PlayJob plays a file through its L{SpeechChannel}."""
 
-    def __init__(self, channel, f, agc = 0,
-                 speed = 0, volume = 0):
+    def __init__(self, channel, f, agc = 0, speed = 0, volume = 0,
+                 filetype = None):
         """Create a PlayJob.
 
         @param channel: The L{SpeechChannel} that will play the file.
         @param f: Either a filename (string) or a file descriptor.
         If a string is passed in, the associated file will be opened for
-        playing and closed upon completion.
-        If a fd is passed in, the file will be left open and not be reset
-        to the beginning.
+        playing and closed upon completion. Filename extensions will be
+        treated as a hint for the file type, but only if filetype is not
+        C{None}. Currently recognized filename extensions are C{.al}, C{.ul}
+        and C{sw}.
+        If a file descriptor d is passed in, the file will be left open (and
+        the file pointer will be left at the position where the replay
+        stopped).
         @param agc: A nonzero value activates automatic gain control
         @param speed: The speed for used for replaying in percent. 0 is the
         same as 100: normal speed.
         @param volume: The volume adjustment in db.
+        @param filetype: The file type. C{kSMDataFormatALawPCM} will be used
+        if it is C{None}.
+
+        The sampling rate is hardcoded to 8000.
 
         See U{sm_replay_start
         <http://www.aculab.com/support/TiNG/gen/apifn-sm_replay_start.html>}
@@ -58,23 +77,31 @@ class PlayJob(object):
         self.agc = agc
         self.speed = speed
         self.volume = volume
+        self.filetype = filetype
+        self.sampling_rate = 8000
+        self.data_rate = 8000
 
         # f may be a string - if it is, close self.file in done
         if type(f) == type(''):
             self.file = file(f, 'rb')
             self.filename = f
+            if filetype is None:
+                self.filetype, self.sampling_rate, self.data_rate = \
+                               guess_filetype(f)
         else:
             self.file = f
+            if filetype is None:
+                self.filetype = lowlevel.kSMDataFormatALawPCM
 
         # read the length of the file
+        pos = self.file.tell()
         self.file.seek(0, 2)
         
         # use a single buffer
         self.data = lowlevel.SM_TS_DATA_PARMS()
-        self.length = self.file.tell()
-        # Assumption: alaw or mulaw
-        self.duration = self.length / 8000.0
-        self.file.seek(0, 0)
+        self.length = self.file.tell() - pos
+        self.duration = self.length / float(self.data_rate)
+        self.file.seek(pos, 0)
         
     def start(self):
         """Start the playback.
@@ -88,8 +115,8 @@ class PlayJob(object):
         replay.agc = self.agc
         replay.speed = self.speed
         replay.volume = self.volume
-        replay.type = lowlevel.kSMDataFormatALawPCM
-        replay.sampling_rate = 8000
+        replay.type = self.filetype
+        replay.sampling_rate = self.sampling_rate
         replay.data_length = self.length
 
         rc = lowlevel.sm_replay_start(replay)
@@ -125,8 +152,7 @@ class PlayJob(object):
         else:
             pos = self.length
 
-        # Assumption: alaw or mulaw
-        self.duration = pos / 8000.0
+        self.duration = pos / float(self.data_rate)
 
         f = self.file
 
@@ -185,7 +211,7 @@ class PlayJob(object):
 
         # position is in seconds
         # Assumption: alaw/mulaw
-        self.position = stop.offset / 8000.0
+        self.position = stop.offset / float(self.data_rate)
 
         log.debug('%s play_stop()', self.channel.name)
 
@@ -194,20 +220,28 @@ class RecordJob(object):
     
     def __init__(self, channel, f, max_octets = 0,
                  max_elapsed_time = 0.0, max_silence = 0.0, elimination = 0,
-                 agc = 0, volume = 0):
+                 agc = 0, volume = 0, filetype = None):
         """Create a RecordJob. The recording will be in alaw, 8kHz.
 
         @param channel: The SpeechChannel that will do the recording.
         @param f: Either a string (filename) or a fd for the file.
         If a string is passed in, the associated file will be opened for
-        recording and closed upon completion. If a fd is passed in,
-        the file will be left open and not be reset to the beginning.
+        recording and closed upon completion. Filename extensions will be
+        treated as a hint for the file type, but only if filetype is not
+        C{None}. Currently recognized filename extensions are C{.al}, C{.ul}
+        and C{.sw}.
+        If a fd is passed in, the file will be left open and not be reset
+        to the beginning.
         @param max_octets: Maximum length of the recording (in bytes)
         @param max_silence: Maximum length of silence in seconds, before the
         recording is terminated.
         @param elimination: Activates silence elimination of not zero.
         @param agc: Nonzero values activate Automatic Gain Control        
         @param volume: The volume adjustment in db.
+        @param filetype: The file type. C{kSMDataFormatALawPCM} will be used
+        if it is C{None}.
+
+        The sampling rate is hardcoded to 8000.
 
         See U{sm_record_start
         <http://www.aculab.com/support/TiNG/gen/apifn-sm_record_start.html>}
@@ -215,12 +249,20 @@ class RecordJob(object):
         """
 
         self.channel = channel
+        self.filetype = filetype
+        self.data_rate = 8000
+        self.sampling_rate = 8000
         # f may be a string - if it is, close self.file in done
         if type(f) == type(''):
             self.file = file(f, 'wb')
             self.filename = f
+            if filetype is None:
+                self.filetype, self.sampling_rate, self.data_rate = \
+                               guess_filetype(f)
         else:
             self.file = f
+            if filetype is None:
+                self.filetype = lowlevel.kSMDataFormatALawPCM
 
         self.data = lowlevel.SM_TS_DATA_PARMS(
             lowlevel.kSMMaxRecordDataBufferSize)
@@ -242,8 +284,8 @@ class RecordJob(object):
         
         record = lowlevel.SM_RECORD_PARMS()
         record.channel = self.channel.channel
-        record.type = lowlevel.kSMDataFormatALawPCM
-        record.sampling_rate = 8000
+        record.type = self.filetype
+        record.sampling_rate = self.sampling_rate
         record.max_octets = self.max_octets
         record.max_elapsed_time = int(self.max_elapsed_time * 1000)
         record.max_silence = int(self.max_silence * 1000)
@@ -319,8 +361,7 @@ class RecordJob(object):
                     silence = how.termination_octets
                     rc = -1
 
-                # Assumption: alaw/mulaw
-                silence = silence / 8000.0
+                silence = silence / float(self.data_rate)
         
                 self.reason = None
                 if term == lowlevel.kSMRecordHowTerminatedLength:
@@ -352,8 +393,7 @@ class RecordJob(object):
                             rc, 'sm_get_recorded_data', self.channel.name)
                     self.done()
 
-                # Assumption: alaw/mulaw
-                self.duration += self.data.length / 8000.0
+                self.duration += self.data.length / float(self.data_rate)
                 
                 self.data.write(self.file)
 
@@ -460,13 +500,6 @@ class DigitsJob(object):
         
         # Compute reason.
         reason = None
-        if self.position:
-            reason = AculabStopped()
-            # Assumption: alaw or mulaw
-            pos = self.position / 8000.0
-        else:
-            # Assumption: alaw or mulaw
-            pos = self.length / 8000.0
 
         # no locks held
         log.debug('%s digits_done(reason=\'%s\', pos=%.3f)',
@@ -969,18 +1002,18 @@ class SpeechChannel(Lockable):
             self.job = job
             job.start()
     
-    def play(self, file, volume = 0, agc = 0, speed = 0):
+    def play(self, file, volume = 0, agc = 0, speed = 0, filetype = None):
         """Play an file.
 
         This is a shorthand to create and start a L{PlayJob}."""
 
-        job = PlayJob(self, file, agc, volume, speed)
+        job = PlayJob(self, file, agc, volume, speed, filetype)
 
         self.start(job)
 
     def record(self, file, max_octets = 0,
                max_elapsed_time = 0.0, max_silence = 0.0, elimination = 0,
-               agc = 0, volume = 0):
+               agc = 0, volume = 0, filetype = None):
         """Record to an alaw file.
 
         This is a shorthand to create and starts a L{RecordJob}."""
