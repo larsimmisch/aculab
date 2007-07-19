@@ -11,6 +11,10 @@
 #include "smfaxapi.h"
 #include "actiff.h"
 #endif
+#ifdef HAVE_T38GW
+#include "t38gwtypes.h"
+#include "smt38gwlib.h"
+#endif
 #include "smdc.h"
 #include "smdc_raw.h"
 #include "smdc_sync.h"
@@ -251,6 +255,9 @@ BLOCKING(smfax_tx_page)
 #ifdef HAVE_FAX
 %include "actiff.h"
 %include "smfaxapi.h"
+#endif
+#ifdef HAVE_T38GW
+%include "smt38gwlib.h"
 #endif
 %include "smdc.h"
 %include "smdc_raw.h"

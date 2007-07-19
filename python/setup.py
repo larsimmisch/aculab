@@ -95,7 +95,7 @@ class build_ext_swig_in_package(build_ext):
 
             of = open('sized_struct.i', 'w')
             parser = xml.sax.make_parser()
-            handler = FindStruct(of)
+            handler = FindStruct(of, u'ACU_SNAPSHOT_PARMS')
 
             parser.setContentHandler(handler)
             parser.parse('lowlevel.xml')
@@ -140,21 +140,24 @@ elif os.name == 'posix':
 
     # crude detection of V5 vs v6
     if os.path.exists(dtk + '/include/cl_lib.h'):
-        # Version 6
-        version = '$Id$'
         fax = '/ProsodyLibraries/Group3Fax/API'
         if not os.path.exists(dtk + fax):
             fax = None
+
+        t38gw = '/ProsodyLibraries/T38_Gateway'
+        if not os.path.exists(dtk + t38gw):
+            t38gw = None
                       
         define_macros = [('ACU_LINUX', None),
                          ('SM_POLL_UNIX', None),
                          ('TiNGTYPE_LINUX', None),
                          ('TiNG_USE_V6', None)]
+
         include_dirs = [dtk + '/include',
-                        dtk + '/ting/apilib',
-                        dtk + '/ting/apilib/LINUX',
-                        dtk + '/ting/pubdoc/gen',
-                        dtk + '/ting/include']
+                        dtk + '/TiNG/pubdoc/gen',
+                        dtk + '/TiNG/apilib',
+                        dtk + '/TiNG/apilib/POSIX',
+                        dtk + '/TiNG/include' ]
 
         lib_dirs = [dtk + '/lib']
         libs = ['acu_cl', 'acu_res', 'acu_sw', 'acu_rmsm', 'acu_common',
@@ -171,10 +174,13 @@ elif os.name == 'posix':
                              dtk + '/ting/libutil/gen-LINUX_V6/bfile.o',   
                              dtk + '/ting/libutil/gen-LINUX_V6/bfopen.o']
 
+            if t38gw:
+                define_macros.append(('HAVE_T38GW', None))
+                include_dirs.append(dtk + t38gw + '/include')
+                lib_dirs.append(dtk + t38gw + '/lib')
+                libs.append('smt38gwlib')
 
     else:
-        # Version 5
-        version = '5.0' 
         define_macros = [('ACU_LINUX', None),
                          ('SM_POLL_UNIX', None)]
 

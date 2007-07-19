@@ -4,8 +4,10 @@ SO := .so
 
 DTK := $(ACULAB_ROOT)
 FAX := ProsodyLibraries/Group3Fax/API
+T38GW := ProsodyLibraries/T38_Gateway
 
 HAVE_FAX := $(strip $(wildcard $(DTK)/$(FAX)/include))
+HAVE_T38GW := $(strip $(wildcard $(DTK)/$(T38GW)/include))
 
 CC := gcc
 
@@ -28,18 +30,25 @@ TiNGTYPE := LINUX
 DEFINES := -DACU_LINUX -DSM_POLL_UNIX -DTiNGTYPE_$(TiNGTYPE) -DTiNG_USE_V6 
 ifneq ($(HAVE_FAX),)
 DEFINES += -DHAVE_FAX
+ifneq ($(HAVE_T38GW),)
+DEFINES += -DHAVE_T38GW
+endif
 endif
 SWIG_DEFINES := -DTiNG_USE_UNDECORATED_NAMES
 C_DEFINES := -g -DNDEBUG -D_REENTRANT -fPIC $(DEFINES)
 
 
-ACULAB_INCLUDE = -I$(DTK)/include -I$(DTK)/TiNG/pubdoc/gen -I$(DTK)/$(FAX)/include -I$(DTK)/TiNG/apilib -I$(DTK)/TiNG/apilib/POSIX -I$(DTK)/TiNG/apilib/LINUX -I$(DTK)/TiNG/include
+ACULAB_INCLUDE = -I$(DTK)/include -I$(DTK)/TiNG/pubdoc/gen -I$(DTK)/TiNG/apilib -I$(DTK)/TiNG/apilib/POSIX -I$(DTK)/TiNG/include -I$(DTK)/$(FAX)/include -I$(DTK)/$(T38GW)/include
 ACULAB_LIBDIR = -L$(DTK)/lib -L$(DTK)/TiNG/lib
 ACULAB_LIBS = -lacu_cl -lacu_sw -lacu_res -lacu_common -lTiNG 
 
 ifneq ($(HAVE_FAX),)
 ACULAB_LIBDIR += -L$(DTK)/$(FAX)/lib
 ACULAB_LIBS += -lfaxlib -lactiff -lfontconfig
+ifneq ($(HAVE_T38GW),)
+ACULAB_LIBDIR += -L$(DTK)/$(T38GW)/lib
+ACULAB_LIBS += -lsmt38gwlib
+endif
 endif
 
 LDFLAGS := -g -shared
