@@ -420,8 +420,10 @@ class MVIP(CTBus):
     attempted to simplify things by treating 'trunk' and 'resource' cards
     differently with regards to the stream numbering.
 
-    Applications need to be aware of this difference. Don't use this bus unless
-    you have to.
+    The L{connect} function tries to take these differences into account, but
+    it hasn't been tested in all possible combinations.
+
+    In other words: don't use this bus unless you have to.
     """
 
     def __init__(self):
