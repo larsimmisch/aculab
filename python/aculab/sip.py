@@ -1,6 +1,6 @@
 # Copyright (C) 2007 Lars Immisch
 
-"""SIP calls."""
+"""Aculab SIP call handles. These are very similar to L{CallHandle}."""
 
 import sys
 import getopt
@@ -22,7 +22,6 @@ class SIPHandle(CallHandleBase):
     event handling is delegated to the controller.
 
     Logging: output from a SIPHandle is prefixed with C{sip-}"""
-    """
 
     def __init__(self, controller, user_data = None,
                  reactor = CallReactor):
