@@ -257,7 +257,7 @@ type_abbr = {lowlevel.kSMTimeslotTypeALaw: 'a',
              lowlevel.kSMTimeslotTypeData: 'd' }
 
 class TDMtx(object):
-	"""A TDM transmitter."""
+    """A TDM transmitter."""
 
     def __init__(self, ts, card = 0, module = 0):
         """Create a TDM transmitter.
@@ -288,7 +288,7 @@ class TDMtx(object):
         self.name = 'tx-%d:%d%s' % (ts[0], ts[1], type_abbr[tdmtx.type])
 
     def close(self):
-		"""Destroy the TDM transmitter.
+        """Destroy the TDM transmitter.
         
         See U{sm_tdmtx_destroy
         <http://www.aculab.com/support/TiNG/gen/\
@@ -299,7 +299,7 @@ class TDMtx(object):
             self.tdmtx = None
 
     def listen_to(self, other):
-		"""Listen to another (datafeed) endpoint."""
+        """Listen to another (datafeed) endpoint."""
         if hasattr(other, 'get_datafeed'):
             connect = lowlevel.SM_TDMTX_DATAFEED_CONNECT_PARMS()
             connect.tdmtx = self.tdmtx
@@ -364,7 +364,7 @@ class TDMrx(object):
         self.datafeed = datafeed.datafeed
 
     def close(self):
-		"""Destroy the TDM receiver.
+        """Destroy the TDM receiver.
 
         See U{sm_tdmrx_destroy
         <http://www.aculab.com/support/TiNG/gen/\
