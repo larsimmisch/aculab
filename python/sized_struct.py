@@ -1,3 +1,7 @@
+#!/usr/bin/env python
+
+# Copyright (C) 2006-2007 Lars Immisch
+
 import sys
 import getopt
 import xml.sax

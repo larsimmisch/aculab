@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+# Copyright (C) 2007 Lars Immisch
+
 import unittest
 from aculab.error import AculabError, AculabSpeechError
 from aculab.sdp import SDP

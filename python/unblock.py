@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+# Copyright (C) 2007 Lars Immisch
+
 from aculab.snapshot import Snapshot
 from aculab.error import AculabError
 import aculab.lowlevel as lowlevel

@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+# Copyright (C) 2002-2007 Lars Immisch
+
 import time
 from aculab.error import AculabError
 from aculab.callcontrol import Call

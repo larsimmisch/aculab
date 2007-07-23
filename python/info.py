@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+# Copyright (C) 2004-2007 Lars Immisch
+
 from pprint import PrettyPrinter
 from aculab.snapshot import Snapshot
 

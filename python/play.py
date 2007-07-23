@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+# Copyright (C) 2004-2007 Lars Immisch
+
 import sys
 import os
 import getopt

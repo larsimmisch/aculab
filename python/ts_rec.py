@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+# Copyright (C) 2007 Lars Immisch
+
 import sys
 import os
 import getopt
@@ -25,7 +27,7 @@ class RecordController:
 
 def usage():
     print '''usage:
-    dtmfloop.py [-c <card>] [-m <module>] <stream>:<timeslot> <filename>
+    ts_rec.py [-c <card>] [-m <module>] <stream>:<timeslot> <filename>
     '''
     sys.exit(-2)
 

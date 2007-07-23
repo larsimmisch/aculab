@@ -1,3 +1,5 @@
+/* Copyright (C) 2002-2007 Lars Immisch */
+
 %module(docstring="The Aculab API as seen by SWIG.") lowlevel
 %{
 #include "netdb.h"
