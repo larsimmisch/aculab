@@ -1,3 +1,5 @@
+# Copyright (C) 2003-2007 Lars Immisch
+
 """A thread-based timer"""
 
 import threading

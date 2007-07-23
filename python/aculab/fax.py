@@ -1,3 +1,5 @@
+# Copyright (C) 2004-2007 Lars Immisch
+
 """FAX Job classes for the SpeechChannel."""
 
 import sys

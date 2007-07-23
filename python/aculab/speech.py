@@ -1,3 +1,5 @@
+# Copyright (C) 2002-2007 Lars Immisch
+
 """Higher level speech processing functions.
 
 This module contains the SpeechChannel, which is a full duplex prosody channel,

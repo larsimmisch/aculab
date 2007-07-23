@@ -1,3 +1,5 @@
+# Copyright (C) 2002-2007 Lars Immisch
+
 """Various reactors for Windows and Unix."""
 
 import threading

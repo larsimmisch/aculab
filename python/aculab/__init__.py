@@ -1,3 +1,5 @@
+# Copyright (C) 2003-2007 Lars Immisch
+
 """Event driven, MVC inspired Python wrapper around the Aculab API."""
 
 import logging

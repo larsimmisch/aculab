@@ -1,3 +1,5 @@
+# Copyright (C) 2005-2007 Lars Immisch
+
 """A snapshot of all available cards, ports and modules (v6 API and later)."""
 
 from pprint import PrettyPrinter

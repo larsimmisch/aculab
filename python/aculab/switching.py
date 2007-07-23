@@ -1,3 +1,5 @@
+# Copyright (C) 2002-2007 Lars Immisch
+
 '''Connection endpoints, Connection objects and CT busses.'''
 
 import sys

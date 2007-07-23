@@ -1,5 +1,7 @@
-"""SIP calls.
-"""
+# Copyright (C) 2007 Lars Immisch
+
+"""SIP calls."""
+
 import sys
 import getopt
 import lowlevel

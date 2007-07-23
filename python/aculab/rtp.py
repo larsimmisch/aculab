@@ -1,3 +1,5 @@
+# Copyright (C) 2007 Lars Immisch
+
 """RTP and speech processing functions.
 
 This module contains RTP transmitters and receivers for speech (L{VMPtx} and

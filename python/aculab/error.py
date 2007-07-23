@@ -1,3 +1,5 @@
+# Copyright (C) 2002-2007 Lars Immisch
+
 """Exception classes for the Aculab API.
 
 Job termination reasons are also modelled as exceptions.

@@ -1,3 +1,6 @@
+# Copyright (c) 2001-2004 Twisted Matrix Laboratories for OrderedDict
+# Copyright (C) 2003-2007 Lars Immisch
+
 """Utility classes: L{OrderedDict} and L{Lockable}."""
 
 import os

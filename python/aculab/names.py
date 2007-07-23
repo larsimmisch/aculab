@@ -1,3 +1,5 @@
+# Copyright (C) 2002-2007 Lars Immisch
+
 """Map constant values to names.
 
 Available dictionaries are:

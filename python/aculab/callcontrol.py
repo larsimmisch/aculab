@@ -1,3 +1,5 @@
+# Copyright (C) 2002-2007 Lars Immisch
+
 """Call Control - a thin layer on top of the Aculab API.
 
 See U{callin.py <http://ibp.de/projects/aculab/browser/trunk/python/callin.py>}
