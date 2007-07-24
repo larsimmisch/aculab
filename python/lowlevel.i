@@ -65,6 +65,12 @@ unsigned char bitrev[] = {
 };
 
 PyObject *set_inaddr(PyObject *address, struct sockaddr_in *addr);
+void t38gw_callback(SM_T38GW_JOB_CONTEXT_PARMS *context);
+
+typedef struct t38jobdata
+{
+	int pipe[2];
+} T38JOBDATA;
 
 %}
 
@@ -164,6 +170,8 @@ BLOCKING(smfax_tx_page)
 
 // The typedef name doesn't work here. 
 %ignore sm_ts_data_parms::data;
+%ignore sm_t38gw_create_job_parms::user_id;
+%ignore sm_t38gw_create_job_parms::job_notify;
 
 %apply char[ANY] { ACU_UCHAR[ANY] };
 
@@ -522,6 +530,45 @@ GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 }
 %enddef
 
+#ifdef HAVE_T38GW
+%extend SM_T38GW_CREATE_JOB_PARMS
+{
+    SM_T38GW_CREATE_JOB_PARMS() {
+		int rc;
+		T38JOBDATA * data = (T38JOBDATA*)calloc(1, sizeof(T38JOBDATA));
+		SM_T38GW_CREATE_JOB_PARMS *c = (SM_T38GW_CREATE_JOB_PARMS*)
+			calloc(1, sizeof(SM_T38GW_CREATE_JOB_PARMS));
+
+		rc = pipe(data->pipe);
+		if (rc < 0)
+		{
+			PyErr_SetFromErrno(PyExc_OSError);
+			return NULL;
+		}
+
+		c->user_id = data;
+
+		return c;
+    }
+
+	PyObject *fd()
+	{
+		T38JOBDATA * data = (T38JOBDATA*)self->user_id;
+
+		return PyInt_FromLong(data->pipe[1]);
+	}
+
+    ~SM_T38GW_CREATE_JOB_PARMS() {
+		T38JOBDATA * data = (T38JOBDATA*)self->user_id;
+		
+		close(data->pipe[0]);
+		close(data->pipe[1]);
+		free(data);
+		free(self);
+    }
+}
+#endif
+
 #ifdef TiNG_USE_V6
 #ifndef SWIGXML
 %include "sized_struct.i"
@@ -538,6 +585,22 @@ void delete_ACTIFF_PAGE_HANDLE(ACTIFF_PAGE_HANDLE *self){
   if (self) free(self);
 }
 */
+
+void t38gw_callback(SM_T38GW_JOB_CONTEXT_PARMS *context)
+{
+   int rc;
+   char buf = 0;
+   T38JOBDATA *data = (T38JOBDATA*)context->user_id;
+
+   rc = write(data->pipe[0], &buf, sizeof(buf));
+   if (rc != sizeof(buf))
+   {
+      fprintf(stderr, "t38gw_callback: write failed: %s",
+			  strerror(errno));
+   }
+
+   return;
+}
 
 PyObject *add_result(PyObject *result, PyObject *o)
 {

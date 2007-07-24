@@ -52,9 +52,6 @@ class _CallEventReactor:
         event = lowlevel.STATE_XPARMS()
         
         while True:
-            if not self.calls:
-                return
-            
             event.handle = 0
             event.timeout = 200
 

@@ -1,6 +1,8 @@
 # Copyright (C) 2002-2007 Lars Immisch
 
-'''Connection endpoints, Connection objects and CT busses.'''
+"""L{connect} and support classes.
+
+This module contains Connection endpoints, Connection objects and CT busses."""
 
 import sys
 import lowlevel
@@ -619,22 +621,35 @@ def connect(a, b, bus=DefaultBus(), force_bus=False):
 
     c = Connection(bus)
 
+    if type(a) == tuple:
+        atx, arx = a[:2]
+    else:
+        atx = arx = a
+
+    if type(b) == tuple:
+        btx, brx = b[:2]
+    else:
+        btx = brx = b
+
     if not force_bus:
         # Optimizations first
 
         # TiNG version 2: same module, make datafeed connections
-        # Doesn't apply to calls because they have to datafeeds
-        if a.get_module() == b.get_module() \
-               and a.get_datafeed() and b.get_datafeed():
-            c.connections = [a.listen_to(b), b.listen_to(a)]
+        # Doesn't apply to calls because they have no datafeeds
+        if arx.get_module() == brx.get_module() \
+               and atx.get_module() == btx.get_module() \
+               and arx.get_datafeed() and brx.get_datafeed():
+            c.connections = [atx.listen_to(brx), btx.listen_to(arx)]
 
             return c
 
         # Same card or module, connect directly
-        if a.get_switch() == b.get_switch() \
-               or a.get_module() == b.get_module():
-            c.endpoints = [a.listen_to(b.get_timeslot()),
-                           b.listen_to(a.get_timeslot())]
+        if arx.get_switch() == brx.get_switch() \
+               and atx.get_switch() == btx.get_switch() \
+               or (atx.get_module() == brx.get_module() \
+                   and btx.get_module() == arx.get_module()):
+            c.endpoints = [atx.listen_to(brx.get_timeslot()),
+                           btx.listen_to(arx.get_timeslot())]
             return c
         
     # The general case: allocate two timeslots...
@@ -646,19 +661,19 @@ def connect(a, b, bus=DefaultBus(), force_bus=False):
 
         # ad-hoc: Prosody ISA daughterboards don't obey the funny
         # MVIP stream numbering scheme
-        if a.get_switch() != -1 and b.get_switch() != -1:
-            c.endpoints = [ b.speak_to(c.timeslots[0]),
-                            a.listen_to(bus.invert(c.timeslots[0])),
-                            a.speak_to(c.timeslots[1]),
-                            b.listen_to(bus.invert(c.timeslots[1])) ]
+        if arx.get_switch() != -1 and brx.get_switch() != -1:
+            c.endpoints = [ brx.speak_to(c.timeslots[0]),
+                            atx.listen_to(bus.invert(c.timeslots[0])),
+                            arx.speak_to(c.timeslots[1]),
+                            btx.listen_to(bus.invert(c.timeslots[1])) ]
 
             return c
         
     # nonpathological case
-    c.endpoints = [ b.speak_to(c.timeslots[0]),
-                    a.listen_to(c.timeslots[0]),
-                    a.speak_to(c.timeslots[1]),
-                    b.listen_to(c.timeslots[1]) ]    
+    c.endpoints = [ brx.speak_to(c.timeslots[0]),
+                    atx.listen_to(c.timeslots[0]),
+                    arx.speak_to(c.timeslots[1]),
+                    btx.listen_to(c.timeslots[1]) ]    
     return c
 
 if __name__ == '__main__':

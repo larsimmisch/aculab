@@ -61,10 +61,11 @@ class SIPHandle(CallHandleBase):
                 response_notification_mask = 0, call_options = 0,
                 custom_headers = None):
 
-        media = ACU_MEDIA_OFFER_ANSWER()
+        media = lowlevel.ACU_MEDIA_OFFER_ANSWER()
         media.raw_sdp = str(sdp)
         
         outparms = lowlevel.SIP_OUT_PARMS()
+        outparms.net = self.port
         outparms.destination_addr = destination_address
         outparms.originating_addr = originating_address
         outparms.contact_addr = contact_address
@@ -173,6 +174,9 @@ class SIPHandle(CallHandleBase):
             self.name = 'sip-00000000'
             
     def ev_incoming_call_det(self):
+        self.get_details()
+
+    def ev_media(self):
         self.get_details()
 
     def ev_ext_hold_request(self):

@@ -292,3 +292,41 @@ class FaxTxJob(FaxJob, threading.Thread):
             self.done()
         else:
             self.done(AculabFAXError(rc, 'FaxRxJob'))
+
+class T38GWSession(threading.Thread):
+
+    def __init__(self):
+        threading.Thread.__init__(self, name='t38gwsession')
+
+        session = lowlevel.SM_T38GW_SESSION_PARMS()
+
+        rc = lowlevel.sm_t38gw_session_create(session)
+        if rc:
+            raise AculabError(rc, 'sm_t38gw_session_create')
+
+        self.session = session.session
+
+    def stop(self):
+        pstop = lowlevel.SM_T38GW_STOP_SESSION_PARMS()
+        pstop.session = self.session
+
+        rc = lowlevel.sw_t38gw_stop_session(pstop)
+        if rc:
+            raise AculabError(rc, 'sm_t38gw_stop_session')
+        
+    def run(self):
+        log.debug('%x starting t38gw session)', self.session)
+
+        parms = lowlevel.SM_T38GW_WORKER_PARMS()
+        parms.session = session
+
+        rc = lowlevel.sm_t38gw_worker_fn(parms)
+        if rc:
+            log.error('%x sm_t38gw_worker_fn failed: %d', self.session, rc)
+        else:
+            log.info('%x sm_t38gw_worker_fn exited', self.session)
+
+        rc = lowlevel.sm_t38gw_destroy_session(self.session)
+        if rc:
+            log.error('%x sm_t38gw_destroy_session failed: %d',
+                      self.session, rc)

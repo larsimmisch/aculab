@@ -299,7 +299,6 @@ class VMPtx(RTPBase):
 
         # initialize early 
         self.event_vmptx = None
-        self.event_vmprx = None
 
         # create vmptx
         vmptx = lowlevel.SM_VMPTX_CREATE_PARMS()
