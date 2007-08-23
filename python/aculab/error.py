@@ -40,11 +40,11 @@ class AculabSpeechError(AculabError):
     def __init__(self, rc, function = 'unknown', name = ''):
         AculabError.__init__(self, rc, function, name, sm_error_names)
             
-class AculabFAXError(AculabError):
+class AculabFAXError(AculabSpeechError):
     """FAX exception. The error code is stored in value."""
 
     def __init__(self, rc, function = 'unknown', name = ''):
-        AculabError.__init__(self, rc, function, name, fax_error_names)
+        AculabSpeechError.__init__(self, rc, function, name, fax_error_names)
 
 class AculabStopped(Exception):
     """Termination reason: stopped."""

@@ -34,7 +34,7 @@ class CallData:
 
 class IncomingCallController:
 
-    def ready(self, vmprx, sdp, user_data):
+    def vmprx_ready(self, vmprx, sdp, user_data):
         """Called when the vmprx is ready."""
         vmprx.config_tones()
         user_data.call.accept(sdp)

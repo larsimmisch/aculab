@@ -114,10 +114,12 @@ typedef struct {
 }
 %enddef
 
-/* This list was manually created (for version 5.10.0) from all structures 
+/* This list was manually created from all structures 
    that:
    - have a timeout member
    - are used in a function call
+
+   Last updated for 6.4.56
 
    It might become incomplete in future versions.
 */
@@ -137,6 +139,7 @@ BLOCKING(smfax_rx_negotiate)
 BLOCKING(smfax_tx_negotiate)
 BLOCKING(smfax_rx_page)
 BLOCKING(smfax_tx_page)
+BLOCKING(sm_t38gw_worker_fn)
 
 /* Functions that are in Aculab's headers, but not implemented.
 

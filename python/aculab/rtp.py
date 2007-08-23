@@ -94,11 +94,11 @@ class VMPrx(RTPBase):
         """Allocate an RTP receiver, configure alaw/mulaw and RFC 2833 codecs
         and add the event to the reactor.
 
-        Note: the VMPrx is not ready to use until it has called 'ready' on its
-        controller.
+        Note: the VMPrx is not ready to use until it has called 'vmprx_ready'
+        on its controller.
         
         Controllers must implement:
-         - ready(vmprx, sdp, user_data)
+         - vmprx_ready(vmprx, sdp, user_data)
          - dtmf(vmprx, digit, user_data)."""
 
         RTPBase.__init__(self, card, module, mutex, user_data, ts_type)
@@ -197,7 +197,7 @@ class VMPrx(RTPBase):
             self.sdp.setServerIP(self.address)
             self.sdp.addMediaDescription(md)
 
-            self.controller.ready(self, self.sdp, self.user_data)
+            self.controller.vmprx_ready(self, self.sdp, self.user_data)
 
         elif status.status == lowlevel.kSMVMPrxStatusDetectTone:
             tone = status.u.tone.id
@@ -492,11 +492,11 @@ class FMPrx(RTPBase):
                  reactor = SpeechReactor):
         """Allocate an RTP FAX receiver, and add the event to the reactor.
 
-        Note: the FMPrx is not ready to use until it has called 'ready' on its
-        controller.
+        Note: the FMPrx is not ready to use until it has called 'fmprx_ready'
+        on its controller.
         
         Controllers must implement:
-         - ready(vmprx, sdp, user_data)
+         - fmprx_ready(vmprx, sdp, user_data)
         """
 
         RTPBase.__init__(self, card, module, mutex, user_data, ts_type)
@@ -595,7 +595,7 @@ class FMPrx(RTPBase):
             self.sdp.setServerIP(self.address)
             self.sdp.addMediaDescription(md)
 
-            self.controller.ready(self, self.sdp, self.user_data)
+            self.controller.fmprx_ready(self, self.sdp, self.user_data)
 
         elif status.status == lowlevel.kSMFMPrxStatusStopped:
             self.reactor.remove(self.event_fmprx)

@@ -8,8 +8,13 @@ import time
 import threading
 import logging
 import lowlevel
-import names
-from error import *
+from names import sm_error_names, fax_error_names
+from error import AculabError, AculabFAXError
+from util import translate_card
+from reactor import SpeechReactor
+# The following are only needed for type comparisons
+from rtp import VMPtx, VMPtx, FMPtx, FMPrx
+from switching import TDMtx, TDMrx
 
 __all__ = ['FaxRxJob', 'FaxTxJob']
 
@@ -23,7 +28,7 @@ def fax_global_data():
         _fax_global_data = lowlevel.SMFAX_GLOBAL_DATA()
         rc = lowlevel.smfax_lib_init(_fax_global_data)
         if rc:
-            raise AculabError(rc, 'smfax_lib_init')
+            raise AculabFAXError(rc, 'smfax_lib_init')
 
     return _fax_global_data
 
@@ -69,7 +74,7 @@ class FaxJob:
 
         rc = lowlevel.smfax_create_session(session)
         if rc != lowlevel.kSMFaxStateMachineRunning:
-            raise AculabError(rc, 'smfax_create_session')
+            raise AculabFAXError(rc, 'smfax_create_session')
 
         self.session = session
 
@@ -128,7 +133,7 @@ class FaxJob:
         
         log.debug('%s %s(reason=\'%s\', exit_code=\'%s\')',
                   self.channel.name, function, reason,
-                  names.fax_error_names[self.session.exit_error_code])
+                  fax_error_names[self.session.exit_error_code])
 
         self.close()
         channel = self.channel
@@ -180,7 +185,7 @@ class FaxRxJob(FaxJob, threading.Thread):
             rc = lowlevel.smfax_rx_page(process)
 
             log.debug('%s faxrx page received %s', self.channel.name,
-                      names.fax_error_names[rc])
+                      fax_error_names[rc])
 
             access = lowlevel.SMFAX_PAGE_ACCESS_PARMS()
             access.fax_session = self.session
@@ -232,7 +237,7 @@ class FaxTxJob(FaxJob, threading.Thread):
         page_props = lowlevel.ACTIFF_PAGE_PROPERTIES()
         rc = lowlevel.actiff_page_properties(self.file, page_props)
         if rc:
-            self.done(AculabFaxError(rc, 'actiff_page_properties'))
+            self.done(AculabFAXError(rc, 'actiff_page_properties'))
             return
 
         neg = lowlevel.SMFAX_NEGOTIATE_PARMS()
@@ -269,7 +274,7 @@ class FaxTxJob(FaxJob, threading.Thread):
                 # Load a page without conversion
                 rc = lowlevel.smfax_load_page(access)
             else:
-                raise AculabFaxError(rc, 'smfax_need_conversion')
+                raise AculabFAXError(rc, 'smfax_need_conversion')
 
             process = lowlevel.SMFAX_PAGE_PROCESS_PARMS()
             process.fax_session = self.session
@@ -280,7 +285,7 @@ class FaxTxJob(FaxJob, threading.Thread):
             rc = lowlevel.smfax_tx_page(process)
 
             log.debug('%s faxtx page %d sent %s', self.channel.name, index + 1,
-                      names.fax_error_names[rc])
+                      fax_error_names[rc])
             
             rc2 = lowlevel.smfax_close_page(process.page_handle)
             if rc2:
@@ -300,9 +305,9 @@ class T38GWSession(threading.Thread):
 
         session = lowlevel.SM_T38GW_SESSION_PARMS()
 
-        rc = lowlevel.sm_t38gw_session_create(session)
+        rc = lowlevel.sm_t38gw_create_session(session)
         if rc:
-            raise AculabError(rc, 'sm_t38gw_session_create')
+            raise AculabFAXError(rc, 'sm_t38gw_session_create')
 
         self.session = session.session
 
@@ -312,21 +317,155 @@ class T38GWSession(threading.Thread):
 
         rc = lowlevel.sw_t38gw_stop_session(pstop)
         if rc:
-            raise AculabError(rc, 'sm_t38gw_stop_session')
+            raise AculabFAXError(rc, 'sm_t38gw_stop_session')
         
     def run(self):
-        log.debug('%x starting t38gw session)', self.session)
+        log.debug('t38gw-%x starting t38gw session', self.session)
 
         parms = lowlevel.SM_T38GW_WORKER_PARMS()
-        parms.session = session
+        parms.session = self.session
 
         rc = lowlevel.sm_t38gw_worker_fn(parms)
         if rc:
-            log.error('%x sm_t38gw_worker_fn failed: %d', self.session, rc)
+            log.error('t38gw-%x sm_t38gw_worker_fn failed: %s', self.session,
+                      sm_error_names[rc])
         else:
-            log.info('%x sm_t38gw_worker_fn exited', self.session)
+            log.info('t38gw-%x sm_t38gw_worker_fn exited', self.session)
 
         rc = lowlevel.sm_t38gw_destroy_session(self.session)
         if rc:
-            log.error('%x sm_t38gw_destroy_session failed: %d',
-                      self.session, rc)
+            log.error('t38gw-%x sm_t38gw_destroy_session failed: %s',
+                      self.session, sm_error_names[rc])
+
+    def add(self, job):
+        add_job = lowlevel.SM_T38GW_ADD_JOB_PARMS()
+        add_job.session = self.session
+        add_job.job = self.job
+
+        rc = lowlevel.sm_t38gw_add_job(add_job)
+        if rc:
+            raise AculabFAXError(rc, 'sm_t38gw_add_job')
+        
+        log.debug('t38gw-%x started t38gw job)', self.session)
+
+
+class T38GWJob:
+
+    def __init__(self, controller, local, remote, card = 0, module = 0,
+                 modems = None, asn1 = 3, user_data = None,
+                 reactor = SpeechReactor):
+        """Create a fax job.
+
+        @param controller: a controller that implements...
+        @param local: a tuple (tx, rx) of either TDM, VMP or FMP for the local
+        (sending) side.
+        @param remote: a tuple (tx, rx) of either TDM, VMP or FMP for the
+        remote (receiving side)
+        @returns: a tSMT38GWJobId
+        """
+
+        if type(local) != tuple or type(remote) != tuple:
+            raise ValueError('local and remote must be (tx, rx) tuples')
+
+        if modems is None:
+            modems = lowlevel.T38GW_MODEMTYPE_V29 | \
+                     lowlevel.T38GW_MODEMTYPE_V27 | \
+                     lowlevel.T38GW_MODEMTYPE_V17
+
+        # Initialize early so that close can always be called.
+        self.reactor = reactor
+        self.fd = None
+        self.job = None
+
+        create = lowlevel.SM_T38GW_CREATE_JOB_PARMS()
+        create.module = translate_card(card, module)[1].open.module_id
+        create.asn1 = asn1
+        create.modems = modems
+
+        if type(local[0]) == VMPtx:
+            if type(local[1]) != VMPrx:
+                raise ValueError('tx and rx must be of the same kind')
+
+            create.local_endpoint.type = lowlevel.kSMT38GWDeviceTypeT30VMP
+            create.local_endpoint.T30VMP_EP.vmptx = local[0]
+            create.local_endpoint.T30VMP_EP.vmprx = local[1]
+
+        if type(local[0]) == TDMtx:
+            if type(local[1]) != TDMrx:
+                raise ValueError('tx and rx must be of the same kind')
+
+            create.local_endpoint.type = lowlevel.kSMT38GWDeviceTypeT30TDM
+            create.local_endpoint.T30TDM_EP.tdmtx = local[0]
+            create.local_endpoint.T30TDM_EP.tdmrx = local[1] 
+
+        if type(local[0]) == FMPtx:
+            if type(local[1]) != FMPrx:
+                raise ValueError('tx and rx must be of the same kind')
+
+            create.local_endpoint.type = lowlevel.kSMT38GWDeviceTypeT38FMP
+            create.local_endpoint.T38FMP_EP.fmptx = local[0]
+            create.local_endpoint.T38FMP_EP.fmprx = local[1]
+
+        if type(remote[0]) == VMPtx:
+            if type(remote[1]) != VMPrx:
+                raise ValueError('tx and rx must be of the same kind')
+
+            create.remote_endpoint.type = lowlevel.kSMT38GWDeviceTypeT30VMP
+            create.remote_endpoint.T30VMP_EP.vmptx = remote[0]
+            create.remote_endpoint.T30VMP_EP.vmprx = remote[1]
+
+        if type(remote[0]) == TDMtx:
+            if type(remote[1]) != TDMrx:
+                raise ValueError('tx and rx must be of the same kind')
+
+            create.local.type = lowlevel.kSMT38GWDeviceTypeT30TDM
+            create.local.T30TDM_EP.tdmtx = remote[0]
+            create.local.T30TDM_EP.tdmrx = remote[1] 
+
+        if type(remote[0]) == FMPtx:
+            if type(remote[1]) != FMPrx:
+                raise ValueError('tx and rx must be of the same kind')
+
+            create.remote_endpoint.type = lowlevel.kSMT38GWDeviceTypeT38FMP
+            create.remote_endpoint.T38FMP_EP.fmptx = remote[0]
+            create.remote_endpoint.T38FMP_EP.fmprx = remote[1]
+
+        rc = lowlevel.sm_t38gw_create_job(create)
+        if rc:
+            raise AculabFAXError(rc, 'sm_t38gw_create_job')
+
+        self.job = create.job
+        self.fd = create.fd()
+        self.reactor.add(self.fd, self.notify)
+
+    def notify(self):
+        status = lowlevel.SM_T38GW_JOB_STATUS_PARMS()
+        status.job = self.job
+
+        rc = lowlevel.sm_t38gw_job_status(status)
+        if rc:
+            # This shouldn't happen. This exception should shut down
+            # the reactor (at least ours)
+            raise AculabFAXError(rc, 'sm_t38gw_job_status')
+
+        self.controller.t38gw_terminated(self)
+            
+    def close(self):
+        if self.job:
+            rc = lowlevel.sm_t38gw_destroy_job(self.job)
+            self.job = None
+            if rc:
+                raise AculabFAXError(rc, 'sm_t38gw_create_job')
+
+        if self.fd:
+            self.reactor.remove(self.fd)
+            self.fd = None
+
+    def stop(self):
+        if self.job:
+            abort = lowlevel.SM_T38GW_ABORT_PARMS()
+            abort.job = self.job
+
+            rc = lowlevel.sm_t38gw_abort_job(abort)
+            if rc:
+                raise AculabFAXError(rc, 'sm_t38gw_abort_job')

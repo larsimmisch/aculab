@@ -63,7 +63,7 @@ aculab/_lowlevel$(SO): $(OBJS)
 # diff -u $(DTK)/include/cl_lib.h cl_lib.h2 > cl_lib.patch
 
 install:
-	python install.py aculab
+	python disthelper.py aculab
 
 clean:
 	rm -f aculab/*$(SO) *$(O) aculab/*.pyc \

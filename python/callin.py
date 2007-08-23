@@ -40,6 +40,9 @@ class IncomingCallController:
     def ev_remote_disconnect(self, call, model):
         call.disconnect()
 
+    def ev_remote_disconnect(self, call, model):
+        raise StopIteration
+        
 class RepeatedIncomingCallController(IncomingCallController):
 
     def ev_idle(self, call, model):
@@ -85,4 +88,8 @@ if __name__ == '__main__':
     for i in range(numcalls):
         c = Call(controller, card=card, port=port, timeslot=timeslot)
 
-    CallReactor.run()
+    try:
+        CallReactor.run()
+    except StopIteration:
+        pass
+    

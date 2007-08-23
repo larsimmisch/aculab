@@ -50,6 +50,7 @@ class CallHandleBase:
 
         self.handle = None
         self.name = 'cc-0000'
+        self.domain = 'pstn'
         
         # The reactor sets the last state changing event after dispatching
         # the event. Which events are deemed state changing is controlled via
@@ -637,6 +638,13 @@ class CallHandle(CallHandleBase):
 
         Calls L{get_details} to cache them.
         """
+        self.get_details()
+
+    def ev_details(self):
+        """Internal event handler for C{EV_DETAILS}.
+
+        Calls L{get_details} to update the details.
+        """        
         self.get_details()
 
     def ev_call_connected(self):

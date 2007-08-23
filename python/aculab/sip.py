@@ -35,9 +35,15 @@ class SIPHandle(CallHandleBase):
 
         self.details = None
         self.name = 'sip-00000000'
+        self.domain = 'sip'
         
     def openin(self, request_notification_mask = 0,
                response_notification_mask = 0, call_options = 0):
+        """Open for an incoming SIP Handle.
+        
+        See U{sip_openin
+        <http://www.aculab.com/Support/v6_api/sip/\
+        sip_openin.htm>}."""
         
         inparms = lowlevel.SIP_IN_PARMS()
         inparms.net = self.port
@@ -60,6 +66,11 @@ class SIPHandle(CallHandleBase):
                 contact_address = None, request_notification_mask = 0,
                 response_notification_mask = 0, call_options = 0,
                 custom_headers = None):
+        """Open for an outgoing SIP Handle.
+        
+        See U{sip_openout
+        <http://www.aculab.com/Support/v6_api/sip/\
+        sip_openout.htm>}."""
 
         media = lowlevel.ACU_MEDIA_OFFER_ANSWER()
         media.raw_sdp = str(sdp)
@@ -105,7 +116,11 @@ class SIPHandle(CallHandleBase):
         return self.details
 
     def accept(self, sdp, contact_address = None):
-        """Accept the call."""
+        """Accept the call.
+
+        See U{sip_openout
+        <http://www.aculab.com/Support/v6_api/sip/\
+        sip_accept.htm>}."""
 
         accept = lowlevel.SIP_ACCEPT_PARMS()
         accept.handle = self.handle
@@ -117,8 +132,30 @@ class SIPHandle(CallHandleBase):
 
         log.debug('%s accept()', self.name)
 
+    def media_accept(self, sdp, contact_address = None):
+        """Accept the media proposal.
+
+        See U{sip_openout
+        <http://www.aculab.com/Support/v6_api/sip/\
+        sip_media_accept.htm>}."""
+
+        accept = lowlevel.SIP_MEDIA_ACCEPT_PARMS()
+        accept.handle = self.handle
+        accept.media_offer_answer.raw_sdp = str(sdp)
+        
+        rc = lowlevel.sip_media_accept(accept)
+        if rc:
+            raise AculabError(rc, 'sip_media_accept', self.name)
+
+        log.debug('%s media_accept()', self.name)
+
     def incoming_ringing(self):
-        """Signal incoming ringing."""
+        """Signal incoming ringing.
+
+        See U{sip_incoming_ringing
+        <http://www.aculab.com/Support/v6_api/sip/\
+        sip_incoming_ringing.htm>}."""
+
         ringing = lowlevel.SIP_INCOMING_RINGING_PARMS()
         ringing.handle = self.handle
         
@@ -176,16 +213,19 @@ class SIPHandle(CallHandleBase):
     def ev_incoming_call_det(self):
         self.get_details()
 
+    def ev_details(self):
+        self.get_details()
+        
     def ev_media(self):
         self.get_details()
 
-    def ev_ext_hold_request(self):
+    def ev_media_propose(self):
         self.get_details()
 
-    def ev_outgoing_ringing(self):
+    def ev_ext_transfer_information(self):
         self.get_details()
 
-    def ev_call_connected(self):
+    def ev_ext_diversion(self):
         self.get_details()
 
     def ev_idle(self):
