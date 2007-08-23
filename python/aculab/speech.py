@@ -504,8 +504,103 @@ class DigitsJob(object):
         reason = None
 
         # no locks held
-        log.debug('%s digits_done(reason=\'%s\', pos=%.3f)',
-                  channel.name, reason, pos)
+        log.debug('%s digits_done(reason=\'%s\')',
+                  channel.name, reason)
+
+        channel.job_done(self, 'digits_done', reason) #, pos)
+
+
+class ToneJob(object):
+    """Job to play a predefined Tone."""
+    
+    def __init__(self, channel, tone, duration = 0):
+        """Prepare to play a tone.
+
+        @param tone: A predefined tone id.
+        See the U{list of pre-loaded output tones
+        <http://www.aculab.com/support/TiNG/gen/apifn-sm_play_tone.html>} for
+        valid tone ids.
+
+        @param duration: The duration of the tone in milliseconds.
+        O is infinite.
+
+        See U{sm_play_tone
+        <http://www.aculab.com/support/TiNG/gen/apifn-sm_play_tone.html>}
+        for more information about the parameters.
+        """
+        
+        self.channel = channel
+        self.tone = tone
+        self.duration = duration
+
+    def start(self):
+        """Do not call this method directly - call L{SpeechChannel.start}
+        instead."""
+        
+        tp = lowlevel.SM_PLAY_TONE_PARMS()
+        tp.channel = self.channel.channel
+        tp.tone = self.tone
+        tp.duration = self.duration
+
+        rc = lowlevel.sm_play_tone(tp)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_play_tone', self.channel.name)
+
+        log.debug('%s tone(%d, duration=%d)',
+                  self.channel.name, self.tone, self.duration)
+
+        # add the write event to the reactor
+        self.channel.reactor.add(os_event(self.channel.event_write),
+                                 self.on_write)
+
+    def on_write(self):
+        if self.channel is None:
+            return
+        
+        status = lowlevel.SM_PLAY_TONE_STATUS_PARMS()
+        status.channel = self.channel.channel
+
+        rc = lowlevel.sm_play_tone_status(status)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_play_tone_status',
+                                    self.channel.name)
+
+        if status.status == lowlevel.kSMPlayToneStatusComplete:
+
+            channel = self.channel
+            
+            reason = None
+
+            # remove the write event from to the reactor
+            channel.reactor.remove(os_event(channel.event_write))
+
+            log.debug('%s tone_done(reason=\'%s\')',
+                      channel.name, reason)
+
+            channel.job_done(self, 'tone_done', reason)
+                
+    def stop(self):
+        """Stop the tone."""
+        
+        self.stopped = True
+        log.debug('%s tone_stop()', self.channel.name)
+
+        rc = lowlevel.sm_play_tone_abort(self.channel.channel)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_play_tone_abort',
+                                    self.channel.name)
+
+        # remove the write event from the reactor
+        self.channel.reactor.remove(os_event(self.channel.event_write))
+
+        # Position is only nonzero when play was stopped.
+        channel = self.channel
+        
+        # Compute reason.
+        reason = AculabStopped()
+
+        # no locks held
+        log.debug('%s tone_done(reason=\'%s\'', channel.name, reason)
 
         channel.job_done(self, 'digits_done', reason) #, pos)
 
