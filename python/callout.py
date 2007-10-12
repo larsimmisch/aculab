@@ -6,12 +6,20 @@ import sys
 import getopt
 import struct
 import time
+import random
 from aculab.error import AculabError
 from aculab.reactor import CallReactor
 from aculab.callcontrol import *
 from aculab.timer import *
 
-OAD = '0403172541'
+calling = '0403172541'
+called = []
+
+def get_called_number():
+    if len(called) == 1:
+        return called[0]
+    else:
+        return random.choice(called)
 
 class Statistics:
     def __init__(self):
@@ -39,8 +47,7 @@ class Statistics:
 statistics = Statistics()
 
 class CallData:
-    def __init__(self, number):
-        self.number = number
+    def __init__(self):
         self.start = time.time()
 
     def start(self):
@@ -51,32 +58,29 @@ class CallData:
 
 class OutgoingCallController:
 
-    def ev_outgoing_ringing(self, call, model):
+    def ev_wait_for_outgoing(self, call, user_data):
+        call.user_data = CallData()
+
+    def ev_outgoing_ringing(self, call, user_data):
         log.debug('%s stream: %d timeslot: %d', call.name,
                   call.details.stream, call.details.ts)
 
-    def ev_call_connected(self, call, model):
+    def ev_call_connected(self, call, user_data):
         if hangup is not None:
             tt.add(hangup, call.disconnect)
-        model.stop()
+        user_data.stop()
         log.info(statistics)
 
-    def ev_remote_disconnect(self, call, model):
+    def ev_remote_disconnect(self, call, user_data):
         call.disconnect()
 
-    def ev_idle(self, call, model):
+    def ev_idle(self, call, user_data):
         raise StopIteration
-
 
 class RepeatedOutgoingCallController(OutgoingCallController):
 
-    def ev_idle(self, call, model):
-        call.user_data = CallData(model.number)
-        call.openout(model.number, True, OAD)
-
-def usage():
-    print 'callout.py [-u] [-n <number of calls>] [-p <port>] [-c <card>] [-r] [-h <hangup secs>]number'
-    sys.exit(-2)
+    def ev_idle(self, call, user_data):
+        call.openout(get_called_number(), True, calling)
 
 def build_cug(oa_request, cug_index):
     fd = lowlevel.FEATURE_UNION()
@@ -104,6 +108,17 @@ def build_uui():
     fd.uui.protocol = lowlevel.UUI_PROTOCOL_USER_SPECIFIC
     fd.uui.setdata('Hallo Hauke, dies ist ein langer und entsetzliche langweiliger Text, den ich nur zum Testen von UUI benutze')
 
+def read_called_numbers(fname):
+    f = open(fname, 'r')
+    for l in f.readlines():
+        l = l.strip()
+        if l and l[0] != '#':
+            called.append(l)
+
+def usage():
+    print 'callout.py [-u] [-n <number of calls>] [-p <port>] [-c <card>] [-r] [-h <hangup secs>] { number | -l <numbers in a file> }'
+    sys.exit(-2)
+
 if __name__ == '__main__':
     port = 0
     card = 0
@@ -117,7 +132,7 @@ if __name__ == '__main__':
 
     controller = OutgoingCallController()
 
-    options, args = getopt.getopt(sys.argv[1:], 'c:h:p:rt:n:uo:')
+    options, args = getopt.getopt(sys.argv[1:], 'c:h:l:p:rt:n:uo:')
 
     for o, a in options:
         if o == '-p':
@@ -138,27 +153,32 @@ if __name__ == '__main__':
             hangup = int(a)
             tt = TimerThread()
             tt.start()
+        elif o == '-l':
+            read_called_numbers(a)
         elif o == '-o':
-            OAD = a
+            calling = a
         else:
             usage()
 
-    if not len(args):
+    if not len(args) and not called:
         usage()
 
+    if not called:
+        called.append(args[0])
+
     for i in range(numcalls):
-        c = Call(controller,  port=port, timeslot=timeslot)
-        c.user_data = CallData(args[0])
+        c = Call(controller, card=card, port=port, timeslot=timeslot)
+        c.user_data = CallData()
         if uui:
-            c.openout(args[0], 1, OAD,
+            c.openout(get_called_number(), 1, calling,
                       feature = lowlevel.FEATURE_USER_USER,
                       feature_data = build_uui())
         elif cug:
-            c.openout(args[0], 1, OAD,
+            c.openout(get_called_number(), 1, calling,
                       feature = lowlevel.FEATURE_FACILITY,
                       feature_data = build_cug(1, 2))
         else:
-            c.openout(args[0], True, OAD)
+            c.openout(get_called_number(), True, calling)
 
 ##         fd.raw_data.length = 6
 ##         fd.raw_data.data = struct.pack('BBBBBB',

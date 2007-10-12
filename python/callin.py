@@ -40,7 +40,7 @@ class IncomingCallController:
     def ev_remote_disconnect(self, call, model):
         call.disconnect()
 
-    def ev_remote_disconnect(self, call, model):
+    def ev_idle(self, call, model):
         raise StopIteration
         
 class RepeatedIncomingCallController(IncomingCallController):
