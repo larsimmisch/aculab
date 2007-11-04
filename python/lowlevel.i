@@ -2,7 +2,9 @@
 
 %module(docstring="The Aculab API as seen by SWIG.") lowlevel
 %{
+#ifndef WIN32
 #include "netdb.h"
+#endif
 #ifdef TiNG_USE_V6
 #include "cl_lib.h"
 #include "res_lib.h"
@@ -65,12 +67,15 @@ unsigned char bitrev[] = {
 };
 
 PyObject *set_inaddr(PyObject *address, struct sockaddr_in *addr);
+
+#ifdef HAVE_T38GW
 void t38gw_callback(SM_T38GW_JOB_CONTEXT_PARMS *context);
 
 typedef struct t38jobdata
 {
 	int pipe[2];
 } T38JOBDATA;
+#endif
 
 %}
 
@@ -589,6 +594,7 @@ void delete_ACTIFF_PAGE_HANDLE(ACTIFF_PAGE_HANDLE *self){
 }
 */
 
+#ifdef HAVE_T38GW
 void t38gw_callback(SM_T38GW_JOB_CONTEXT_PARMS *context)
 {
    int rc;
@@ -604,6 +610,7 @@ void t38gw_callback(SM_T38GW_JOB_CONTEXT_PARMS *context)
 
    return;
 }
+#endif
 
 PyObject *add_result(PyObject *result, PyObject *o)
 {
