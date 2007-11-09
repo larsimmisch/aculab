@@ -820,11 +820,13 @@ class SpeechChannel(Lockable):
         listen_for = lowlevel.SM_LISTEN_FOR_PARMS()
         listen_for.channel = self.channel
         listen_for.tone_detection_mode = \
-                                  lowlevel.kSMToneDetectionMinDuration40;
+                                       lowlevel.kSMToneDetectionMinDuration40;
         listen_for.map_tones_to_digits = lowlevel.kSMDTMFToneSetDigitMapping;
         rc = lowlevel.sm_listen_for(listen_for)
         if rc:
             raise AculabSpeechError(rc, 'sm_listen_for', self.name)
+
+        log.debug('%s listening for DTMF', self.name)
 
     def set_event(self, _type):
         """Create and set an event for the channel.

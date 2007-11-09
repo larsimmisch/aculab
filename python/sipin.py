@@ -19,6 +19,7 @@ class CallData:
         self.call = call
         self.vmptx = VMPtx(controller, user_data=self)
         self.vmprx = VMPrx(controller, user_data=self)
+        # self.vmprx.config_tones()
         self.speech = SpeechChannel(controller, user_data=self)
         self.connection = None
 
@@ -67,6 +68,7 @@ class IncomingCallController:
 
     def ev_idle(self, call, user_data):
         user_data.close()
+        raise StopIteration
         
 class RepeatedIncomingCallController(IncomingCallController):
 
@@ -99,6 +101,9 @@ if __name__ == '__main__':
     for i in range(numcalls):
         c = SIPCall(controller)
 
-    SpeechReactor.start()
-    CallReactor.run()
+    try:
+        SpeechReactor.start()
+        CallReactor.run()
+    except StopIteration:
+        pass
 

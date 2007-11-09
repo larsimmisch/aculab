@@ -408,7 +408,7 @@ class VMPtx(RTPBase):
             else:
                 log.warn('Codec %d %s unsupported', k, m.name)
             
-    def config_tones(self, convert = 0, elim = 1):
+    def config_tones(self, convert = False, elim = True):
         """Configure RFC2833 tone conversion/elimination.
         By default, don't convert tones, but eliminate them."""
         
@@ -464,7 +464,7 @@ class VMPtx(RTPBase):
             if rc:
                 raise AculabSpeechError(rc, 'sm_vmptx_datafeed_connect')
 
-            log_switch.debug('%s := %s', self.name, other.name)
+            log_switch.debug('%s := %s (datafeed)', self.name, other.name)
 
             return VMPtxEndpoint(self)
         else:
