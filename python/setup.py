@@ -134,7 +134,36 @@ class build_ext_swig_in_package(build_ext):
 extra_objects = []
 
 if os.name == 'nt':
-    raise RuntimeError('Windows not supported yet')
+    # This is for versions Call 5.x/Prosody 1.y
+    import _winreg
+    h = _winreg.OpenKey(_winreg.HKEY_LOCAL_MACHINE,
+                        'SOFTWARE\\Aculab\\acusetup')
+    dtk = str(_winreg.QueryValueEx(h, 'BaseDirectory')[0])
+    h.Close()
+    dtk = os.path.split(dtk.rstrip('\\'))[0]
+    dtk = os.path.join(dtk, 'API')
+
+    define_macros = []
+    lib_dirs = []
+    libs = []
+
+    include_dirs = [os.path.join(dtk, 'Call', 'include'),
+                    os.path.join(dtk, 'Switch', 'include'),
+                    os.path.join(dtk, 'Speech', 'include')]
+
+    sources = [os.path.join(dtk, 'Call', 'lib', 'cllib.c'),
+               os.path.join(dtk, 'Call', 'lib', 'clnt.c'),
+               os.path.join(dtk, 'Call', 'lib', 'common.c'),
+               os.path.join(dtk, 'Switch', 'lib', 'swlib.c'),
+               os.path.join(dtk, 'Switch', 'lib', 'swnt.c'),
+               os.path.join(dtk, 'Speech', 'lib', 'smbesp.c'),
+               os.path.join(dtk, 'Speech', 'lib', 'smclib.c'),
+               os.path.join(dtk, 'Speech', 'lib', 'smdc.c'),
+               os.path.join(dtk, 'Speech', 'lib', 'smfwcaps.c'),
+               os.path.join(dtk, 'Speech', 'lib', 'smlib.c'),
+               os.path.join(dtk, 'Speech', 'lib', 'smnt.c'),
+               "lowlevel.i"]
+
 elif os.name == 'posix':
     dtk = os.getenv('ACULAB_ROOT')
     if not dtk:
@@ -149,7 +178,7 @@ elif os.name == 'posix':
         t38gw = '/ProsodyLibraries/T38_Gateway'
         if not os.path.exists(dtk + t38gw):
             t38gw = None
-                      
+
         define_macros = [('ACU_LINUX', None),
                          ('SM_POLL_UNIX', None),
                          ('TiNGTYPE_LINUX', None),
@@ -205,7 +234,7 @@ setup(name = "pyAculab",
       description = "Aculab Python wrappers",
       author = "Lars Immisch",
       author_email = "lars@ibp.de",
-      url = "http://ibp.de/projects/aculab",
+      url = "http://svn.ibp.de/projects/aculab",
       cmdclass = { 'build_ext' : build_ext_swig_in_package },
       ext_modules = [Extension("aculab._lowlevel", sources,
                                include_dirs = include_dirs,

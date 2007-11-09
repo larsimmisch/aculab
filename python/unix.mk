@@ -23,7 +23,6 @@ PYTHON_LIBDIR := -L$(shell $(PYTHON) disthelper.py -L)
 PYTHON_VERSION := $(shell $(PYTHON) disthelper.py -v)
 PYTHON_LIBS := -lpython$(PYTHON_VERSION)
 PYTHON_SITEDIR := $(shell $(PYTHON) disthelper.py -l)
-
 endif
 
 TiNGTYPE := LINUX

@@ -2,10 +2,8 @@
 
 %module(docstring="The Aculab API as seen by SWIG.") lowlevel
 %{
-#ifndef WIN32
-#include "netdb.h"
-#endif
 #ifdef TiNG_USE_V6
+#include "netdb.h"
 #include "cl_lib.h"
 #include "res_lib.h"
 #include "sw_lib.h"
@@ -66,7 +64,9 @@ unsigned char bitrev[] = {
 	0x3f, 0xbf, 0x7f, 0xff
 };
 
+#ifdef TiNG_USE_V6
 PyObject *set_inaddr(PyObject *address, struct sockaddr_in *addr);
+#endif
 
 #ifdef HAVE_T38GW
 void t38gw_callback(SM_T38GW_JOB_CONTEXT_PARMS *context);
@@ -632,6 +632,7 @@ PyObject *add_result(PyObject *result, PyObject *o)
 	return result;
 }
 
+#ifdef TiNG_USE_V6
 /* Compute a sockaddr_in from a a tuple(address, port, address_family 
 
    Code nicked from Python's socketmodule.c */
@@ -687,6 +688,7 @@ PyObject *set_inaddr(PyObject *args, struct sockaddr_in *addr)
 	Py_INCREF(Py_None);
 	return Py_None;
 }
+#endif
 %}
 
 %init %{

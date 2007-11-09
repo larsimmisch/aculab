@@ -14,7 +14,13 @@ else
   else
     include unix_v5.mk
   endif
-endif # test is_unix
+endif
+
+# By default, the SWIG include dirs are ACULAB_INCLUDE
+# cygwin needs an exception
+ifeq ($(SWIG_INCLUDE),)
+SWIG_INCLUDE := $(ACULAB_INCLUDE)
+endif
 
 all: aculab/_lowlevel$(SO) aculab/lowlevel.py
 
@@ -34,12 +40,12 @@ cl_lib.h2: $(DTK)/include/cl_lib.h cl_lib.patch
 # builds are very slow - only rebuild if cl_lib.h changes
 # exclude structures that are %extended already
 sized_struct.i: $(DTK)/include/cl_lib.h $(DTK)/include/sw_lib.h
-	swig $(DEFINES) $(SWIG_DEFINES) $(ACULAB_INCLUDE) -xml -xmllite lowlevel.i
+	$(SWIG) $(DEFINES) $(SWIG_DEFINES) -xml -xmllite lowlevel.i
 	python sized_struct.py -x ACU_SNAPSHOT_PARMS lowlevel_wrap.xml
 	rm lowlevel_wrap.xml
 
 lowlevel_wrap.c aculab/lowlevel.py: lowlevel.i cl_lib.h2 sized_struct.i
-	$(SWIG) $(DEFINES) $(SWIG_DEFINES) -O -new_repr -python $(ACULAB_INCLUDE) $<
+	$(SWIG) $(SWIG_DEFINES) -O -new_repr -python $(DEFINES) $(SWIG_INCLUDE) $<
 	mv lowlevel.py aculab
 
 else
@@ -47,7 +53,7 @@ smosintf.h2: $(DTK)/speech/include/smosintf.h smosintf.patch
 	patch -o $@ $(DTK)/speech/include/smosintf.h smosintf.patch
 
 lowlevel_wrap.c aculab/lowlevel.py: lowlevel.i smosintf.h2
-	$(SWIG) $(DEFINES) -modern -new_repr -python $(ACULAB_INCLUDE) $<
+	$(SWIG) $(SWIG_DEFINES) -modern -new_repr -python $(DEFINES) $(SWIG_INCLUDE) $<
 	mv lowlevel.py aculab
 endif
 
