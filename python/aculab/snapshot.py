@@ -235,7 +235,7 @@ class Module(object):
     def translate_tone(self, toneset, mode, recog):
         """Translate for our custom DTMF/FAX toneset.
 
-        @Returns a tuple, tone, length.
+        @return: a tuple (tone, length).
         length will be None unless une of the C{kSMToneLenDetection*}
         algorithms is used.
         """
