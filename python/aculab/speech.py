@@ -236,8 +236,9 @@ class RecordJob(object):
     """A RecordJob records a file through its L{SpeechChannel}."""
     
     def __init__(self, channel, f, max_octets = 0,
-                 max_elapsed_time = 0.0, max_silence = 0.0, elimination = 0,
-                 agc = 0, volume = 0, filetype = None):
+                 max_elapsed_time = 0.0, max_silence = 0.0,
+                 elimination = False,
+                 agc = False, volume = 0, filetype = None):
         """Create a RecordJob. The recording will be in alaw, 8kHz.
 
         @param channel: The SpeechChannel that will do the recording.
@@ -252,11 +253,11 @@ class RecordJob(object):
         @param max_octets: Maximum length of the recording (in bytes)
         @param max_silence: Maximum length of silence in seconds, before the
         recording is terminated.
-        @param elimination: Activates silence elimination of not zero.
+        @param elimination: Activates silence elimination if not zero.
         @param agc: Nonzero values activate Automatic Gain Control        
         @param volume: The volume adjustment in db.
-        @param filetype: The file type. C{kSMDataFormatALawPCM} will be used
-        if it is C{None}.
+        @param filetype: The file type. By default, C{kSMDataFormatALawPCM}
+        will be used.
 
         The sampling rate is hardcoded to 8000.
 
