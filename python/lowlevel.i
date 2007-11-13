@@ -516,6 +516,13 @@ GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 		return set_inaddr(args, &self->source);
 	}
 }
+
+%extend SM_VMPTX_CREATE_TONESET_PARMS {
+	void set_default_toneset(void) {
+		self->toneset = kSMVMPTxDefaultToneSet;
+	}
+};
+
 #endif
 
 %define SIZED_STRUCT(name) 

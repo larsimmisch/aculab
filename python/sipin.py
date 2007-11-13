@@ -19,7 +19,6 @@ class CallData:
         self.call = call
         self.vmptx = VMPtx(controller, user_data=self)
         self.vmprx = VMPrx(controller, user_data=self)
-        # self.vmprx.config_tones()
         self.speech = SpeechChannel(controller, user_data=self)
         self.connection = None
 
@@ -37,7 +36,7 @@ class IncomingCallController:
 
     def vmprx_ready(self, vmprx, sdp, user_data):
         """Called when the vmprx is ready."""
-        vmprx.config_tones()
+        vmprx.config_tones(True, True)
         user_data.call.accept(sdp)
 
     def dtmf(self, channel, digit, user_data):

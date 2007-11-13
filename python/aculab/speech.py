@@ -43,6 +43,21 @@ def guess_filetype(fn):
 
     return lowlevel.kSMDataFormatALawPCM
 
+tonetype = { lowlevel.kSMRecognisedNothing: 'nothing',
+             lowlevel.kSMRecognisedTrainingDigit: 'training digit',
+             lowlevel.kSMRecognisedDigit: 'digit',
+             lowlevel.kSMRecognisedTone: 'tone',
+             lowlevel.kSMRecognisedCPTone: 'call progress tone',
+             lowlevel.kSMRecognisedGruntStart: 'grunt start',
+             lowlevel.kSMRecognisedGruntEnd: 'grunt end',
+             lowlevel.kSMRecognisedASRResult: 'asr result',
+             lowlevel.kSMRecognisedASRUncertain: 'asr uncertain',
+             lowlevel.kSMRecognisedASRRejected: 'asr rejected',
+             lowlevel.kSMRecognisedASRTimeout: 'asr timeout',
+             lowlevel.kSMRecognisedCatSig: 'cat sig',
+             lowlevel.kSMRecognisedOverrun: 'overrun',
+             lowlevel.kSMRecognisedANS: 'ans' }
+
 class PlayJob(object):
     """A PlayJob plays a file through its L{SpeechChannel}."""
 
@@ -539,7 +554,7 @@ class ToneJob(object):
         
         tp = lowlevel.SM_PLAY_TONE_PARMS()
         tp.channel = self.channel.channel
-        tp.tone = self.tone
+        tp.tone_id = self.tone
         tp.duration = self.duration
 
         rc = lowlevel.sm_play_tone(tp)
@@ -699,6 +714,11 @@ class SpeechChannel(Lockable):
         this would be the I{model}. In most of the examples, this is a L{Glue}
         subclass.
 
+        @param ts_type: The encoding to use on the timeslot, either alaw, mulaw
+        or raw data. See U{sm_config_module_switching
+        <http://www.aculab.com/support/TiNG/gen/apifn-sm_config_module_switching.html>}
+        for more details.
+
         @param reactor: The reactor used to dispatch controller methods.
         By default, a single reactor is used for all channels.
         """
@@ -710,6 +730,8 @@ class SpeechChannel(Lockable):
         self.user_data = user_data
         self.job = None
         self.close_pending = None
+        self.tone_set_id = None
+        self.tone_detection_mode = None
         self.ts_type = ts_type
         # initialize early 
         self.event_read = None
@@ -748,8 +770,6 @@ class SpeechChannel(Lockable):
         self.event_read = self.set_event(lowlevel.kSMEventTypeReadData)
         self.event_write = self.set_event(lowlevel.kSMEventTypeWriteData)
         self.event_recog = self.set_event(lowlevel.kSMEventTypeRecog)
-
-        self._listen()
 
         # add the recog event to the reactor
         self.reactor.add(os_event(self.event_recog), self.on_recog)
@@ -814,19 +834,6 @@ class SpeechChannel(Lockable):
 
 ##     def __hash__(self):
 ##         return self.channel
-
-    def _listen(self):
-        """Start DTMF detection."""
-        listen_for = lowlevel.SM_LISTEN_FOR_PARMS()
-        listen_for.channel = self.channel
-        listen_for.tone_detection_mode = \
-                                       lowlevel.kSMToneDetectionMinDuration40;
-        listen_for.map_tones_to_digits = lowlevel.kSMDTMFToneSetDigitMapping;
-        rc = lowlevel.sm_listen_for(listen_for)
-        if rc:
-            raise AculabSpeechError(rc, 'sm_listen_for', self.name)
-
-        log.debug('%s listening for DTMF', self.name)
 
     def set_event(self, _type):
         """Create and set an event for the channel.
@@ -1063,6 +1070,53 @@ class SpeechChannel(Lockable):
 
         return CTBusEndpoint(self.card.card_id, sink)
 
+    def listen_for(self, toneset = 0,
+                   mode = lowlevel.kSMToneDetectionMinDuration40,
+                   cptone_recognition = False, grunt_detection = False,
+                   grunt_latency = 0, min_noise_level = 0.0,
+                   grunt_threshold = 0.0):
+                   
+        """Start DTMF/Tone detection.
+
+        @param toneset: toneset for DTMF/tone detection. The default toneset
+        will recognize DTMF only. The string 'dtmf/fax' will use a combined
+        DTMF/FAX toneset.
+
+        @param mode: the algorithm to use for tone detection.
+        See U{sm_listen_for
+        <http://www.aculab.com/support/TiNG/gen/apifn-sm_listen_for.html>} for
+        a list of available algorithms.
+        """
+
+        self.tone_set_id = toneset
+        self.tone_detection_mode = mode
+
+        if type(toneset) in (str, unicode) and toneset.lower() == 'dtmf/fax':
+            # Incomplete: does not work for non-TiNG yet
+            self.tone_set_id = self.module.dtmf_fax_toneset()
+
+        listen_for = lowlevel.SM_LISTEN_FOR_PARMS()
+        listen_for.channel = self.channel
+        listen_for.active_tone_set_id = self.tone_set_id
+        listen_for.tone_detection_mode = mode
+        if toneset <= 1:
+            listen_for.map_tones_to_digits = lowlevel.kSMDTMFToneSetDigitMapping
+        listen_for.enable_cptone_recognition = cptone_recognition
+        listen_for.enable_grunt_detection = grunt_detection
+        listen_for.grunt_latency = grunt_latency
+
+        if TiNG_version[0] >= 2:
+            listen_for.min_noise_level = min_noise_level
+            listen_for.grunt_threshold = grunt_threshold
+        
+        rc = lowlevel.sm_listen_for(listen_for)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_listen_for', self.name)
+
+        log.debug('%s listening for DTMF/Tones with toneset %d', self.name,
+                  self.tone_set_id)
+
+
     def dc_config(self, protocol, pconf, encoding, econf):
         """Configure the channel for data communications.
 
@@ -1123,6 +1177,13 @@ class SpeechChannel(Lockable):
 
         self.start(job)
 
+    def tone(self, tone = 0, duration = 128):
+        """Send a tone."""
+
+        job = ToneJob(self, tone, duration)
+
+        self.start(job)
+
     def digits(self, digits, inter_digit_delay = 0, digit_duration = 0):
         """Send a string of DTMF digits."""
 
@@ -1148,6 +1209,7 @@ class SpeechChannel(Lockable):
     def on_recog(self):
         # log.debug('%s on_recog', self.name)
         recog = lowlevel.SM_RECOGNISED_PARMS()
+        tone = None
         
         while True:
             recog.channel = self.channel
@@ -1159,13 +1221,28 @@ class SpeechChannel(Lockable):
             if recog.type == lowlevel.kSMRecognisedNothing:
                 return
             elif recog.type == lowlevel.kSMRecognisedDigit:
+                tone = chr(recog.param0)
+                log.debug('%s recognised %s: %s', self.name,
+                          tonetype[recog.type], tone)
+            elif recog.type == lowlevel.kSMRecognisedTone:
+                tone = self.module.translate_tone(self.tone_set_id,
+                                                  self.tone_detection_mode,
+                                                  recog)[0]
+                
+                log.debug('%s recognised %s: %s (%d:%d)', self.name,
+                          tonetype[recog.type], tone, recog.param0,
+                          recog.param1)
+            else:
+                log.debug('%s recognised %s: %d:%d', self.name,
+                          tonetype[recog.type], recog.param0, recog.param1)
+
+            if tone:
                 self.lock()
                 try:
-                    self.controller.dtmf(self, chr(recog.param0),
-                                         self.user_data)
+                    self.controller.dtmf(self, tone, self.user_data)        
                 finally:
                     self.unlock()
-            
+
     def stop(self):
         if self.job:
             self.job.stop()

@@ -136,26 +136,146 @@ class Module(object):
     The member C{info} has the type U{SM_MODULE_INFO_PARMS
     http://www.aculab.com/support/TiNG/gen/apifn-sm_get_module_info.html}.    
     """
-    def __init__(self, card, index):
-        sm_openp = lowlevel.SM_OPEN_MODULE_PARMS()
 
-        sm_openp.card_id = card.card_id
-        sm_openp.module_ix = index
-        rc = lowlevel.sm_open_module(sm_openp)
+    # Tone matrix for combined DTMF/FAX toneset
+    dtmf_fax_tonematrix = (( '1', '2', '3', None ),
+                           ( '4', '5', '6', None ),
+                           ( '7', '8', '9', None ),
+                           ( '*', '0', '#', None ),
+                           ( None, None, None, 'CNG' ),
+                           ( None, None, None, 'CED' ))
+    
+    def __init__(self, card, index):
+        self.open = lowlevel.SM_OPEN_MODULE_PARMS()
+
+        self.open.card_id = card.card_id
+        self.open.module_ix = index
+        rc = lowlevel.sm_open_module(self.open)
         if rc:
             raise AculabError(rc, 'sm_open_module')
 
-        self.open = sm_openp
-
         self.info = lowlevel.SM_MODULE_INFO_PARMS()
-        self.info.module = sm_openp.module_id
+        self.info.module = self.open.module_id
         rc = lowlevel.sm_get_module_info(self.info)
         if rc:
             raise AculabError(rc, 'sm_get_module_info')
 
         from switching import ProsodyTimeslots
 
+        self.vmptx_toneset_id = None
+        self.dtmf_fax_toneset_id = None
         self.timeslots = ProsodyTimeslots(self.info.min_stream)
+
+    def add_tone_limits(self, lower, upper):
+        """Helper function for L{dtmf_fax_toneset}."""
+
+        coeff = lowlevel.SM_INPUT_FREQ_COEFFS_PARMS()
+
+        coeff.module = self.info.module
+        coeff.lower_limit = lower
+        coeff.upper_limit = upper
+
+        rc = lowlevel.sm_add_input_freq_coeffs(coeff)
+        if rc:
+            raise AculabError(rc, 'sm_add_input_freq_coeffs')        
+
+        return coeff.id
+
+    def dtmf_fax_toneset(self):
+        """Create a custom toneset for the detection of DTMF and CED/CNG at
+        the same time. This toneset is cached; upon the first invocation, the
+        toneset will be created on the module, further invocations just return
+        the existing identifier."""
+
+        if self.dtmf_fax_toneset_id is not None:
+            return self.dtmf_fax_toneset_id
+
+        # The first group of frequencies
+        toneid = self.add_tone_limits(679.6875, 710.9375)
+        self.add_tone_limits(742.1875, 789.0625)
+        self.add_tone_limits(835.9375, 867.1875)
+        self.add_tone_limits(914.0625, 960.9375)
+        self.add_tone_limits(1062.0, 1138.0)     # CNG +/- 10% 
+        self.add_tone_limits(2085.0, 2115.0)     # CED +/- 10% 
+
+        # The second group of frequencies
+        self.add_tone_limits(1179.6875, 1242.1875)
+        self.add_tone_limits(1304.6875, 1367.1875)
+        self.add_tone_limits(1445.3125, 1507.8125)
+        self.add_tone_limits(0, 0)
+
+        toneset = lowlevel.SM_INPUT_TONE_SET_PARMS()
+
+        toneset.module = self.info.module
+        toneset.band1_first_freq_coeffs_id = toneid
+        toneset.band1_freq_count = 6
+        toneset.band2_first_freq_coeffs_id = toneid + 6
+        toneset.band2_freq_count = 4
+
+        # Original values:
+        # toneset.req_third_peak = 0.0794
+        # toneset.req_signal_to_noise_ratio = 0.756
+        # toneset.req_minimum_power = 1.0e8
+        # toneset.req_twist_for_dual_tone = 10.0
+
+        # Tweaked values
+        toneset.req_third_peak = 0.5
+        toneset.req_signal_to_noise_ratio = 0.756
+        toneset.req_minimum_power = 1.0e8
+        toneset.req_twist_for_dual_tone = 50.0
+
+        rc = lowlevel.sm_add_input_tone_set(toneset)
+        if rc:
+            raise AculabError(rc, 'sm_add_input_freq_coeffs')        
+
+        self.dtmf_fax_toneset_id = toneset.id
+        
+        return self.dtmf_fax_toneset_id
+
+    def translate_tone(self, toneset, mode, recog):
+        """Translate for our custom DTMF/FAX toneset.
+
+        @Returns a tuple, tone, length.
+        length will be None unless une of the C{kSMToneLenDetection*}
+        algorithms is used.
+        """
+        
+        l = None
+        if toneset == self.dtmf_fax_toneset_id:
+            # Sigh. The parameters are in different places depending
+            # on the tone detection type
+            if mode in (lowlevel.kSMToneLenDetectionNoMinDuration,
+                        lowlevel.kSMToneLenDetectionMinDuration64,
+                        lowlevel.kSMToneLenDetectionMinDuration40):
+                p = (recog.param0/256, recog.param0 % 256)
+                l = recog.param1
+
+            else:
+                p = (recog.param0, recog.param1)
+
+            return (self.dtmf_fax_tonematrix[p[0]][p[1]], l)
+                        
+        else:
+            ValueError('unknown toneset id %d' % toneset_id)
+
+    def vmptx_default_toneset(self):
+        """Allocate a default toneset for the VMPtx on the first invocation
+        and cache it for subsequent invocations."""
+        
+        if self.vmptx_toneset_id:
+            return self.vmptx_toneset_id
+
+        ts = lowlevel.SM_VMPTX_CREATE_TONESET_PARMS()
+
+        ts.module = self.info.module
+        ts.set_default_toneset()
+        rc = lowlevel.sm_vmptx_create_toneset(ts)
+        if rc:
+            raise AculabError(rc, 'sm_vmptx_create_toneset')       
+
+        self.vmptx_toneset_id = ts.tone_set_id
+
+        return self.vmptx_toneset_id
 
 class ProsodyCard(Card):
     """An Aculab Prosody (speech processing) card.

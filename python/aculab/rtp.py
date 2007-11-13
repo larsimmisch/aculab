@@ -416,6 +416,7 @@ class VMPtx(RTPBase):
         tones.vmptx = self.vmptx
         tones.convert_tones = convert
         tones.elim_tones = elim
+        tones.tone_set_id = self.module.vmptx_default_toneset()
 
         rc = lowlevel.sm_vmptx_config_tones(tones)
         if rc:

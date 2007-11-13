@@ -22,9 +22,12 @@ class DTMFLoopController:
         log.info('%s dtmf: %s', channel.name, digit)
 
     def record_done(self, channel, file, reason, size, user_data):
-        raise StopIteration
+        pass
 
     def digits_done(self, channel, reason, user_data):
+        channel.tone(23, 1000)
+
+    def tone_done(self, channel, reason, user_data):
         raise StopIteration
 
 def usage():
@@ -56,7 +59,8 @@ if __name__ == '__main__':
 
     connection = connect(channels[0], channels[1])
 
+    channels[0].listen_for('dtmf/fax')
     channels[0].record('dtmf.al', max_silence = 1000)
-    channels[1].digits('0123456789')
+    channels[1].digits('0123456789*#')
     
     SpeechReactor.run()
