@@ -110,6 +110,11 @@ typedef struct {
 %apply (int *OUTPUT) { int *perrno };
 %apply (int *OUTPUT) { ACU_PORT_ID *sip_port };
 
+#ifdef WIN32
+%apply int { tSMChannelId };
+#endif
+
+
 /* Allows to execute Python code during function calls */
 %define BLOCKING(name) 
 %exception name {

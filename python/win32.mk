@@ -39,21 +39,33 @@ ACULAB_INCLUDE = -I$(DTK)Call/include -I$(DTK)Switch/include \
 # Determine Python paths and version from installed python executable via 
 # distutils. 
 
-PYTHON_INCLUDE := -I$(shell cygpath -u $(shell $(PYTHON) disthelper.py -i))
+PYTHON_INCLUDE := -I$(shell cygpath -u "$(shell $(PYTHON) disthelper.py -i)")
 # avoid multiple warnings if python is not found
 ifneq ($(PYTHON_INCLUDE),) 
-PYTHON_LIBDIR := -L$(shell cygpath -u $(shell $(PYTHON) disthelper.py -L))
-PYTHON_VERSION := $(shell $(PYTHON) disthelper.py -v)
-PYTHON_LIBS := -lpython$(PYTHON_VERSION)
+PYTHON_LIBDIR := 
+PL = $(shell cygpath -u "$(shell $(PYTHON) disthelper.py -L)")
+PYTHON_VERSION := $(subst .,,$(shell $(PYTHON) disthelper.py -v))
+PYTHON_LIBS := $(PL)/libpython$(PYTHON_VERSION).a
 PYTHON_SITEDIR := $(shell $(PYTHON) disthelper.py -l)
 endif
 
 LDFLAGS := -shared -s
 POST_LDFLAGS := 
 
-OBJS := lowlevel_wrap$(O) set_inaddr${O} cllib$(O) clnt$(O) common$(O) \
-	swlib$(O) swnt$(O) smnt$(O) smbesp$(O) smlib$(O) smfwcaps$(O)
+OBJS := lowlevel_wrap$(O) cllib$(O) clnt$(O) common$(O) \
+	swlib$(O) swnt$(O) smnt$(O) smbesp$(O) smlib$(O) smfwcaps$(O) \
 
-%$(O): ../src/%.c
+
+# VPATH=$(DTK)Call/lib:$(DTK)Switch/lib:$(DTK)Speech/lib:
+
+%$(O): $(DTK)Call/lib/%.c 
 	$(CC) -c $(C_DEFINES) $(ACULAB_INCLUDE) $(PYTHON_INCLUDE) $< -o $@ 
+
+%$(O): $(DTK)Speech/lib/%.c 
+	$(CC) -c $(C_DEFINES) $(ACULAB_INCLUDE) $(PYTHON_INCLUDE) $< -o $@ 
+
+%$(O): $(DTK)Switch/lib/%.c 
+	$(CC) -c $(C_DEFINES) $(ACULAB_INCLUDE) $(PYTHON_INCLUDE) $< -o $@ 
+
+
 

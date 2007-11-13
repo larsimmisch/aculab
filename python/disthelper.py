@@ -105,8 +105,14 @@ if __name__ == '__main__':
             print ds.get_python_lib()
             sys.exit(0)
         if o == '-L':
-            lib_dir = ds.get_python_lib(plat_specific=1, standard_lib=1)
-            print os.path.join(lib_dir, "config")
+            # There ought to be a better way.
+            if os.name == 'nt':
+                lib_dir = ds.get_config_var('prefix')
+                print os.path.join(lib_dir, "libs")
+            else:
+                lib_dir = ds.get_python_lib(plat_specific=1, standard_lib=1)
+                print os.path.join(lib_dir, "config")
+
             sys.exit(0)
         if o == '-v':
             print ds.get_python_version()

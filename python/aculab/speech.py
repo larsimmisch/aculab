@@ -55,8 +55,10 @@ tonetype = { lowlevel.kSMRecognisedNothing: 'nothing',
              lowlevel.kSMRecognisedASRRejected: 'asr rejected',
              lowlevel.kSMRecognisedASRTimeout: 'asr timeout',
              lowlevel.kSMRecognisedCatSig: 'cat sig',
-             lowlevel.kSMRecognisedOverrun: 'overrun',
-             lowlevel.kSMRecognisedANS: 'ans' }
+             lowlevel.kSMRecognisedOverrun: 'overrun' }
+
+if TiNG_version[0] >= 2:
+    tonetype[lowlevel.kSMRecognisedANS] = 'ans'
 
 class PlayJob(object):
     """A PlayJob plays a file through its L{SpeechChannel}."""
@@ -1020,7 +1022,7 @@ class SpeechChannel(Lockable):
                          output.ost, output.ots,
                          output.ist, output.its)
 
-        return CTBusEndpoint(self.card.card_id,
+        return CTBusEndpoint(self.get_switch(),
                              (self.info.ist, self.info.its))
 
     def speak_to(self, sink):

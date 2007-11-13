@@ -55,7 +55,7 @@ if __name__ == '__main__':
             usage()
 
     channels = [SpeechChannel(controller, card, module),
-                SpeechChannel(controller, card, module+1)]
+                SpeechChannel(controller, card, module)]
 
     connection = connect(channels[0], channels[1])
 
