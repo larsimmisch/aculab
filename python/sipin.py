@@ -70,12 +70,11 @@ class IncomingCallController:
         call.incoming_ringing()
 
     def ev_media(self, call, user_data):
-        # sdp = SDP(call.details.media_session.sent_media.raw_sdp)
-        # log.debug('sent SDP:\n%s', sdp)
 
         sdp = SDP(call.details.media_session.received_media.raw_sdp)
-        #log.debug('received SDP:\n%s', sdp)
 
+        # Some CPEs seem to get confused when the TX doesn't have the same
+        # port as the RX.
         user_data.vmptx.configure(sdp, user_data.vmprx.get_rtp_address())
 
     def ev_remote_disconnect(self, call, user_data):
