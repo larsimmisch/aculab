@@ -45,6 +45,8 @@ class AnsweringMachine(Glue):
 
     def start(self):
         self.timer = None
+        self.speech.listen_for()
+        
         f = os.path.join(root, '%s.al' % self.call.details.destination_addr)
         if os.path.exists(f):
             announce = PlayJob(self.speech, f)
@@ -104,10 +106,10 @@ class AMController(object):
         call.pop_controller()
         call.openin()
 
-    def play_done(self, channel, f, reason, position, user_data):
+    def play_done(self, channel, reason, f, position, user_data):
         pass
 
-    def record_done(self, channel, f, reason, position, user_data):
+    def record_done(self, channel, reason, f, position, user_data):
         pass
 
     def job_done(self, job, reason, user_data):

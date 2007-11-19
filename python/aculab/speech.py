@@ -27,7 +27,8 @@ from switching import (Connection, CTBusEndpoint, SpeechEndpoint, TDMrx, TDMtx,
 from util import os_event, TiNG_version
 from error import *
 
-__all__ = ['PlayJob', 'RecordJob', 'DigitsJob', 'SpeechChannel']
+__all__ = ['PlayJob', 'RecordJob', 'DigitsJob', 'ToneJob', 'SilenceJob',
+           'SpeechChannel', 'Conference', 'Glue']
 
 log = logging.getLogger('speech')
 log_switch = logging.getLogger('switch')
@@ -60,30 +61,33 @@ tonetype = { lowlevel.kSMRecognisedNothing: 'nothing',
 if TiNG_version[0] >= 2:
     tonetype[lowlevel.kSMRecognisedANS] = 'ans'
 
-class PlayJob(object):
-    """A PlayJob plays a file through its L{SpeechChannel}."""
+class PlayJobBase(object):
+    """An Abstract Base Class for playing samples through a L{SpeechChannel}.
 
-    def __init__(self, channel, f, agc = 0, speed = 0, volume = 0,
+    Subclasses must override C{get_data(len)}. C{get_data} must fill
+    the buffer C{self.data} and return the length of the data.
+
+    The must also override and call {done}. It is their responsibility to call
+    C{channel.job_done()} in {done}.
+
+    If the attribute C{datadesc} is present, it will be used for
+    logging, when the output starts.
+    """
+
+    # Used for debug output
+    name = 'play_base'
+    
+    def __init__(self, channel, agc = 0, speed = 0, volume = 0,
                  filetype = None):
-        """Create a PlayJob.
+        """Create an abstract PlayJob.
 
         @param channel: The L{SpeechChannel} that will play the file.
-        @param f: Either a filename (string) or a file descriptor.
-        If a string is passed in, the associated file will be opened for
-        playing and closed upon completion. Filename extensions will be
-        treated as a hint for the file type, but only if filetype is not
-        C{None}. Currently recognized filename extensions are C{.al}, C{.ul}
-        and C{sw}.
-        If a file descriptor d is passed in, the file will be left open (and
-        the file pointer will be left at the position where the replay
-        stopped).
         @param agc: A nonzero value activates automatic gain control
         @param speed: The speed for used for replaying in percent. 0 is the
         same as 100: normal speed.
         @param volume: The volume adjustment in db.
-        @param filetype: The file type. C{kSMDataFormatALawPCM} will be used
-        if it is C{None}.
-
+        @param filetype: The file type. The default is C{kSMDataFormatALawPCM}.
+        
         The sampling rate is hardcoded to 8000.
 
         See U{sm_replay_start
@@ -99,29 +103,17 @@ class PlayJob(object):
         self.filetype = filetype
         self.sampling_rate = 8000
         self.data_rate = 8000
+        # Bytes submitted so far
+        self.offset = 0
+        # The offset where the hardware stopped
+        self.stop_offset = 0
 
-        # f may be a string - if it is, close self.file in done
-        if type(f) == type(''):
-            self.file = file(f, 'rb')
-            self.filename = f
-            if filetype is None:
-                self.filetype, self.sampling_rate, self.data_rate = \
-                               guess_filetype(f)
-        else:
-            self.file = f
-            if filetype is None:
-                self.filetype = lowlevel.kSMDataFormatALawPCM
+        if filetype is None:
+            self.filetype = lowlevel.kSMDataFormatALawPCM
 
-        # read the length of the file
-        pos = self.file.tell()
-        self.file.seek(0, 2)
-        
         # use a single buffer
         self.data = lowlevel.SM_TS_DATA_PARMS()
-        self.length = self.file.tell() - pos
-        self.duration = self.length / float(self.data_rate)
-        self.file.seek(pos, 0)
-        
+
     def start(self):
         """Start the playback.
 
@@ -136,15 +128,19 @@ class PlayJob(object):
         replay.volume = self.volume
         replay.type = self.filetype
         replay.sampling_rate = self.sampling_rate
-        replay.data_length = self.length
 
         rc = lowlevel.sm_replay_start(replay)
         if rc:
             raise AculabSpeechError(rc, 'sm_replay_start', self.channel.name)
 
-        log.debug('%s play(%s, agc=%d, speed=%d, volume=%d, duration=%.3f)',
-                  self.channel.name, str(self.file), self.agc,
-                  self.speed, self.volume, self.duration)
+        if hasattr(self, 'datadesc'):
+            log.debug('%s %s(%s, agc=%d, speed=%d, volume=%d)',
+                      self.channel.name, self.name, self.datadesc, self.agc,
+                      self.speed, self.volume)
+        else:
+            log.debug('%s %s(agc=%d, speed=%d, volume=%d)',
+                      self.channel.name, self.name, self.agc,
+                      self.speed, self.volume)
 
         # On very short samples, we might be done after fill_play_buffer
         if not self.fill_play_buffer():
@@ -157,7 +153,10 @@ class PlayJob(object):
         return self
 
     def done(self):
-        """I{Used internally}."""
+        """I{Used internally}. Must be overwritten and called in subclasses.
+
+        @return: a tuple (reason, duration). Duration is in seconds.
+        """
         
         # remove the write event from the reactor
         if self.reactor:
@@ -165,26 +164,16 @@ class PlayJob(object):
 
         # Compute reason.
         reason = None
-        if self.position:
+        if self.stop_offset:
             reason = AculabStopped()
-            pos = self.position
+            duration = float(self.stop_offset) / self.data_rate
         else:
-            pos = self.length
+            duration = float(self.offset) / self.data_rate
 
-        self.duration = pos / float(self.data_rate)
+        log.debug('%s %s_done(reason=\'%s\', duration=%.3f)',
+                  self.channel.name, self.name, reason, duration)
 
-        f = self.file
-
-        if hasattr(self, 'filename'):
-            f.close()
-            self.file = None
-            f = self.filename
-
-        # no locks held 
-        log.debug('%s play_done(reason=\'%s\', duration=%.3f)',
-                  self.channel.name, reason, self.duration)
-
-        self.channel.job_done(self, 'play_done', reason, self.duration, f)
+        return reason, duration
 
     def fill_play_buffer(self):
         """I{Used internally} to fill the play buffers on the board.
@@ -210,17 +199,23 @@ class PlayJob(object):
                 self.done()
                 return True
             else:
+                l = self.get_data(lowlevel.kSMMaxReplayDataBufferSize)
                 self.data.channel = self.channel.channel
-                self.data.read(self.file)
 
-                rc = lowlevel.sm_put_replay_data(self.data)
-                if rc and rc != lowlevel.ERR_SM_NO_CAPACITY:
+                if l == lowlevel.kSMMaxReplayDataBufferSize:
+                    rc = lowlevel.sm_put_replay_data(self.data)
+                else:
+                    rc = lowlevel.sm_put_last_replay_data(self.data)
+
+                if rc:
                     raise AculabSpeechError(rc, 'sm_put_replay_data',
                                             self.channel.name)
 
+                self.offset = self.offset + l
+
     def stop(self):
-        """Stop a PlayJob. The internal position will be updated based upon
-        the information available from the drivers."""
+        """Stop an abstract PlayJob. The internal position will be updated
+        based upon the information available from the drivers."""
 
         stop = lowlevel.SM_REPLAY_ABORT_PARMS()
         stop.channel = self.channel.channel
@@ -229,10 +224,119 @@ class PlayJob(object):
             raise AculabSpeechError(rc, 'sm_replay_abort', self.channel.name)
 
         # position is in seconds
-        # Assumption: alaw/mulaw
-        self.position = stop.offset / float(self.data_rate)
+        # Assumption: PCM
+        self.stop_offset = stop.offset
 
-        log.debug('%s play_stop()', self.channel.name)
+        log.debug('%s %s_stop()', self.channel.name, self.name)
+
+
+class PlayJob(PlayJobBase):
+    """A PlayJob plays a file through its L{SpeechChannel}."""
+
+    name = 'play'
+
+    def __init__(self, channel, f, agc = 0, speed = 0, volume = 0,
+                 filetype = None):
+        """Create a PlayJob.
+
+        @param channel: The L{SpeechChannel} that will play the file.
+        @param f: Either a filename (string) or a file descriptor.
+        If a string is passed in, the associated file will be opened for
+        playing and closed upon completion. Filename extensions will be
+        treated as a hint for the file type, but only if filetype is not
+        C{None}. Currently recognized filename extensions are C{.al}, C{.ul}
+        and C{sw}.
+        If a file descriptor d is passed in, the file will be left open (and
+        the file pointer will be left at the position where the replay
+        stopped).
+        @param agc: A nonzero value activates automatic gain control
+        @param speed: The speed for used for replaying in percent. 0 is the
+        same as 100: normal speed.
+        @param volume: The volume adjustment in db.
+        @param filetype: The file type. The default is C{kSMDataFormatALawPCM}.
+        
+        The sampling rate is hardcoded to 8000.
+
+        See U{sm_replay_start
+        <http://www.aculab.com/support/TiNG/gen/apifn-sm_replay_start.html>}
+        for more information about the parameters.
+        """
+
+        PlayJobBase.__init__(self, channel, agc, speed, volume, filetype)
+        
+        # f may be a string - if it is, close self.file in done
+        if type(f) == type(''):
+            self.file = file(f, 'rb')
+            self.filename = f
+            if filetype is None:
+                self.filetype, self.sampling_rate, self.data_rate = \
+                               guess_filetype(f)
+        else:
+            self.file = f
+            if filetype is None:
+                self.filetype = lowlevel.kSMDataFormatALawPCM
+
+        # read the length of the file
+        pos = self.file.tell()
+        self.file.seek(0, 2)
+        self.length = self.file.tell() - pos
+        self.file.seek(pos, 0)
+
+        # used for logging
+        self.datadesc = str(self.file)
+        
+    def done(self):
+        """I{Used internally}."""
+
+        reason, duration = PlayJobBase.done(self)
+        
+        f = self.file
+
+        if hasattr(self, 'filename'):
+            f.close()
+            self.file = None
+            f = self.filename
+
+        self.channel.job_done(self, 'play_done', reason, duration, f)
+
+    def get_data(self, length):
+        return self.data.read(self.file, length)
+
+class SilenceJob(PlayJobBase):
+    """Play silence on a L{SpeechChannel}."""
+
+    name = 'silence'
+
+    def __init__(self, channel, duration = 0.0):
+        """Create a SilenceJob.
+
+        @param channel: The L{SpeechChannel} that will play the file.
+        @param duration: The length of the silence in seconds.
+        """
+
+        PlayJobBase.__init__(self, channel)
+
+        # Work with ms internally
+        self.duration = int(duration * self.data_rate)
+        
+    def done(self):
+        """I{Used internally}."""
+
+        reason, duration = PlayJobBase.done(self)
+        
+        self.channel.job_done(self, 'silence_done', reason, duration)
+
+    def get_data(self, length):
+        r = self.duration - self.offset 
+        if r < length:
+            length = r
+
+        # alaw silence, as our filetype is alaw by default
+        # we could look at the ts_type of the channel for a possible
+        # optimisation
+        self.data.setdata('\x55' * length)
+        return length
+
 
 class RecordJob(object):
     """A RecordJob records a file through its L{SpeechChannel}."""
@@ -253,6 +357,7 @@ class RecordJob(object):
         If a fd is passed in, the file will be left open and not be reset
         to the beginning.
         @param max_octets: Maximum length of the recording (in bytes)
+        @param max_elapsed_time: Maximum length the recording in seconds.
         @param max_silence: Maximum length of silence in seconds, before the
         recording is terminated.
         @param elimination: Activates silence elimination if not zero.
@@ -309,7 +414,12 @@ class RecordJob(object):
         record.max_octets = self.max_octets
         record.max_elapsed_time = int(self.max_elapsed_time * 1000)
         record.max_silence = int(self.max_silence * 1000)
-        record.elimination = self.elimination
+        if TiNG_version[0] < 2:
+            record.elimination = self.elimination
+        else:
+            # We abuse the fact that False == kSMToneDetectionNone
+            record.tone_elimination_mode = self.elimination
+            
         record.agc = self.agc
         record.volume = self.volume
 
@@ -531,16 +641,16 @@ class DigitsJob(object):
 class ToneJob(object):
     """Job to play a predefined Tone."""
     
-    def __init__(self, channel, tone, duration = 0):
-        """Prepare to play a tone.
+    def __init__(self, channel, tone, duration = 0.0):
+        """Prepare to play a list of tones.
 
         @param tone: A predefined tone id.
         See the U{list of pre-loaded output tones
-        <http://www.aculab.com/support/TiNG/gen/apifn-sm_play_tone.html>} for
-        valid tone ids.
+        <http://www.aculab.com/support/TiNG/prospapi_outtones.html>} for
+        valid tone ids. Duration is in seconds, not milliseconds.
+        0.0 is infinite.
 
-        @param duration: The duration of the tone in milliseconds.
-        O is infinite.
+        @param duration: the duration in seconds (float).
 
         See U{sm_play_tone
         <http://www.aculab.com/support/TiNG/gen/apifn-sm_play_tone.html>}
@@ -551,20 +661,23 @@ class ToneJob(object):
         self.tone = tone
         self.duration = duration
 
+    def start_tone(self):
+        """Used internally: start the tone at the current offset."""
+        
     def start(self):
         """Do not call this method directly - call L{SpeechChannel.start}
         instead."""
-        
+
         tp = lowlevel.SM_PLAY_TONE_PARMS()
         tp.channel = self.channel.channel
         tp.tone_id = self.tone
-        tp.duration = self.duration
+        tp.duration = int(self.duration * 1000)
 
         rc = lowlevel.sm_play_tone(tp)
         if rc:
             raise AculabSpeechError(rc, 'sm_play_tone', self.channel.name)
 
-        log.debug('%s tone(%d, duration=%d)',
+        log.debug('%s tone(%d, duration=%.3f)',
                   self.channel.name, self.tone, self.duration)
 
         # add the write event to the reactor
@@ -586,15 +699,14 @@ class ToneJob(object):
         if status.status == lowlevel.kSMPlayToneStatusComplete:
 
             channel = self.channel
-            
             reason = None
 
             # remove the write event from to the reactor
             channel.reactor.remove(os_event(channel.event_write))
-
+            
             log.debug('%s tone_done(reason=\'%s\')',
                       channel.name, reason)
-
+            
             channel.job_done(self, 'tone_done', reason)
                 
     def stop(self):
@@ -611,13 +723,11 @@ class ToneJob(object):
         # remove the write event from the reactor
         self.channel.reactor.remove(os_event(self.channel.event_write))
 
-        # Position is only nonzero when play was stopped.
         channel = self.channel
         
-        # Compute reason.
+        # Compute reason
         reason = AculabStopped()
 
-        # no locks held
         log.debug('%s tone_done(reason=\'%s\'', channel.name, reason)
 
         channel.job_done(self, 'digits_done', reason) #, pos)
@@ -698,9 +808,9 @@ class SpeechChannel(Lockable):
 
         @param controller: This object will receive notifications about
         completed jobs. Controllers must implement:
-         - play_done(self, channel, file, reason, position, user_data)
+         - play_done(self, channel, reason, file, duration, user_data)
          - dtmf(self, channel, digit, user_data)
-         - record_done(self, channel, file, reason, size, user_data)
+         - record_done(self, channel, reason, file, size, user_data)
          - digits_done(self, channel, reason, user_data).
         
         Reason is an exception or None (for normal termination).
@@ -1094,9 +1204,12 @@ class SpeechChannel(Lockable):
         self.tone_set_id = toneset
         self.tone_detection_mode = mode
 
-        if type(toneset) in (str, unicode) and toneset.lower() == 'dtmf/fax':
-            # Incomplete: does not work for non-TiNG yet
-            self.tone_set_id = self.module.dtmf_fax_toneset()
+        if type(toneset) in (str, unicode):
+            if toneset.lower() == 'dtmf/fax':
+                # Incomplete: does not work for non-TiNG yet
+                self.tone_set_id = self.module.dtmf_fax_toneset()
+            else:
+                raise ValueError('invalid toneset %s' % toneset)
 
         listen_for = lowlevel.SM_LISTEN_FOR_PARMS()
         listen_for.channel = self.channel
@@ -1180,8 +1293,8 @@ class SpeechChannel(Lockable):
 
         self.start(job)
 
-    def tone(self, tone = 0, duration = 128):
-        """Send a tone."""
+    def tone(self, tone, duration = 0.0):
+        """Send a predefined output tone."""
 
         job = ToneJob(self, tone, duration)
 
@@ -1192,6 +1305,15 @@ class SpeechChannel(Lockable):
 
         job = DigitsJob(self, digits, inter_digit_delay,
                         digit_duration)
+
+        self.start(job)
+
+    def silence(self, duration = 0.0):
+        """Play silence.
+
+        This is a shorthand to create and start a L{SilenceJob}."""
+
+        job = SilenceJob(self, duration)
 
         self.start(job)
 
@@ -1261,8 +1383,9 @@ class SpeechChannel(Lockable):
         else:
             self.unlock()
 
-        f = getattr(self.controller, fn)
-        f(self, reason, *args, **kwargs)
+        f = getattr(self.controller, fn, None)
+        if f:
+            f(self, reason, *args, **kwargs)
         m = getattr(self.controller, 'job_done', None)
         if m:
             m(job, reason, self.user_data)

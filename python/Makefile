@@ -24,9 +24,17 @@ endif
 
 all: aculab/_lowlevel$(SO) aculab/lowlevel.py
 
+# To generate a patch, (with the example cl_lib.h), copy a the original 
+# cl_lib.h to cl_lib.h2, edit it, and then do:
+# diff -u $(DTK)/include/cl_lib.h cl_lib.h2 > cl_lib.patch
+
+
 ifneq ($(find_v6),)
 cl_lib.h2: $(DTK)/include/cl_lib.h cl_lib.patch
 	patch -o $@ $(DTK)/include/cl_lib.h cl_lib.patch
+
+acu_type.h2: $(DTK)/include/cl_lib.h acu_type.patch
+	patch -o $@ $(DTK)/include/acu_type.h acu_type.patch
 
 #res_lib.h2: $(DTK)/include/res_lib.h res_lib.patch
 #	patch -o $@ $(DTK)/include/res_lib.h res_lib.patch
@@ -63,10 +71,6 @@ aculab/_lowlevel$(SO): $(OBJS)
 
 %$(O): %.c
 	$(CC) -c $(C_DEFINES) $(ACULAB_INCLUDE) $(PYTHON_INCLUDE) $< -o $@ 
-
-# To generate a patch, (with the example cl_lib.h), copy a the original 
-# cl_lib.h to cl_lib.h2, edit it, and then do:
-# diff -u $(DTK)/include/cl_lib.h cl_lib.h2 > cl_lib.patch
 
 install:
 	python disthelper.py aculab

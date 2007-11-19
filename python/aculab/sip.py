@@ -26,7 +26,7 @@ class SIPHandle(CallHandleBase):
     def __init__(self, controller, user_data = None,
                  reactor = CallReactor):
 
-        sip_port = Snapshot().sip
+        sip_port = Snapshot().sip.port_id
         if sip_port is None:
             raise RuntimeError('no SIP service running')
 
@@ -165,18 +165,16 @@ class SIPHandle(CallHandleBase):
 
         log.debug('%s incoming_ringing()', self.name)
 
-        return ringing
-
     def disconnect(self, code = 200):
         """Disconnect a call. Code is 200 by default (which is probably
         wrong)"""
         
         if self.handle:
-            disconnectp = lowlevel.SIP_DISCONNECT_PARMS()
+            disconnectp = lowlevel.DISCONNECT_XPARMS()
             disconnectp.handle = self.handle
-            disconnectp.sip_code = code
+            disconnectp.cause = code
 
-            rc = lowlevel.sip_disconnect(disconnectp)
+            rc = lowlevel.xcall_disconnect(disconnectp)
             if rc:
                 raise AculabError(rc, 'sip_disconnect', self.name)
 

@@ -1,7 +1,7 @@
 # Copyright (c) 2001-2004 Twisted Matrix Laboratories for OrderedDict
 # Copyright (C) 2003-2007 Lars Immisch
 
-"""Utility classes: L{OrderedDict} and L{Lockable}."""
+"""Utility classes: L{OrderedDict}, L{Lockable} and L{EventQueue}."""
 
 import os
 import lowlevel
@@ -76,16 +76,24 @@ class OrderedDict(dict):
         dict.__delitem__(self, key)
         self._order.remove(key)
 
-    def iteritems(self):
-        for item in self._order:
-            yield (item, self[item])
-
+    def iteritems(self, reverse = False):
+        if not reverse:
+            for item in self._order:
+                yield (item, self[item])
+        else:
+            for item in reversed(self._order):
+                yield (item, self[item])
+                
     def items(self):
         return list(self.iteritems())
 
-    def itervalues(self):
-        for item in self._order:
-            yield self[item]
+    def itervalues(self, reverse = False):
+        if not reverse:
+            for item in self._order:
+                yield self[item]
+        else:
+            for item in reversed(self._order):
+                yield self[item]
 
     def values(self):
         return list(self.itervalues())
@@ -124,3 +132,32 @@ class Lockable(object):
     def unlock(self):
         if self.mutex:
             self.mutex.release()
+
+class EventQueue(object):
+
+    def __init__(self):
+        '''Allocate an event queue.'''
+        q = lowlevel.ACU_ALLOC_EVENT_QUEUE_PARMS()
+        rc = lowlevel.acu_allocate_event_queue(q)
+        if rc:
+            raise AculabError(rc, 'acu_allocate_event_queue')
+
+        self.queue_id = q.queue_id
+
+        wo = lowlevel.ACU_QUEUE_WAIT_OBJECT_PARMS()
+        wo.queue_id = self.queue_id
+
+        rc = lowlevel.acu_get_event_queue_wait_object(wo)
+        if rc:
+            raise AculabError(rc, 'acu_get_event_queue_wait_object')
+        
+        self.fd = wo.wait_object
+        
+    def __del__(self):
+        f = lowlevel.ACU_FREE_EVENT_QUEUE_PARMS()
+        f.queue_id = qid
+
+        rc = lowlevel.acu_free_event_queue(f)
+        if rc:
+            raise AculabError(rc, 'acu_free_event_queue')
+

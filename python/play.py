@@ -87,7 +87,7 @@ class PlayController(object):
     def ev_idle(self, call, user_data):
         raise StopIteration
 
-    def play_done(self, channel, f, reason, position, user_data):
+    def play_done(self, channel, reason, f, duration, user_data):
         pass
 
     def job_done(self, job, reason, user_data):

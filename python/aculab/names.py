@@ -9,6 +9,7 @@ Available dictionaries are:
  - C{fax_error_names}
  - C{vmptx_status_names}
  - C{vmprx_status_names}
+ - C{port_event_names}
 """
 
 import re
@@ -50,3 +51,11 @@ for k in lowlevel.__dict__.keys():
         vmprx_status_names[lowlevel.__dict__[k]] = k
     elif _vmptx_status_pattern.match(k):
         vmptx_status_names[lowlevel.__dict__[k]] = k
+
+del _ext_pattern
+del _event_pattern
+del _sm_error_pattern
+del _error_pattern
+del _fax_error_pattern
+del _vmptx_status_pattern
+del _vmprx_status_pattern

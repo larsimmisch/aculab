@@ -7,6 +7,7 @@ import select
 import os
 import lowlevel
 import logging
+from util import EventQueue
 from names import event_names
 
 if os.name == 'nt':
@@ -31,6 +32,17 @@ no_state_change_extended_events = [lowlevel.EV_EXT_FACILITY,
                                    lowlevel.EV_EXT_UUI_UNCONGESTED,
                                    lowlevel.EV_EXT_UUS_SERVICE_REQUEST,
                                    lowlevel.EV_EXT_TRANSFER_INFORMATION]
+
+def generic_dispatch(controller, method, *args, **kwargs):
+    m = getattr(controller, method, None)
+    if not m:
+        log.warn('%s not implemented on %s', method, controller)
+        return
+
+    try:
+        m(*args, **kwargs)
+    except:
+        log.error('error in %s', method, exc_info=1)
 
 class _CallEventReactor:
 
@@ -299,7 +311,9 @@ else: # os.name == 'nt'
 
     class PollSpeechEventReactor(threading.Thread):
         """Prosody Event reactor for Unix systems with poll(), most notably
-        Linux."""
+        Linux.
+
+        Experimental support for notifications."""
 
         def __init__(self):
             """Create a reactor."""
@@ -307,26 +321,33 @@ else: # os.name == 'nt'
             self.handles = {}
             self.mutex = threading.Lock()
             self.queue = []
-
+            
             # create a pipe to add/remove fds
             pfds = os.pipe()
-            self.pipe = (os.fdopen(pfds[0], 'rb', 0), os.fdopen(pfds[1], 'wb', 0))
+            self.pipe = (os.fdopen(pfds[0], 'rb', 0),
+                         os.fdopen(pfds[1], 'wb', 0))
             self.setDaemon(1)
             self.poll = select.poll()
 
             # listen to the read fd of our pipe
             self.poll.register(self.pipe[0], select.POLLIN )
 
+
         def add(self, handle, method, mask = select.POLLIN|select.POLLOUT):
             """Add a new handle to the reactor.
 
-            @param handle: A file descriptor. On Unix, use the C{fd} member of the
-            C{tSMEventId} structure.
+            @param handle: A file descriptor. On Unix, use the C{fd} member of
+            the C{tSMEventId} structure.
             @param method: This will be called when the event is fired.
             @param mask: Bitmask of POLLIN, POLLPRI, POLLOUT, POLLERR, POLLHUP
             or POLLNVAL or None for a default mask.
 
             This method blocks until I{handle} is added by reactor thread"""
+
+            if not callable(method):
+                raise ValueError('method must be callable')
+            
+            
             if threading.currentThread() == self or not self.isAlive():
                 # log.debug('adding fd: %d %s', handle, method.__name__)
                 self.handles[handle] = method
@@ -394,17 +415,71 @@ else: # os.name == 'nt'
                             #log.info('event on fd %d %s: %s', a, maskstr(mask),
                             #         m.__name__)
 
-                            # ignore method not found
+                            # ignore missing method, it must have been removed
                             if m:
                                 m()
 
                 except StopIteration:
                     return
                 except KeyboardInterrupt:
-                    raise
+                    return
                 except:
                     log.error('error in PollSpeechEventReactor main loop',
                               exc_info=1)
                     raise
 
     SpeechReactor = PollSpeechEventReactor()
+
+class PortEventDispatcher:
+    def __init__(self, port, controller, user_data):
+        self.port = port
+        self.controller = controller
+        self.user_data = user_data
+
+    def __call__(self):
+        n = lowlevel.CALL_PORT_NOTIFICATION_PARMS()
+        n.port_id = port.get_port_id()
+        
+        rc = call_get_port_notification(n)
+        if rc:
+            raise AculabError(rc, 'call_get_port_notification')
+
+        if n.event == lowlevel.ACU_CALL_EVT_L1_CHANGE:
+            pass
+        elif n.event == lowlevel.ACU_CALL_EVT_L2_CHANGE:
+            pass
+        elif n.event == lowlevel.ACU_CALL_EVT_HW_CLOCK_STOP:
+            pass
+        elif n.event == lowlevel.ACU_CALL_EVT_CONNECTIONLESS:
+            pass
+        elif n.event == lowlevel.ACU_CALL_EVT_FIRMWARE_CHANGE:
+            pass
+        elif n.event == lowlevel.ACU_CALL_EVT_D_CHAN_SWITCHOVER:
+            pass
+        elif n.event == lowlevel.ACU_CALL_EVT_PORT_COMMS_LOST:
+            pass
+        elif n.event == lowlevel.ACU_IPT_EV_ADD_ALIAS_SUCCEEDED:
+            pass
+        elif n.event == lowlevel.ACU_IPT_EV_ADD_ALIAS_FAILED:
+            pass
+        elif n.event == lowlevel.ACU_IPT_EV_ALIAS_REMOVED:
+            pass
+        elif n.event == lowlevel.ACU_CALL_EV_INSUFFICIENT_MEDIA_RESOURCE:
+            pass
+        elif n.event == lowlevel.ACU_SIP_EV_RESPONSE:
+            pass
+        elif n.event == lowlevel.ACU_SIP_EV_REQUEST:
+            pass
+        elif n.event == lowlevel.ACU_SIP_EV_REQUEST_TIMEOUT:
+            pass
+        elif n.event == lowlevel.ACU_CALL_EVT_NO_CHANNEL_AVAILABLE:
+            pass
+        elif n.event == lowlevel.ACU_CALL_EVT_BLOCKING_STATE_CHANGE:
+            pass
+        elif n.event == lowlevel.ACU_CALL_EVT_RESET_STATE_CHANGE:
+            pass
+        elif n.event == lowlevel.ACU_CALL_EVT_TRACE_MODE:
+            pass
+        elif n.event == lowlevel.ACU_CALL_EVT_TRACE_SNAPSHOT:
+            pass
+        

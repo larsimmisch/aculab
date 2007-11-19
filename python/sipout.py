@@ -24,19 +24,23 @@ class CallData:
         self.speech = SpeechChannel(controller, user_data=self)
         self.connection = None
 
-    def vmprx_ready(self, vmprx, sdp):
-        self.call.openout(self.number, sdp)
+    def vmprx_ready(self, vmprx):
+        sd = vmprx.default_sdp()
+        vmprx.configure(sd)
+        
+        self.call.openout(self.number, sd)
         vmprx.config_tones()
 
     def ev_media(self, call):
         # The call has already received the details for us
         # and that's how we get at the SDP:
-        sdp = SDP(call.details.media_session.received_media.raw_sdp)
+        sd = SDP(call.details.media_session.received_media.raw_sdp)
 
-        self.vmptx.configure(sdp)
+        self.vmptx.configure(sd)
 
     def connect(self):
         self.connection = connect((self.vmptx, self.vmprx), self.speech)
+        self.speech.listen_for()
 
     def close(self):
         for attr in ['connection', 'call', 'speech', 'vmprx', 'vmptx']:
@@ -47,9 +51,9 @@ class CallData:
 
 class OutgoingCallController:
 
-    def vmprx_ready(self, vmprx, sdp, user_data):
+    def vmprx_ready(self, vmprx, user_data):
         """Called when the vmprx is ready."""
-        user_data.vmprx_ready(vmprx, sdp)
+        user_data.vmprx_ready(vmprx)
 
     def dtmf(self, channel, digit, user_data):
         log.info('dtmf: %s', digit)
@@ -64,13 +68,14 @@ class OutgoingCallController:
         user_data.connect()
         user_data.speech.play('asteria.al')
         
-    def play_done(self, channel, f, reason, position, user_data):
+    def play_done(self, channel, reason, f, duration, user_data):
         # The call might be gone already
         if user_data.call:
             user_data.call.disconnect()
 
     def ev_idle(self, call, user_data):
         user_data.close()
+        raise StopIteration
         
 def usage():
     print '''usage: sipout.py [-n <numcalls>] <number>'''
@@ -97,5 +102,8 @@ if __name__ == '__main__':
     for i in range(numcalls):
         c = CallData(controller, args[0])
 
-    SpeechReactor.start()
-    CallReactor.run()
+    try:
+        SpeechReactor.start()
+        CallReactor.run()
+    except StopIteration:
+        pass

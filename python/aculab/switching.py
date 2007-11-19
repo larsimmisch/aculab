@@ -278,7 +278,7 @@ class TDMtx(object):
         tdmtx.module = self.module.open.module_id
         tdmtx.stream = ts[0]
         tdmtx.timeslot = ts[1]
-        tdmtx.type = lowlevel.kSMTimeslotTypeALaw
+        tdmtx.type = lowlevel.kSMTimeslotTypeData
         if len(ts) > 2:
             tdmtx.type = ts[2]
 
@@ -297,7 +297,7 @@ class TDMtx(object):
         apifn-sm_tdmtx_destroy.html>}."""
         
         if self.tdmtx:
-            rc = lowlevel.smd_tdmtx_destroy(self.tdmtx)
+            rc = lowlevel.sm_tdmtx_destroy(self.tdmtx)
             self.tdmtx = None
 
     def listen_to(self, other):
@@ -313,7 +313,7 @@ class TDMtx(object):
                     rc, 'sm_tdmtx_datafeed_connect(%s)' % other.name,
                     self.name)
 
-            log_switch.debug('%s := %s', self.name, other.name)
+            log.debug('%s := %s', self.name, other.name)
         else:
             raise ValueError('%s := %s: cannot connect to instance without '\
                              'get_datafeed() method' % (self.name, other.name))
@@ -344,8 +344,8 @@ class TDMrx(object):
         tdmrx.module = self.module.open.module_id
         tdmrx.stream = ts[0]
         tdmrx.timeslot = ts[1]
-        tdmrx.type = lowlevel.kSMTimeslotTypeALaw
-        if len(ts) > 2:
+        tdmrx.type = lowlevel.kSMTimeslotTypeData
+        if len(ts) > 2 and ts[2] is not None:
             tdmrx.type = ts[2]
 
         rc = lowlevel.sm_tdmrx_create(tdmrx)
@@ -373,7 +373,7 @@ class TDMrx(object):
         apifn-sm_tdmrx_destroy.html>}."""
 
         if self.tdmrx:
-            rc = lowlevel.smd_tdmrx_destroy(self.tdmrx)
+            rc = lowlevel.sm_tdmrx_destroy(self.tdmrx)
             self.datafeed = None
             self.tdmrx = None
 
@@ -670,10 +670,18 @@ def connect(a, b, bus=DefaultBus(), force_bus=False):
             return c
         
     # nonpathological case
-    c.endpoints = [ brx.speak_to(c.timeslots[0]),
+    #c.endpoints = [ brx.speak_to(c.timeslots[0]),
+    #                atx.listen_to(c.timeslots[0]),
+    #                arx.speak_to(c.timeslots[1]),
+    #                btx.listen_to(c.timeslots[1]) ]
+
+    c.endpoints = [ bus.listen_to(brx.get_switch(), c.timeslots[0],
+                                  brx.get_timeslot()),
                     atx.listen_to(c.timeslots[0]),
-                    arx.speak_to(c.timeslots[1]),
-                    btx.listen_to(c.timeslots[1]) ]    
+                    bus.listen_to(arx.get_switch(), c.timeslots[1],
+                                  arx.get_timeslot()),
+                    btx.listen_to(c.timeslots[1]) ]
+
     return c
 
 if __name__ == '__main__':

@@ -4,6 +4,7 @@
 
 from pprint import PrettyPrinter
 import lowlevel
+from util import EventQueue
 from error import AculabError
 
 _singletons = {}
@@ -78,6 +79,66 @@ class Port(object):
 
     def __repr__(self):
         return 'Port(%d)' % self.index
+
+    def get_port_id(self):
+        return self.open.port_id
+
+class SIPPort(object):
+
+    def __init__(self):
+        rc, sip_port = lowlevel.sip_open_port()
+        if rc:
+            raise AculabError(rc, 'sip_open_port')
+
+        self.port_id = sip_port
+
+    def get_port_id(self):
+        return self.port_id
+
+    def register(self, controller):
+        # incomplete
+        wo = lowlevel.CALL_PORT_WAIT_OBJECT_PARMS()
+        wo.port_id = self.port_id
+        
+        rc = lowlevel.call_get_port_notification_wait_object(wo)
+        if rc:
+            raise AculabError(rc, 'call_get_port_notification_wait_object')
+
+    def set_message_notification(self, request_mask = 0, response_mask = 0,
+                                 enable_response_mask = 0):
+        """Configure the SIP service how to respond to out-of-dialog
+        SIP messages.
+
+        Possible bits from module L{lowlevel} are::
+         - ACU_SIP_INITIAL_INVITE_NOTIFICATION
+         - ACU_SIP_REINVITE_NOTIFICATION
+         - ACU_SIP_TRANSFER_INVITE_NOTIFICATION
+         - ACU_SIP_INFO_NOTIFICATION
+         - ACU_SIP_NOTIFY_NOTIFICATION
+         - ACU_SIP_REGISTER_NOTIFICATION
+         - ACU_SIP_SUBSCRIBE_NOTIFICATION
+         - ACU_SIP_OPTIONS_NOTIFICATION
+
+        @param request_mask: a bitmask of requests for which the application
+        would like to receive notifications.
+
+        @param response_mask: a bitmask of responses for which the application
+        would like to receive notifications.
+
+        @param enable_response_mask: a bitmask of responses for which the
+        application would would like to send responses itself. If this isn't
+        set, the SIP service will send 200 OK responses automatically.
+        """
+
+        notify = lowlevel.SIP_MESSAGE_NOTIFICATION_PARMS()
+        notify.port_id = self.port_id
+        notify.request_notification_mask = request_mask
+        notify.response_notification_mask = response_mask
+        notify.enable_response_mask = enable_response_mask
+
+        rc = lowlevel.sip_set_message_notification(notify)
+        if rc:
+            raise AculabError(rc, 'sip_set_message_notifications')        
 
 class CallControlCard(Card):
     """An Aculab card capable of call control.
@@ -247,7 +308,7 @@ class Module(object):
             if mode in (lowlevel.kSMToneLenDetectionNoMinDuration,
                         lowlevel.kSMToneLenDetectionMinDuration64,
                         lowlevel.kSMToneLenDetectionMinDuration40):
-                p = (recog.param0/256, recog.param0 % 256)
+                p = (recog.param0 % 256, recog.param0 / 256)
                 l = recog.param1
 
             else:
@@ -330,7 +391,7 @@ class Snapshot(object):
             Snapshot._singleton.init(*args, **kwargs)
         return Snapshot._singleton
 
-    def init(self, notification_queue = None, user_data = None):
+    def init(self, notification_queue = 0, user_data = None):
         """Note that we do not have a __init__ method, since this is called
         every time the singleton is re-issued. We do the work here instead"""
         
@@ -345,11 +406,11 @@ class Snapshot(object):
         
         count = count + 1
 
-        rc, sip_port = lowlevel.sip_open_port()
-        # Don't fail if no SIP service is running
-        if rc == 0:
-            self.sip = sip_port
-        
+        try:
+            self.sip = SIPPort()
+        except AculabError:
+            pass
+
         snapshotp = lowlevel.ACU_SNAPSHOT_PARMS()
     
         rc = lowlevel.acu_get_system_snapshot(snapshotp)
@@ -379,7 +440,6 @@ class Snapshot(object):
 
             if infop.resources_available & lowlevel.ACU_RESOURCE_SPEECH:
                 self.prosody.append(ProsodyCard(openp, infop))
-
 
     def pprint(self, **kwargs):
         """Pretty-print all cards (not very detailed yet)"""

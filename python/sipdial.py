@@ -43,10 +43,11 @@ class CallData:
 
 class IncomingCallController:
 
-    def vmprx_ready(self, vmprx, sdp, user_data):
+    def vmprx_ready(self, vmprx, user_data):
         """Called when the vmprx is ready."""
         vmprx.config_tones()
-        user_data.incall.accept(sdp)
+        sd = vmprx.default_codec(True)
+        user_data.incall.accept(sd)
 
     def dtmf(self, channel, digit, user_data):
         log.info('dtmf: %s', digit)
@@ -69,6 +70,11 @@ class IncomingCallController:
         else:
             user_data.outcall.disconnect()
 
+    def ev_media(self, call, user_data):
+        sd = SDP(call.details.media_session.received_media.raw_sdp)
+
+        user_data.vmptx.configure(sd, user_data.vmprx.get_rtp_address())
+
     def ev_call_connected(self, call, user_data):
         user_data.connect()
         user_data.outcall = CallHandle(self, user_data)
@@ -77,7 +83,7 @@ class IncomingCallController:
         # Dial tone, 400Hz
         user_data.speech.tone(9)
         
-    def play_done(self, channel, f, reason, position, user_data):
+    def play_done(self, channel, reason, f, duration, user_data):
         # The call might be gone already
         if user_data.incall:
             user_data.incall.disconnect()

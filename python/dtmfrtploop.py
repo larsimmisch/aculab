@@ -35,11 +35,13 @@ class RTPLoop:
 
 class RTPLoopController:
 
-    def vmprx_ready(self, vmprx, sdp, user_data):
+    def vmprx_ready(self, vmprx, user_data):
         """Called when the vmprx is ready."""
+
+        sd = vmprx.default_sdp(configure=True)
         
-        log.debug('vmprx SDP: %s', sdp)
-        user_data.vmptx.configure(sdp)
+        log.debug('vmprx SDP: %s', sd)
+        user_data.vmptx.configure(sd)
 
         # convert: regenerate, eliminate: False
         user_data.vmptx.config_tones(regenerate, False)
@@ -47,23 +49,41 @@ class RTPLoopController:
         # detect: True, regen: False
         user_data.vmprx.config_tones(True, False)
 
-        user_data.speechtx.digits('0123456789*#')
-        user_data.speechrx.record('dtmfrtp.al', max_silence = 1000)
+        if fname:
+            user_data.speechtx.play(fname)
+        else:
+            user_data.speechtx.digits('0123456789*#')
+            
+        user_data.speechrx.record('dtmfrtp.al', max_silence = 1.0)
+
+    def vmprx_newssrc(self, vmprx, address, ssrc, user_data):
+        pass
 
     def dtmf(self, channel, digit, user_data):
-        log.info('%s dtmf: %s', channel.name, digit)
+        pass
+
+    def play_done(self, channel, reason, f, duration, user_data):
+        raise StopIteration
 
     def record_done(self, channel, file, reason, size, user_data):
-        raise StopIteration
-
+        pass
+    
     def digits_done(self, channel, reason, user_data):
-        channel.tone(23, 1000)
+        channel.tone(23, 1.0)
 
     def tone_done(self, channel, reason, user_data):
-        raise StopIteration
+        channel.silence(1.0)
+
+    def silence_done(self, channel, reason, duration, user_data):
+        raise StopIteration    
         
 def usage():
-    print 'usage: dtmfrtploop.py [-c <card>] [-m <module>] [-t <tingtrace>]'
+    print '''usage: dtmfrtploop.py [-c <card>] [-m <module>] [-t <tingtrace>]
+    -l turns on digit recognition via kSMToneLenDetectionMinDuration64
+
+    If -f is given, <file> is played. If no file is specified,
+    0123456789*# plus CNG is generated.
+    '''
     sys.exit(-2)
 
 if __name__ == '__main__':
@@ -74,9 +94,10 @@ if __name__ == '__main__':
     module = 0
     controller = RTPLoopController()
     regenerate = False
+    fname = None
     mode = lowlevel.kSMToneDetectionMinDuration64
 
-    options, args = getopt.getopt(sys.argv[1:], 'c:m:t:rl')
+    options, args = getopt.getopt(sys.argv[1:], 'c:m:t:f:rlh?')
 
     for o, a in options:
         if o == '-c':
@@ -85,6 +106,8 @@ if __name__ == '__main__':
             module = int(a)
         elif o == '-t':
             aculab.lowlevel.cvar.TiNGtrace = int(a)
+        elif o == '-f':
+            fname = a            
         elif o == '-r':
             regenerate = True
         elif o == '-l':

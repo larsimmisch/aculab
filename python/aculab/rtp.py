@@ -12,7 +12,8 @@ import logging
 import lowlevel
 import names
 import sdp
-from switching import VMPtxEndpoint, FMPtxEndpoint, TDMrx
+import socket
+from switching import VMPtxEndpoint, FMPtxEndpoint, TDMrx, TDMtx, Connection
 from reactor import SpeechReactor
 from snapshot import Snapshot
 from error import *
@@ -98,7 +99,8 @@ class VMPrx(RTPBase):
         on its controller.
         
         Controllers must implement:
-         - vmprx_ready(vmprx, sdp, user_data)
+         - vmprx_ready(vmprx, user_data)
+         - vmprx_newssrc(vmprx, address, ssrc, user_data)
          - dtmf(vmprx, digit, user_data)."""
 
         RTPBase.__init__(self, card, module, mutex, user_data, ts_type)
@@ -112,7 +114,7 @@ class VMPrx(RTPBase):
         self.datafeed = None
         self.rtp_port = None
         self.rtcp_port = None
-        self.sdp = None
+        self.address = socket.INADDR_ANY
         self.tdm = None
 
         # create vmprx
@@ -137,7 +139,7 @@ class VMPrx(RTPBase):
 
         self.event_vmprx = os_event(evmprx.event)
 
-        log.debug('%s event fd: %d', self.name, self.event_vmprx)
+        # log.debug('%s event fd: %d', self.name, self.event_vmprx)
 
         # get the datafeed
         datafeed = lowlevel.SM_VMPRX_DATAFEED_PARMS()
@@ -166,6 +168,16 @@ class VMPrx(RTPBase):
 
             log.debug("%s stopping", self.name)
 
+    def get_rtp_address(self):
+        "Return the RTP address and port as a Python-friendly tuple."
+
+        return (self.address, self.rtp_port)
+
+    def get_rtcp_address(self):
+        "Return the RTCP address and port as a Python-friendly tuple."
+
+        return (self.address, self.rtcp_port)
+
     def on_vmprx(self):
         """Internal event handler."""
         
@@ -173,31 +185,16 @@ class VMPrx(RTPBase):
         status.vmprx = self.vmprx
 
         rc = lowlevel.sm_vmprx_status(status)
-        log.debug('%s vmprx status: %s', self.name,
-                  names.vmprx_status_names[status.status])
         
         if status.status == lowlevel.kSMVMPrxStatusGotPorts:
             self.rtp_port = status.u.ports.RTP_Port
             self.rtcp_port = status.u.ports.RTCP_Port
-            self.address = status.get_ports_address()
+            self.address = status.get_address()
             # self.rtp_address = status.ports_address()
             log.debug('%s vmprx: rtp address: %s rtp port: %d, rtcp port: %d',
                       self.name, self.address, self.rtp_port, self.rtcp_port)
 
-            self.default_codecs()
-        
-            # Create the SDP
-            md = sdp.MediaDescription()
-            md.setLocalPort(self.rtp_port)
-            md.addRtpMap(sdp.PT_PCMU)
-            md.addRtpMap(sdp.PT_PCMA)
-            md.addRtpMap(sdp.PT_NTE)
-    
-            self.sdp = sdp.SDP()
-            self.sdp.setServerIP(self.address)
-            self.sdp.addMediaDescription(md)
-
-            self.controller.vmprx_ready(self, self.sdp, self.user_data)
+            self.controller.vmprx_ready(self, self.user_data)
 
         elif status.status == lowlevel.kSMVMPrxStatusDetectTone:
             tone = status.u.tone.id
@@ -207,7 +204,22 @@ class VMPrx(RTPBase):
 
             self.controller.dtmf(self, rfc2833_digits[tone], self.user_data)
             
+        elif status.status == lowlevel.kSMVMPrxStatusEndTone:
+            # ignore in the logging
+            pass
+        
+        elif status.status == lowlevel.kSMVMPrxStatusNewSSRC:
+            log.debug('%s vmprx: new SSRC: %s, port: %d, ssrc: %d', self.name,
+                      status.get_address(), status.u.ssrc.port,
+                      status.u.ssrc.ssrc)
+
+            if hasattr(self.controller, 'vmprx_newssrc'):
+                self.controller.vmprx_newssrc(
+                    self, (status.get_address, status.u.ssrc.port),
+                    status.u.ssrc.ssrc, self.user_data)
+
         elif status.status == lowlevel.kSMVMPrxStatusStopped:
+            log.debug('%s vmprx stopped', self.name)
             self.reactor.remove(self.event_vmprx)
             self.event_vmprx = None
             self.datafeed = None
@@ -217,7 +229,10 @@ class VMPrx(RTPBase):
 
             if rc:
                 raise AculabSpeechError(rc, 'sm_vmprx_destroy')
-
+        else:
+            log.debug('%s vmprx status: %s', self.name,
+                      names.vmprx_status_names[status.status])
+            
     def tdm_connect(self):
         """Connect the Receiver to a timeslot on its DSP's timeslot range.
         This method internally allocates a L{TDMtx} on the module's
@@ -238,7 +253,61 @@ class VMPrx(RTPBase):
     def get_datafeed(self):
         """Used internally by the switching protocol."""
         return self.datafeed
+
+
+    def default_sdp(self, configure=False):
+        # Create a default SDP
+        md = sdp.MediaDescription()
+        md.setLocalPort(self.rtp_port)
+        md.addRtpMap(sdp.PT_PCMA)
+        md.addRtpMap(sdp.PT_PCMU)
+        md.addRtpMap(sdp.PT_NTE)
+        
+        sd = sdp.SDP()
+        sd.addMediaDescription(md)
+
+        sd.setServerIP(self.address)
+        # sd.addSessionAttribute('direction', 'sendrecv')
+
+        if configure:
+            self.configure(sd)
+
+        return sd
             
+    def configure(self, sd, plc_mode = lowlevel.kSMPLCModeDisabled):
+        """Configure the Receiver according to the SDP.
+
+        @param sd: A L{SDP} instance describing the session."""
+
+        md = sd.getMediaDescription('audio')
+        for k, v in md.rtpmap.iteritems(reverse=True):
+            m = v[1]
+            log.debug('%s codec: %s pt: %d', self.name, m.name, k)
+            if m.name == 'PCMU':
+                codecp = lowlevel.SM_VMPRX_CODEC_MULAW_PARMS()
+                codecp.vmprx = self.vmprx
+                codecp.payload_type = k
+                codecp.plc_mode = plc_mode
+    
+                rc = lowlevel.sm_vmprx_config_codec_mulaw(codecp)
+                if rc:
+                    raise AculabSpeechError(rc, 'sm_vmprx_config_codec_mulaw')
+                
+            elif m.name == 'PCMA':
+                codecp = lowlevel.SM_VMPRX_CODEC_ALAW_PARMS()
+                codecp.vmprx = self.vmprx
+                codecp.payload_type = k
+                codecp.plc_mode = plc_mode
+    
+                rc = lowlevel.sm_vmprx_config_codec_alaw(codecp)
+                if rc:
+                    raise AculabSpeechError(rc, 'sm_vmprx_config_codec_alaw')
+
+            elif m.name == 'telephone-event':
+                self.config_rfc2833(k)
+            else:
+                log.warn('Codec %d %s unsupported', k, m.name)
+                
     def config_tones(self, detect = True, regen = False):
         """Configure RFC2833 tone detection/regeneration."""
         
@@ -251,19 +320,6 @@ class VMPrx(RTPBase):
         if rc:
             raise AculabSpeechError(rc, 'sm_vmprx_config_tones')
 
-    def config_codec(self, codec, pt, plc_mode = lowlevel.kSMPLCModeDisabled):
-        """Configure a (generic) codec."""
-        
-        codecp = lowlevel.SM_VMPRX_CODEC_PARMS()
-        codecp.vmprx = self.vmprx
-        codecp.codec = codec
-        codecp.payload_type = pt
-        codecp.plc_mode = plc_mode
-    
-        rc = lowlevel.sm_vmprx_config_codec(codecp)
-        if rc:
-            raise AculabSpeechError(rc, 'sm_vmprx_config_codec')
-
     def config_rfc2833(self, pt = 101, plc_mode = lowlevel.kSMPLCModeDisabled):
         """Configure the RFC2833 codec."""
         
@@ -275,13 +331,6 @@ class VMPrx(RTPBase):
         rc = lowlevel.sm_vmprx_config_codec_rfc2833(rfc2833)
         if rc:
             raise AculabSpeechError(rc, 'sm_vmprx_config_codec_rfc2833')
-
-    def default_codecs(self):
-        """Preliminary: just alaw/mulaw/rfc2833. No connection to SDP yet."""
-
-        self.config_codec(lowlevel.kSMCodecTypeAlaw, 0)
-        self.config_codec(lowlevel.kSMCodecTypeMulaw, 8)
-        self.config_rfc2833()
 
 class VMPtx(RTPBase):
     """An RTP speech data transmitter.
@@ -298,6 +347,7 @@ class VMPtx(RTPBase):
         self.reactor = reactor
 
         # initialize early 
+        self.vmptx = None
         self.event_vmptx = None
 
         # create vmptx
@@ -319,7 +369,7 @@ class VMPtx(RTPBase):
 
         self.event_vmptx = os_event(evmptx.event)
 
-        log.debug('%s event fd: %d', self.name, self.event_vmptx)
+        # log.debug('%s event fd: %d', self.name, self.event_vmptx)
 
         self.reactor.add(self.event_vmptx, self.on_vmptx, select.POLLIN)
 
@@ -357,7 +407,7 @@ class VMPtx(RTPBase):
             self.vmptx = None
 
     def tdm_connect(self):
-        """Connect the Tranmitter to a timeslot on its DSP's timeslot range.
+        """Connect the Transmitter to a timeslot on its DSP's timeslot range.
         This method internally allocates a L{TDMtx} on the module's
         timeslot range.
 
@@ -377,10 +427,21 @@ class VMPtx(RTPBase):
         """Used internally by the switching protocol."""
         return self.datafeed
 
-    def configure(self, sdp):
+    def configure(self, sdp, source_rtp = None, source_rtcp = None,
+                  vad_mode = lowlevel.kSMVMPTxVADModeDisabled,
+                  ptime = 20):
         """Configure the Transmitter according to the SDP.
 
-        @param sdp: An instance of class L{SDP}."""
+        By default, do not do voice activity detection (i.e. always send data)
+        and send 20ms of data in each packets
+
+        @param sdp: An instance of class L{SDP}.
+
+        @param source_rtp: the receivers source rtp address (as a tuple)
+        @param source_rtcp: the receivers source rtcp address (as a tuple)
+        @param vad_mode: voice activity detection mode.
+        @param ptime: how much data (in ms) to send per packet per packet.
+        """
 
         config = lowlevel.SM_VMPTX_CONFIG_PARMS()
         config.vmptx = self.vmptx
@@ -390,24 +451,51 @@ class VMPtx(RTPBase):
         
         config.set_destination_rtp(addr)
 
+        if source_rtp:
+            config.set_source_rtp(source_rtp)
+
+        if source_rtcp:
+            config.set_source_rtp(rtcp)
+
         rc = lowlevel.sm_vmptx_config(config)
         if rc:
             raise AculabSpeechError(rc, 'sm_vmptx_config')
 
         md = sdp.getMediaDescription('audio')
-        for k, v in md.rtpmap.iteritems():
+        # The codec that is configured last seems to be the
+        # default codec. Hence, we configure codecs in
+        # the reverse oder they appear in the SDP
+        for k, v in md.rtpmap.iteritems(reverse=True):
             m = v[1]
+            log.debug('%s codec: %s pt: %d', self.name, m.name, k)
+
             if m.name == 'PCMU':
-                self.config_codec(lowlevel.kSMCodecTypeMulaw, k)
+                codecp = lowlevel.SM_VMPTX_CODEC_MULAW_PARMS()
+                codecp.vmptx = self.vmptx
+                codecp.payload_type = k
+                codecp.ptime = ptime
+                codecp.VADMode = vad_mode
+    
+                rc = lowlevel.sm_vmptx_config_codec_mulaw(codecp)
+                if rc:
+                    raise AculabSpeechError(rc, 'sm_vmprx_config_codec_mulaw')
+                
             elif m.name == 'PCMA':
-                self.config_codec(lowlevel.kSMCodecTypeAlaw, k)
-            elif m.name == 'G729':
-                self.config_codec(lowlevel.kSMCodecTypeG729AB, k)
+                codecp = lowlevel.SM_VMPTX_CODEC_ALAW_PARMS()
+                codecp.vmptx = self.vmptx
+                codecp.payload_type = k
+                codecp.ptime = ptime
+                codecp.VADMode = vad_mode
+    
+                rc = lowlevel.sm_vmptx_config_codec_alaw(codecp)
+                if rc:
+                    raise AculabSpeechError(rc, 'sm_vmptx_config_codec_alaw')
+
             elif m.name == 'telephone-event':
                 self.config_rfc2833(k)
             else:
                 log.warn('Codec %d %s unsupported', k, m.name)
-            
+
     def config_tones(self, convert = False, elim = True):
         """Configure RFC2833 tone conversion/elimination.
         By default, don't convert tones, but eliminate them."""
@@ -427,11 +515,6 @@ class VMPtx(RTPBase):
                      ptime = 20):
         """Configure a (generic) codec.
 
-        By default, do not do voice activity detection (i.e. always send data)
-        and send 20ms of data in each packets
-
-        @param vad_mode: voice activity detection mode.
-        @param ptime: how much data (in ms) to send per packet per packet.
         """
         
         codecp = lowlevel.SM_VMPTX_CODEC_PARMS()
@@ -479,7 +562,7 @@ class VMPtx(RTPBase):
             if rc:
                 raise AculabSpeechError(rc, 'sm_vmptx_datafeed_connect')
 
-            log_switch.debug('%s := %s', self.name, other.name)
+            log_switch.debug('%s := %s', self.name, tdm.name)
 
             return VMPtxEndpoint(self, tdm)
 
@@ -489,7 +572,7 @@ class FMPrx(RTPBase):
     Logging: output from a FMPrx is prefixed with C{frx-}"""
 
     def __init__(self, controller, card = 0, module = 0, mutex = None,
-                 user_data = None, ts_type = lowlevel.kSMTimeslotTypeALaw,
+                 user_data = None, ts_type = lowlevel.kSMTimeslotTypeData,
                  reactor = SpeechReactor):
         """Allocate an RTP FAX receiver, and add the event to the reactor.
 
@@ -498,6 +581,7 @@ class FMPrx(RTPBase):
         
         Controllers must implement:
          - fmprx_ready(vmprx, sdp, user_data)
+         - fmprx_running(vmprx, user_data)
         """
 
         RTPBase.__init__(self, card, module, mutex, user_data, ts_type)
@@ -578,23 +662,22 @@ class FMPrx(RTPBase):
         if status.status == lowlevel.kSMFMPrxStatusGotPorts:
             self.rtp_port = status.u.ports.RTP_Port
             self.rtcp_port = status.u.ports.RTCP_Port
-            self.address = status.get_ports_address()
+            self.address = status.get_address()
             # self.rtp_address = status.ports_address()
             log.debug('%s fmprx: rtp address: %s rtp port: %d, rtcp port: %d',
                       self.name, self.address, self.rtp_port, self.rtcp_port)
 
-            self.default_codecs()
         
-            # Create the SDP
+            # Create our SDP
             md = sdp.MediaDescription()
             md.setLocalPort(self.rtp_port)
             md.addRtpMap(sdp.PT_PCMU)
             md.addRtpMap(sdp.PT_PCMA)
             md.addRtpMap(sdp.PT_NTE)
     
-            self.sdp = sdp.SDP()
-            self.sdp.setServerIP(self.address)
-            self.sdp.addMediaDescription(md)
+            sdp = sdp.SDP()
+            sdp.setServerIP(self.address)
+            sdp.addMediaDescription(md)
 
             self.controller.fmprx_ready(self, self.sdp, self.user_data)
 
@@ -636,7 +719,7 @@ class FMPtx(RTPBase):
     Logging: output from a FMPrx is prefixed with C{frx-}"""
 
     def __init__(self, controller, card = 0, module = 0, mutex = None,
-                 user_data = None, ts_type = lowlevel.kSMTimeslotTypeALaw,
+                 user_data = None, ts_type = lowlevel.kSMTimeslotTypeData,
                  reactor = SpeechReactor):
 
         RTPBase.__init__(self, card, module, mutex, user_data, ts_type)

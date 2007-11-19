@@ -95,7 +95,7 @@ class DCController:
             if rc:
                 raise AculabError(rc, 'smdc_rx_data')
 
-    def play_done(self, channel, f, reason, position, user_data, job_data):
+    def play_done(self, channel, reason, f, duration, user_data):
         raise StopIteration
 
 def usage():

@@ -4,6 +4,7 @@
 %{
 #ifdef TiNG_USE_V6
 #include "netdb.h"
+#include "acu_type.h"
 #include "cl_lib.h"
 #include "res_lib.h"
 #include "sw_lib.h"
@@ -101,11 +102,12 @@ typedef struct {
 
 %apply int { ACU_ERR, ACU_UINT, ACU_UCHAR, ACU_ULONG, ACU_INT, ACU_LONG, 
 			 ACU_PORT_ID, ACU_CALL_HANDLE, ACU_CARD_ID, tSMCardId, 
-             ACU_RESOURCE_ID, tSM_INT, tSM_UT32, tSMVMPrxId, tSMVMPtxId };
+             ACU_RESOURCE_ID, tSM_INT, tSM_UT32, tSMVMPrxId, tSMVMPtxId,
+			 ACU_QUEUE_ID, ACU_EVENT_QUEUE };
 
 %apply char[ANY] { ACU_CHAR[ANY] };
 
-%apply void * { ACU_EVENT_QUEUE, ACU_ACT };
+%apply void * { ACU_ACT };
 
 %apply (int *OUTPUT) { int *perrno };
 %apply (int *OUTPUT) { ACU_PORT_ID *sip_port };
@@ -255,6 +257,7 @@ BLOCKING(sm_t38gw_worker_fn)
 // See also sized_struct.{i,py}
 %immutable *::size;
 
+%include "acu_type.h2"
 %include "cl_lib.h2"
 %include "res_lib.h"
 %include "sw_lib.h"
@@ -384,18 +387,18 @@ GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 		return Py_None;
 	}
 	
-	PyObject *read(PyObject *fo)
+	PyObject *read(PyObject *fo, int len)
 	{
 		FILE *f;
 		int rc;
 
 		if (!PyFile_Check(fo)) {
-	    	PyErr_SetString(PyExc_TypeError,"Expected a file object");
+	    	PyErr_SetString(PyExc_TypeError, "Expected a file object");
 			return NULL;
 		}
-		
+
 		f = PyFile_AsFile(fo);
-		rc = fread(self->data, 1, kSMMaxReplayDataBufferSize, f);
+		rc = fread(self->data, 1, len, f);
 		if (rc < 0)
 		{
 			PyErr_SetFromErrno(PyExc_OSError);
@@ -486,15 +489,22 @@ GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 }
 
 %extend SM_VMPRX_STATUS_PARMS {
-	PyObject *get_ports_address() {
-		if (self->status != kSMVMPrxStatusGotPorts)
+	PyObject *get_address() {
+		if (self->status == kSMVMPrxStatusGotPorts)
+		{
+			return PyString_FromString(
+				(const char*)inet_ntoa(self->u.ports.address));
+		}
+		else if (self->status == kSMVMPrxStatusNewSSRC)
+		{
+			return PyString_FromString(
+				(const char*)inet_ntoa(self->u.ssrc.address));
+		}
+		else
 		{
 	    	PyErr_SetString(PyExc_ValueError, "invalid status");
 			return NULL;
 		}
-		
-		return PyString_FromString(
-			(const char*)inet_ntoa(self->u.ports.address));
 	}
 }
 
