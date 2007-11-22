@@ -191,7 +191,7 @@ class VMPrx(RTPBase):
             self.rtcp_port = status.u.ports.RTCP_Port
             self.address = status.get_address()
             # self.rtp_address = status.ports_address()
-            log.debug('%s vmprx: rtp address: %s rtp port: %d, rtcp port: %d',
+            log.debug('%s rtp address: %s rtp port: %d, rtcp port: %d',
                       self.name, self.address, self.rtp_port, self.rtcp_port)
 
             self.controller.vmprx_ready(self, self.user_data)
@@ -199,7 +199,7 @@ class VMPrx(RTPBase):
         elif status.status == lowlevel.kSMVMPrxStatusDetectTone:
             tone = status.u.tone.id
             volume = status.u.tone.volume
-            log.debug('%s vmprx: tone: %d, volume: %f', self.name,
+            log.debug('%s tone: %d, volume: %f', self.name,
                       tone, volume)
 
             self.controller.dtmf(self, rfc2833_digits[tone], self.user_data)
@@ -209,7 +209,7 @@ class VMPrx(RTPBase):
             pass
         
         elif status.status == lowlevel.kSMVMPrxStatusNewSSRC:
-            log.debug('%s vmprx: new SSRC: %s, port: %d, ssrc: %d', self.name,
+            log.debug('%s new SSRC: %s, port: %d, ssrc: %d', self.name,
                       status.get_address(), status.u.ssrc.port,
                       status.u.ssrc.ssrc)
 
@@ -255,19 +255,20 @@ class VMPrx(RTPBase):
         return self.datafeed
 
 
-    def default_sdp(self, configure=False):
+    def default_sdp(self, configure=False, enable_rfc2833 = True):
         # Create a default SDP
         md = sdp.MediaDescription()
         md.setLocalPort(self.rtp_port)
         md.addRtpMap(sdp.PT_PCMA)
         md.addRtpMap(sdp.PT_PCMU)
-        md.addRtpMap(sdp.PT_NTE)
+        if enable_rfc2833:
+            md.addRtpMap(sdp.PT_NTE)
         
         sd = sdp.SDP()
         sd.addMediaDescription(md)
 
         sd.setServerIP(self.address)
-        # sd.addSessionAttribute('direction', 'sendrecv')
+        sd.addSessionAttribute('direction', 'sendrecv')
 
         if configure:
             self.configure(sd)
@@ -280,10 +281,14 @@ class VMPrx(RTPBase):
         @param sd: A L{SDP} instance describing the session."""
 
         md = sd.getMediaDescription('audio')
-        for k, v in md.rtpmap.iteritems(reverse=True):
+
+        configured = False
+
+        # We must iterate the entire list, because we need to configure
+        # RFC 2833 if present
+        for k, v in md.rtpmap.iteritems():
             m = v[1]
-            log.debug('%s codec: %s pt: %d', self.name, m.name, k)
-            if m.name == 'PCMU':
+            if m.name == 'PCMU' and not configured:
                 codecp = lowlevel.SM_VMPRX_CODEC_MULAW_PARMS()
                 codecp.vmprx = self.vmprx
                 codecp.payload_type = k
@@ -292,8 +297,11 @@ class VMPrx(RTPBase):
                 rc = lowlevel.sm_vmprx_config_codec_mulaw(codecp)
                 if rc:
                     raise AculabSpeechError(rc, 'sm_vmprx_config_codec_mulaw')
+
+                configured = True
+                log.debug('%s codec: %s pt: %d', self.name, m.name, k)
                 
-            elif m.name == 'PCMA':
+            elif m.name == 'PCMA' and not configured:
                 codecp = lowlevel.SM_VMPRX_CODEC_ALAW_PARMS()
                 codecp.vmprx = self.vmprx
                 codecp.payload_type = k
@@ -303,10 +311,16 @@ class VMPrx(RTPBase):
                 if rc:
                     raise AculabSpeechError(rc, 'sm_vmprx_config_codec_alaw')
 
+                configured = True
+                log.debug('%s codec: %s pt: %d', self.name, m.name, k)
+
             elif m.name == 'telephone-event':
                 self.config_rfc2833(k)
+                log.debug('%s codec: %s pt: %d', self.name, m.name, k)
             else:
-                log.warn('Codec %d %s unsupported', k, m.name)
+                if not configured:
+                    log.warn('%s Codec %d %s unsupported', self.name, k,
+                             m.name)
                 
     def config_tones(self, detect = True, regen = False):
         """Configure RFC2833 tone detection/regeneration."""
@@ -432,8 +446,8 @@ class VMPtx(RTPBase):
                   ptime = 20):
         """Configure the Transmitter according to the SDP.
 
-        By default, do not do voice activity detection (i.e. always send data)
-        and send 20ms of data in each packets
+        By default, do not do voice activity detection (i.e. don't do silence
+        suppression) and send 20ms of data in each packet.
 
         @param sdp: An instance of class L{SDP}.
 
@@ -461,26 +475,29 @@ class VMPtx(RTPBase):
         if rc:
             raise AculabSpeechError(rc, 'sm_vmptx_config')
 
-        md = sdp.getMediaDescription('audio')
-        # The codec that is configured last seems to be the
-        # default codec. Hence, we configure codecs in
-        # the reverse oder they appear in the SDP
-        for k, v in md.rtpmap.iteritems(reverse=True):
-            m = v[1]
-            log.debug('%s codec: %s pt: %d', self.name, m.name, k)
+        configured = False
 
-            if m.name == 'PCMU':
+        md = sdp.getMediaDescription('audio')
+        # We must iterate the entire list, because we need to configure
+        # RFC 2833 if present
+        for k, v in md.rtpmap.iteritems():
+            m = v[1]
+
+            if m.name == 'PCMU' and not configured:
                 codecp = lowlevel.SM_VMPTX_CODEC_MULAW_PARMS()
                 codecp.vmptx = self.vmptx
                 codecp.payload_type = k
                 codecp.ptime = ptime
                 codecp.VADMode = vad_mode
-    
+
+                configured = True
                 rc = lowlevel.sm_vmptx_config_codec_mulaw(codecp)
                 if rc:
-                    raise AculabSpeechError(rc, 'sm_vmprx_config_codec_mulaw')
+                    raise AculabSpeechError(rc, 'sm_vmptx_config_codec_mulaw')
+
+                log.debug('%s codec: %s pt: %d', self.name, m.name, k)
                 
-            elif m.name == 'PCMA':
+            elif m.name == 'PCMA' and not configured:
                 codecp = lowlevel.SM_VMPTX_CODEC_ALAW_PARMS()
                 codecp.vmptx = self.vmptx
                 codecp.payload_type = k
@@ -491,10 +508,16 @@ class VMPtx(RTPBase):
                 if rc:
                     raise AculabSpeechError(rc, 'sm_vmptx_config_codec_alaw')
 
+                configured = True
+                log.debug('%s codec: %s pt: %d', self.name, m.name, k)
+
             elif m.name == 'telephone-event':
                 self.config_rfc2833(k)
+                log.debug('%s codec: %s pt: %d', self.name, m.name, k)
             else:
-                log.warn('Codec %d %s unsupported', k, m.name)
+                if not configured:
+                    log.warn('%s Codec %d %s unsupported', self.name, k,
+                             m.name)
 
     def config_tones(self, convert = False, elim = True):
         """Configure RFC2833 tone conversion/elimination.

@@ -74,6 +74,10 @@ class SIPHandle(CallHandleBase):
 
         media = lowlevel.ACU_MEDIA_OFFER_ANSWER()
         media.raw_sdp = str(sdp)
+
+        # Assume sip URI
+        if destination_address[:4] != 'sip:':
+            destination_address = 'sip:' + destination_address
         
         outparms = lowlevel.SIP_OUT_PARMS()
         outparms.net = self.port

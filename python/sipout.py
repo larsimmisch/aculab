@@ -25,22 +25,31 @@ class CallData:
         self.connection = None
 
     def vmprx_ready(self, vmprx):
-        sd = vmprx.default_sdp()
-        vmprx.configure(sd)
+        self.our_sdp = vmprx.default_sdp()# (enable_rfc2833 = False)
+        vmprx.configure(self.our_sdp)
         
-        self.call.openout(self.number, sd)
+        self.call.openout(self.number, self.our_sdp)
         vmprx.config_tones()
 
     def ev_media(self, call):
         # The call has already received the details for us
         # and that's how we get at the SDP:
-        sd = SDP(call.details.media_session.received_media.raw_sdp)
+        self.other_sdp = SDP(call.details.media_session.received_media.raw_sdp)
 
-        self.vmptx.configure(sd)
+        self.other_sdp.intersect(self.our_sdp)
+
+        self.vmptx.configure(self.other_sdp)
+        self.vmptx.config_tones(False, False)
 
     def connect(self):
         self.connection = connect((self.vmptx, self.vmprx), self.speech)
         self.speech.listen_for()
+
+        if fax:
+            self.speech.tone(23, 1.0)
+            # self.speech.faxtx(fax)
+        else:
+            self.speech.play('12345CNG.al')
 
     def close(self):
         for attr in ['connection', 'call', 'speech', 'vmprx', 'vmptx']:
@@ -66,7 +75,6 @@ class OutgoingCallController:
 
     def ev_call_connected(self, call, user_data):
         user_data.connect()
-        user_data.speech.play('asteria.al')
         
     def play_done(self, channel, reason, f, duration, user_data):
         # The call might be gone already
@@ -87,15 +95,18 @@ if __name__ == '__main__':
     log = logging.getLogger('app')
 
     numcalls = 1
+    fax = None
     controller = OutgoingCallController()
 
-    options, args = getopt.getopt(sys.argv[1:], 'n?')
+    options, args = getopt.getopt(sys.argv[1:], 'n?f:')
     if not args:
         usage()
 
     for o, a in options:
         if o == '-n':
             numcalls = int(a)
+        elif o == '-f':
+            fax = a
         else:
             usage()
 

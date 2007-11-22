@@ -436,7 +436,13 @@ class Snapshot(object):
                 self.switch.append(SwitchCard(openp, infop))
 
             if infop.resources_available & lowlevel.ACU_RESOURCE_CALL:
-                self.call.append(CallControlCard(openp, infop))
+                # ignore ERR_NO_PORTS: happens on Prosody X without
+                # a PMX
+                try:
+                    self.call.append(CallControlCard(openp, infop))
+                except AculabError, e:
+                    if e.value != lowlevel.ERR_NO_PORTS:
+                        raise
 
             if infop.resources_available & lowlevel.ACU_RESOURCE_SPEECH:
                 self.prosody.append(ProsodyCard(openp, infop))

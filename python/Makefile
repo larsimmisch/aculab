@@ -2,6 +2,10 @@
 find_init := $(strip $(wildcard /sbin/init) \
 	                 $(wildcard /usr/sbin/init))
 
+ifeq ($(ACULAB_ROOT),)
+  $(error "ACULAB_ROOT not set")
+endif
+
 # check for signs of Aculab v6
 find_v6 := $(strip $(wildcard $(ACULAB_ROOT)/include/cl_lib.h))
 
@@ -33,7 +37,7 @@ ifneq ($(find_v6),)
 cl_lib.h2: $(DTK)/include/cl_lib.h cl_lib.patch
 	patch -o $@ $(DTK)/include/cl_lib.h cl_lib.patch
 
-acu_type.h2: $(DTK)/include/cl_lib.h acu_type.patch
+acu_type.h2: $(DTK)/include/acu_type.h acu_type.patch
 	patch -o $@ $(DTK)/include/acu_type.h acu_type.patch
 
 #res_lib.h2: $(DTK)/include/res_lib.h res_lib.patch
@@ -48,7 +52,7 @@ acu_type.h2: $(DTK)/include/cl_lib.h acu_type.patch
 # builds are very slow - only rebuild if cl_lib.h changes
 # exclude structures that are %extended already
 sized_struct.i: $(DTK)/include/cl_lib.h $(DTK)/include/sw_lib.h
-	$(SWIG) $(DEFINES) $(SWIG_DEFINES) -xml -xmllite lowlevel.i
+	$(SWIG) $(DEFINES) $(SWIG_DEFINES) $(SWIG_INCLUDE) -xml -xmllite lowlevel.i
 	python sized_struct.py -x ACU_SNAPSHOT_PARMS lowlevel_wrap.xml
 	rm lowlevel_wrap.xml
 
@@ -79,3 +83,6 @@ clean:
 	rm -f aculab/*$(SO) *$(O) aculab/*.pyc \
 		lowlevel.py *_wrap.c *_wrap.doc MANIFEST $(CRUFT)
 	rm -rf build dist
+
+distclean: clean
+	rm -f *.h2 sized_struct.i

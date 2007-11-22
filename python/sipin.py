@@ -14,7 +14,7 @@ from aculab.sip import SIPCall
 from aculab.rtp import VMPrx, VMPtx
 from aculab.sdp import SDP
 from aculab.snapshot import Snapshot
-from aculab.lowlevel import ACU_SIP_REGISTER_NOTIFICATION
+from aculab.lowlevel import ACU_SIP_REGISTER_NOTIFICATION, cvar
 
 class CallData:
     
@@ -27,7 +27,7 @@ class CallData:
         self.connection = None
 
     def connect(self):
-        #self.connection = connect((self.vmptx, self.vmprx), self.speech)
+        # self.connection = connect((self.vmptx, self.vmprx), self.speech)
 
         self.connection = Connection(
             endpoints = [self.vmptx.listen_to(self.speech.get_timeslot()),
@@ -47,35 +47,34 @@ class IncomingCallController:
 
     def vmprx_ready(self, vmprx, user_data):
         """Called when the vmprx is ready."""
-        rx_sd = vmprx.default_sdp()
-        rx_sd.intersect(user_data.in_sd)
+        sd = vmprx.default_sdp()
+        sd.intersect(user_data.in_sd)
 
-        vmprx.configure(rx_sd)
+        vmprx.configure(sd)
 
-        log.debug('sent SDP:\n%s', rx_sd)
+        log.debug('sent SDP:\n%s', sd)
 
-        user_data.call.accept(rx_sd)
+        user_data.call.accept(sd)
 
     def dtmf(self, channel, digit, user_data):
         # log.info('dtmf: %s', digit)
         pass
 
     def ev_incoming_call_det(self, call, user_data):
-        sdp = SDP(call.details.media_offer_answer.raw_sdp)
+        sd = SDP(call.details.media_offer_answer.raw_sdp)
 
-        call.user_data = CallData(self, call, sdp)
+        call.user_data = CallData(self, call, sd)
 
-        log.debug('got SDP:\n%s', sdp)
+        log.debug('got SDP:\n%s', sd)
 
         call.incoming_ringing()
 
     def ev_media(self, call, user_data):
-
-        sdp = SDP(call.details.media_session.received_media.raw_sdp)
+        sd = SDP(call.details.media_session.received_media.raw_sdp)
 
         # Some CPEs seem to get confused when the TX doesn't have the same
         # port as the RX.
-        user_data.vmptx.configure(sdp, user_data.vmprx.get_rtp_address())
+        user_data.vmptx.configure(sd, user_data.vmprx.get_rtp_address())
 
     def ev_remote_disconnect(self, call, user_data):
         call.disconnect()
@@ -85,6 +84,7 @@ class IncomingCallController:
         user_data.vmprx.config_tones(True, False)
         user_data.vmptx.config_tones(False, False)
         user_data.speech.listen_for('dtmf/fax')
+
         if not silent:
             user_data.speech.play('asteria.al')
         else:
@@ -118,7 +118,7 @@ if __name__ == '__main__':
     controller = IncomingCallController()
     silent = False
 
-    options, args = getopt.getopt(sys.argv[1:], 'nrs?')
+    options, args = getopt.getopt(sys.argv[1:], 'nrst:?')
 
     for o, a in options:
         if o == '-n':
@@ -127,14 +127,15 @@ if __name__ == '__main__':
             controller = RepeatedIncomingCallController()
         elif o == '-s':
             silent = True
+        elif o == '-t':
+            cvar.TiNGtrace = int(a)
         else:
             usage()
 
     for i in range(numcalls):
         c = SIPCall(controller)
 
-    # log.debug('SIP port queue: %d', Snapshot().sip.get_queue())
-
+    # send automatic 200 OK for REGISTER - needed by the SpeedPort CPEs
     Snapshot().sip.set_message_notification(ACU_SIP_REGISTER_NOTIFICATION)
 
     try:

@@ -419,8 +419,12 @@ class SDP:
         else:
             raise ValueError, "only know about suboptions for 'a' so far"
 
-    def setServerIP(self, l):
-        self._o_ipaddr = self.ipaddr = l
+    def setServerIP(self, l, owner = None):
+        self.ipaddr = l
+        if owner is None:
+            self._o_ipaddr = l
+        else:
+            self._o_ipaddr = owner
 
     def addSessionAttribute(self, attrname, attrval):
         if not isinstance(attrval, (list, tuple)):

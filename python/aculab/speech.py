@@ -20,7 +20,7 @@ import logging
 import lowlevel
 import names
 from util import Lockable, translate_card
-from fax import FaxRxJob
+from fax import FaxRxJob, FaxTxJob
 from reactor import SpeechReactor
 from switching import (Connection, CTBusEndpoint, SpeechEndpoint, TDMrx, TDMtx,
                        DefaultBus, connect)

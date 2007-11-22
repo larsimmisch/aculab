@@ -47,8 +47,14 @@ class FaxJob:
 
     def create_session(self, mode):
         self.mode = mode
-        
+
         session = lowlevel.SMFAX_SESSION()
+
+        if TiNG_version[0] >= 2:
+            session.module = self.channel.module.open.module_id
+        else:
+            session.module = self.channel.module
+        
         session.channel = self.channel.channel
         # accept five percent bad lines
         session.user_options.max_percent_badlines = 0.10
@@ -160,7 +166,7 @@ class FaxRxJob(FaxJob, threading.Thread):
 
         self.create_session(lowlevel.kSMFaxModeReceiver)
 
-        self.trace_on()
+        # self.trace_on()
 
         neg = lowlevel.SMFAX_NEGOTIATE_PARMS()
         neg.fax_session = self.session
@@ -233,7 +239,7 @@ class FaxTxJob(FaxJob, threading.Thread):
 
         self.create_session(lowlevel.kSMFaxModeTransmitter)
 
-        self.trace_on()
+        # self.trace_on()
 
         page_props = lowlevel.ACTIFF_PAGE_PROPERTIES()
         rc = lowlevel.actiff_page_properties(self.file, page_props)
