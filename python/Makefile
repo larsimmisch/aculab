@@ -56,7 +56,7 @@ sized_struct.i: $(DTK)/include/cl_lib.h $(DTK)/include/sw_lib.h
 	python sized_struct.py -x ACU_SNAPSHOT_PARMS lowlevel_wrap.xml
 	rm lowlevel_wrap.xml
 
-lowlevel_wrap.c aculab/lowlevel.py: lowlevel.i cl_lib.h2 sized_struct.i
+lowlevel_wrap.c aculab/lowlevel.py: lowlevel.i cl_lib.h2 acu_type.h2 sized_struct.i
 	$(SWIG) $(SWIG_DEFINES) -O -new_repr -python $(DEFINES) $(SWIG_INCLUDE) $<
 	mv lowlevel.py aculab
 
