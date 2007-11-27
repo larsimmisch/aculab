@@ -8,13 +8,15 @@ from vobject.base import readComponents
 
 addresses = '/var/addresses/All.vcf'
 
-def tel_type(types):
-    for t in types:
-        n = t.lower()
-        if n == 'fax':
-            return 'Fax'
-        if n == 'cell':
-            return 'Mobil'
+def tel_type(t):
+    types = t.params.get('TYPE', None)
+    if types:
+        for t in types:
+            n = t.lower()
+            if n == 'fax':
+                return 'Fax'
+            if n == 'cell':
+                return 'Mobil'
 
     return 'Tel'
 
@@ -63,7 +65,7 @@ def vcard_str(vc):
     if tel:
         for t in tel:
             s = s + '%s: %s\n' % (
-                tel_type(t.params['TYPE']), t.value)
+                tel_type(t), t.value)
     if email:
         for e in email:
             s = s + join('mailto:' + e.value, '\n')
@@ -88,7 +90,14 @@ def vcard_find(tel):
 
 if __name__ == '__main__':
 
-    vc = vcard_find('3172541')
+    import sys
+
+    if len(sys.argv) > 1:
+        tel = sys.argv[1]
+    else:
+        tel = '3172541'
+
+    vc = vcard_find(tel)
     print vcard_str(vc)
 
 
