@@ -2,6 +2,7 @@
 
 """Event driven, MVC inspired Python wrapper around the Aculab API."""
 
+import optparse
 import logging
 import logging.handlers
 
@@ -88,3 +89,41 @@ def defaultLogging(level = logging.WARNING, logfile = None):
         
     return log
 
+
+def set_TiNGtrace(option, opt, value, parser):
+    import lowlevel
+    lowlevel.cvar.TiNGtrace = value
+
+def defaultOptions(repeat = False, *args, **kwargs):
+    """A default option parser.
+
+    Passes all extra args/kwargs on to the OptionParser constructor.
+
+    @param repeat: Include -r or --repeat in the option list. Off by default.
+
+    Understands:
+
+     - -c CARD or --card=CARD: select card
+     - -p PORT or --port=PORT: select port
+     - -c MODULE or --module=MODULE: select module
+     - -t TiNGtrace or --tingtrace=TiNGtrace: select TiNGtrace level (0-9)
+     - -r or --repeat: repeat after hangup
+    """
+
+    parser = optparse.OptionParser(*args, **kwargs)
+    parser.add_option('-p', '--port', action='store', type='int', default = 0,
+                      help='use the specified port for PSTN calls')
+    parser.add_option('-c', '--card', action='store', type='int', default = 0,
+                      help='use the specified card')
+    parser.add_option('-m', '--module', action='store', type='int',
+                      default = 0, help='use the specified module for ' \
+                      'speech and RTP channels')
+    parser.add_option('-t', '--tingtrace', action='callback',
+                      callback=set_TiNGtrace,
+                      type='int', default = 0, help='Set TiNG trace level.')
+    
+    if repeat:
+        parser.add_option('-r', '--repeat', action='store_true',
+                          help='Repeat after hangup.')
+
+    return parser

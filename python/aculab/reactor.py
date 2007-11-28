@@ -332,7 +332,6 @@ else: # os.name == 'nt'
             # listen to the read fd of our pipe
             self.poll.register(self.pipe[0], select.POLLIN )
 
-
         def add(self, handle, method, mask = select.POLLIN|select.POLLOUT):
             """Add a new handle to the reactor.
 
@@ -346,7 +345,6 @@ else: # os.name == 'nt'
 
             if not callable(method):
                 raise ValueError('method must be callable')
-            
             
             if threading.currentThread() == self or not self.isAlive():
                 # log.debug('adding fd: %d %s', handle, method.__name__)

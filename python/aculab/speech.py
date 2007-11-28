@@ -19,6 +19,7 @@ import time
 import logging
 import lowlevel
 import names
+import select
 from util import Lockable, translate_card
 from fax import FaxRxJob, FaxTxJob
 from reactor import SpeechReactor
@@ -882,10 +883,6 @@ class SpeechChannel(Lockable):
         # initialise our events
         self.event_read = self.set_event(lowlevel.kSMEventTypeReadData)
         self.event_write = self.set_event(lowlevel.kSMEventTypeWriteData)
-        self.event_recog = self.set_event(lowlevel.kSMEventTypeRecog)
-
-        # add the recog event to the reactor
-        self.reactor.add(os_event(self.event_recog), self.on_recog)
 
     def __del__(self):
         """Close the channel if it is still open."""
@@ -1232,6 +1229,11 @@ class SpeechChannel(Lockable):
         log.debug('%s listening for DTMF/Tones with toneset %d', self.name,
                   self.tone_set_id)
 
+        if self.event_recog is None:
+            self.event_recog = self.set_event(lowlevel.kSMEventTypeRecog)
+        
+            # add the recog event to the reactor
+            self.reactor.add(os_event(self.event_recog), self.on_recog)
 
     def dc_config(self, protocol, pconf, encoding, econf):
         """Configure the channel for data communications.

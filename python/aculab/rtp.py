@@ -263,11 +263,13 @@ class VMPrx(RTPBase):
         md.addRtpMap(sdp.PT_PCMU)
         if enable_rfc2833:
             md.addRtpMap(sdp.PT_NTE)
-                
+
+        return md
+        
     def default_sdp(self, configure=False, enable_rfc2833 = True):
         # Create a default SDP
         sd = sdp.SDP()
-        sd.addMediaDescription(self.media_description(enable_rfc2833)
+        sd.addMediaDescription(self.media_description(enable_rfc2833))
 
         sd.setServerIP(self.address)
         sd.addSessionAttribute('direction', 'sendrecv')
@@ -303,7 +305,7 @@ class VMPrx(RTPBase):
             if rc:
                 raise AculabSpeechError(rc, 'sm_vmprx_config_codec_alaw')
 
-        elif m.name == 'telephone-event':
+        elif fmt.name == 'telephone-event':
             rfc2833 = lowlevel.SM_VMPRX_CODEC_RFC2833_PARMS()
             rfc2833.vmprx = self.vmprx
             rfc2833.payload_type = pt
@@ -336,7 +338,7 @@ class VMPrx(RTPBase):
         for k, v in md.rtpmap.iteritems():
             m = v[1]
             if m.name == 'telephone-event':
-                config_codec(k, m, plc_mode)
+                self.config_codec(k, m, plc_mode)
 
                 
     def config_tones(self, detect = True, regen = False):
@@ -538,7 +540,7 @@ class VMPtx(RTPBase):
         for k, v in md.rtpmap.iteritems():
             m = v[1]
             if m.name == 'telephone-event':
-                config_codec(k, m, vad_mode, ptime)
+                self.config_codec(k, m, vad_mode, ptime)
 
     def config_tones(self, convert = False, elim = True):
         """Configure RFC2833 tone conversion/elimination.

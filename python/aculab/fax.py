@@ -155,7 +155,7 @@ class FaxRxJob(FaxJob, threading.Thread):
         threading.Thread.__init__(self, name='faxrx ' + channel.name)
 
         FaxJob.__init__(self, channel, file, subscriber_id, job_data)
-                
+        
         self.file, rc = lowlevel.actiff_write_open(file, None)
         if rc:
             raise OSError(rc, 'actiff_write_open')
