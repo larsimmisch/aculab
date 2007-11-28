@@ -4,7 +4,6 @@
 
 import sys
 import os
-import getopt
 import logging
 import aculab
 from aculab.error import AculabError
@@ -99,39 +98,26 @@ class PlayController(object):
     def dtmf(self, channel, digit, user_data):
         log.info('got DTMF: %s', digit)
 
-def usage():
-    print 'usage: play.py [-c <card>] [-p <port>] [-m <module>] <file>+'
-    sys.exit(2)
-
 if __name__ == '__main__':
 
-    card = 0
-    port = 0
-    module = 0
-    numcalls = 1
-    fplay = None
-    loglevel = logging.DEBUG
+    log = aculab.defaultLogging(logging.DEBUG)
+    
+    parser = aculab.defaultOptions(
+        usage='usage: %prog [options] file+',
+        description='Accept incoming PSTN calls and play file(s).')
 
-    options, args = getopt.getopt(sys.argv[1:], 'c:m:p:')
+    parser.add_option('-n', '--numcalls', action='store', type='int',
+                      default=1, help='Accept NUMCALLS in parallel')
 
-    for o, a in options:
-        if o == '-c':
-            card = int(a)
-        elif o == '-m':
-            module = int(a)
-        elif o == '-p':
-            port = int(a)
-        else:
-            usage()
+    options, args = parser.parse_args()
 
     if not args:
-        usage()
+        parser.print_help()
+        sys.exit(2)
 
     fplay = args
 
     controller = PlayController()
-
-    log = aculab.defaultLogging(loglevel)
 
     try:
         bus =  DefaultBus()
@@ -139,8 +125,8 @@ if __name__ == '__main__':
         log.info('play app starting (bus: %s)',
                 bus.__class__.__name__)
 
-        for i in range(numcalls):
-            c = Call(controller, card=card, port=port)
+        for i in range(options.numcalls):
+            c = Call(controller, card=options.card, port=options.port)
 
         timer = TimerThread()
         timer.start()

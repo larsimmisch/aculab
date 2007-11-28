@@ -6,6 +6,7 @@
 
 import sys
 import getopt
+from aculab import defaultLogging, defaultOptions
 from aculab.error import AculabError
 from aculab.callcontrol import *
 from aculab.switching import MVIP
@@ -179,16 +180,9 @@ def usage():
     sys.exit(-2)
 
 if __name__ == '__main__':
-    log = logging.getLogger('')
-    log.setLevel(logging.DEBUG)
-    log_formatter = logging.Formatter(
-        '%(asctime)s %(levelname)-5s %(message)s')
-    hdlr = logging.StreamHandler()
-    hdlr.setFormatter(log_formatter)
-    log.addHandler(hdlr)
+    log = defaultLogging(logging.DEBUG)
 
     port = 2
-
     options, args = getopt.getopt(sys.argv[1:], 'p:')
 
     for o, a in options:

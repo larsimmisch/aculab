@@ -4,7 +4,6 @@
 
 import sys
 import os
-import getopt
 import threading
 import logging
 import struct
@@ -26,7 +25,6 @@ class IncomingCallController:
         # The Prosody module that was globally selected.
         # Proper applications that handle multiple modules 
         # can be more clever here
-        global module
         call.user_data = Glue(self, module, call)        
         call.accept()
 
@@ -49,44 +47,23 @@ class IncomingCallController:
     def dtmf(self, channel, digit, user_data):
         print 'got DTMF:', digit
 
-class RepeatedIncomingCallController(IncomingCallController):
-
     def ev_idle(self, call, user_data):
-        call.openin()
-
-def usage():
-    print 'usage: faxrx.py [-c <card>] [-p <port>] [-m <module>] [-r]'
-    sys.exit(-2)
+        if options.repeat:
+            call.openin()
+        else:
+            raise StopIteration
 
 if __name__ == '__main__':
 
+    parser = aculab.defaultOptions(description='Receive a T.30 FAX.',
+                                   repeat=True)
+    options, args = parser.parse_args()
+
     log = aculab.defaultLogging(logging.DEBUG)
 
-    card = 0
-    port = 0
-    module = 0
     controller = IncomingCallController()
 
-    options, args = getopt.getopt(sys.argv[1:], 'p:rsm:')
-
-    for o, a in options:
-        if o == '-c':
-            card = int(a)
-        if o == '-p':
-            port = int(a)
-        elif o == '-m':
-            module = int(a)
-        elif o == '-r':
-            controller = RepeatedIncomingCallController()
-        elif o == '-s':
-            DefaultBus = SCBus()
-        else:
-            usage()
-
-    snapshot = Snapshot()
-    # port = snapshot.call[card].ports[port].open.port_id
-
-    call = Call(controller, port=port)
+    call = Call(controller, card=options.card, port=options.port)
 
     SpeechReactor.start()
     CallReactor.run()

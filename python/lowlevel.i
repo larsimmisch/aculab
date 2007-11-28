@@ -109,7 +109,8 @@ typedef struct {
 
 %apply void * { ACU_ACT };
 
-%apply (int *OUTPUT) { int *perrno };
+// The OUTPUT typemap doesn't set *perrno to 0, so we must do this manually
+// %apply (int *OUTPUT) { int *perrno };
 %apply (int *OUTPUT) { ACU_PORT_ID *sip_port };
 
 #ifdef WIN32
@@ -216,6 +217,15 @@ BLOCKING(sm_t38gw_worker_fn)
 											SWIG_POINTER_OWN));
 }
 #endif
+
+%typemap(in,numinputs=0) int *perrno ($basetype temp) {
+	temp = 0;
+	$1 = ($basetype*)&temp;
+}
+
+%typemap(argout) int *perrno {
+	$result = add_result($result, PyInt_FromLong((unsigned)*$1));
+}
 
 /*
 %typemap(except) int {

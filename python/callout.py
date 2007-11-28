@@ -3,16 +3,15 @@
 # Copyright (C) 2002-2007 Lars Immisch
 
 import sys
-import getopt
 import struct
 import time
 import random
+from aculab import defaultLogging, defaultOptions
 from aculab.error import AculabError
 from aculab.reactor import CallReactor
 from aculab.callcontrol import *
 from aculab.timer import *
 
-calling = '0403172541'
 called = []
 
 def get_called_number():
@@ -38,10 +37,10 @@ class Statistics:
 
     def __repr__(self):
         if self.count:
-            return 'min: %f max: %s average: %f count: %d' % \
+            return 'min: %.3f max: %.3f average: %.3f count: %d' % \
                    (self.min, self.max, self.average / self.count, self.count)
         else:
-            return 'min: %f max: %f average: n/a count: %d' % \
+            return 'min: %.3f max: %.3f average: n/a count: %d' % \
                    (self.min, self.max, self.count)
 
 statistics = Statistics()
@@ -62,13 +61,13 @@ class OutgoingCallController:
         call.user_data = CallData()
 
     def ev_outgoing_ringing(self, call, user_data):
-        if t_ringing is not None:
+        if options.t_ringing is not None:
             tt.add(t_ringing, call.disconnect)
         log.debug('%s stream: %d timeslot: %d', call.name,
                   call.details.stream, call.details.ts)
 
     def ev_call_connected(self, call, user_data):
-        if t_hangup is not None:
+        if options.t_hangup is not None:
             tt.add(t_hangup, call.disconnect)
         user_data.stop()
         log.info(statistics)
@@ -77,12 +76,10 @@ class OutgoingCallController:
         call.disconnect()
 
     def ev_idle(self, call, user_data):
-        raise StopIteration
-
-class RepeatedOutgoingCallController(OutgoingCallController):
-
-    def ev_idle(self, call, user_data):
-        call.openout(get_called_number(), True, calling)
+        if options.repeat:
+            call.openout(get_called_number(), True, options.oad)
+        else:
+            raise StopIteration
 
 def build_cug(oa_request, cug_index):
     fd = lowlevel.FEATURE_UNION()
@@ -110,85 +107,81 @@ def build_uui():
     fd.uui.protocol = lowlevel.UUI_PROTOCOL_USER_SPECIFIC
     fd.uui.setdata('Hallo Hauke, dies ist ein langer und entsetzliche langweiliger Text, den ich nur zum Testen von UUI benutze')
 
-def read_called_numbers(fname):
-    f = open(fname, 'r')
+
+def read_called_numbers(option, opt, value, parser):
+    f = open(value, 'r')
     for l in f.readlines():
         l = l.strip()
         if l and l[0] != '#':
             called.append(l)
-
-def usage():
-    print 'callout.py [-u] [-n <number of calls>] [-p <port>] [-c <card>] [-r] [-h <hangup secs>] { number | -l <numbers in a file> }'
-    sys.exit(-2)
+    f.close()
 
 if __name__ == '__main__':
-    port = 0
-    card = 0
-    numcalls = 1
-    uui = False
-    cug = False
-    timeslot = None
-    t_hangup = None
-    t_ringing = None
-    tt = None
 
     log = aculab.defaultLogging(logging.DEBUG)
 
-    controller = OutgoingCallController()
+    parser = defaultOptions(
+        usage='usage: %prog [options] <number>',
+        description='Make outgoing PSTN call(s).',
+        repeat=True)
 
-    options, args = getopt.getopt(sys.argv[1:], 'c:h:l:p:rt:n:uo:w:')
+    parser.add_option('-s', '--timeslot', type='int',
+                      help='Use TIMESLOT for outgoing call.')
 
-    for o, a in options:
-        if o == '-p':
-            port = int(a)
-        elif o == '-c':
-            card = int(a)
-        elif o == '-r':
-            controller = RepeatedOutgoingCallController()
-        elif o == '-t':
-            timeslot = int(a)
-        elif o == '-n':
-            numcalls = int(a)
-        elif o == '-u':
-            uui = True
-        elif o == '-g':
-            cug = True
-        elif o == '-h':
-            t_hangup = int(a)
-            if not tt:
-                tt = TimerThread()
-                tt.start()
-        elif o == '-w':
-            t_ringing = int(a)
-            if not tt:
-                tt = TimerThread()
-                tt.start()            
-        elif o == '-l':
-            read_called_numbers(a)
-        elif o == '-o':
-            calling = a
-        else:
-            usage()
+    parser.add_option('-n', '--numcalls', type='int', default=1,
+                      help='Process NUMCALLS calls in parallel.')
 
-    if not len(args) and not called:
-        usage()
+    parser.add_option('-u', '--uui', action='store_true', 
+                      help='Send ISDN UUI Type 1.')
+
+    parser.add_option('-g', '--cug', action='store_true', 
+                      help='Send ISDN Closed User Group.')
+
+    parser.add_option('-w', '--t-ringing', type='int', 
+                      help='Disconnect x seconds after receiving outgoing ' \
+                      'ringing.')
+
+    parser.add_option('-x', '--t-hangup', type='int', 
+                      help='Disconnect x seconds after being connected.')
+
+    parser.add_option('-l', '--numbers', action='callback',
+                      callback=read_called_numbers,
+                      help='Read the called party numbers from NUMBERS.')
+
+    parser.add_option('-o', '--oad', default='403172541',
+                      help='Use OAD as the originating address. ' \
+                      'Default is 403172541.')
+
+    options, args = parser.parse_args()
+
+    if not args and not called:
+        parser.print_help()
+        sys.exit(2)
+
+    if options.t_ringing or options.t_hangup:
+        tt = TimerThread()
+        tt.start()    
 
     if not called:
         called.append(args[0])
 
-    for i in range(numcalls):
-        c = Call(controller, card=card, port=port, timeslot=timeslot)
+    controller = OutgoingCallController()
+
+    for i in range(options.numcalls):
+        c = Call(controller, card=options.card, port=options.port,
+                 timeslot=options.timeslot)
+        
         c.user_data = CallData()
-        if uui:
-            c.openout(get_called_number(), 1, calling,
+        if options.uui:
+            c.openout(get_called_number(), 1, options.oad,
                       feature = lowlevel.FEATURE_USER_USER,
                       feature_data = build_uui())
-        elif cug:
-            c.openout(get_called_number(), 1, calling,
+        elif options.cug:
+            c.openout(get_called_number(), 1, options.oad,
                       feature = lowlevel.FEATURE_FACILITY,
                       feature_data = build_cug(1, 2))
         else:
-            c.openout(get_called_number(), True, calling)
+            c.openout(get_called_number(), True, options.oad)
 
 ##         fd.raw_data.length = 6
 ##         fd.raw_data.data = struct.pack('BBBBBB',
@@ -202,4 +195,5 @@ if __name__ == '__main__':
         CallReactor.run()
     except KeyboardInterrupt:
         log.info(statistics)
-        raise
+    except StopIteration:
+        log.info(statistics)

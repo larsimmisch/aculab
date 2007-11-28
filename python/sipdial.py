@@ -9,9 +9,8 @@
 # Written for Dima to simulate the behaviour of a PBX
 
 import sys
-import getopt
 import logging
-from aculab import defaultLogging
+from aculab import defaultLogging, defaultOptions
 from aculab.speech import SpeechChannel
 from aculab.reactor import SpeechReactor, CallReactor
 from aculab.callcontrol import CallHandle
@@ -25,9 +24,12 @@ class CallData:
     def __init__(self, controller, call):
         self.outcall = None
         self.incall = call
-        self.vmptx = VMPtx(controller, user_data=self)
-        self.vmprx = VMPrx(controller, user_data=self)
-        self.speech = SpeechChannel(controller, user_data=self)
+        self.vmptx = VMPtx(controller, card=options.card,
+                           module=options.module, user_data=self)
+        self.vmprx = VMPrx(controller, card=options.card,
+                           module=options.module, user_data=self)
+        self.speech = SpeechChannel(controller, card=options.card,
+                                    module=options.module, user_data=self)
         self.connection = None
 
     def connect(self):
@@ -106,20 +108,16 @@ if __name__ == '__main__':
     defaultLogging(logging.DEBUG)
     log = logging.getLogger('app')
 
-    numcalls = 1
-    controller = IncomingCallController()
+    parser = aculab.defaultOptions(repeat=True,
+        description='Accept incoming SIP calls and forward them to PSTN. ' \
+                                   'Supports overlap sending')
 
-    options, args = getopt.getopt(sys.argv[1:], 'nr?')
+    parser.add_option('-n', '--numcalls', type='int', default=1,
+                      help='Process NUMCALLS calls in parallel.')
 
-    for o, a in options:
-        if o == '-n':
-            numcalls = int(a)
-        elif o == '-r':
-            controller = RepeatedIncomingCallController()
-        else:
-            usage()
+    options, args = parser.parse_args()    
 
-    for i in range(numcalls):
+    for i in range(options.numcalls):
         c = SIPCall(controller)
 
     SpeechReactor.start()

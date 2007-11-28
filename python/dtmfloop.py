@@ -2,14 +2,8 @@
 
 # Copyright (C) 2002-2007 Lars Immisch
 
-import sys
-import os
-import getopt
-import threading
 import logging
-import struct
-import time
-import traceback
+import aculab
 import aculab.lowlevel as lowlevel
 from aculab import defaultLogging
 from aculab.error import AculabError
@@ -39,54 +33,36 @@ class DTMFLoopController:
     def silence_done(self, channel, reason, duration, user_data):
         raise StopIteration
 
-def usage():
-    print '''usage: dtmfloop.py [-c <card>] [-m <module>] [-t <tingtrace>] \\
-    [-l] [ -f <file>]
-
-    -l selects kSMToneLenDetectionMinDuration64 as tone detection mode (note
-    the Len)
-
-    If -f is given, <file> is played. If no file is specified,
-    0123456789*# plus CNG is generated.
-    '''
-    sys.exit(-2)
-
 if __name__ == '__main__':
 
     log = defaultLogging(logging.DEBUG)
 
-    card = 0
-    module = 0
+    parser = aculab.defaultOptions(
+        description='Detect DTMF and CNG on two loopback channels.')
+
+    parser.add_option('-l', '--lendetect', action='store_const', dest='mode',
+                      default=lowlevel.kSMToneDetectionMinDuration64,
+                      const=lowlevel.kSMToneLenDetectionMinDuration64,
+                      help='Use kSMToneLenDetectionMinDuration64 for the' \
+                      'tone detection mode.')
+
+    parser.add_option('-f', '--file-name', 
+                      help='Play FILE instead of sending 0123456789*#')
+
+    options, args = parser.parse_args()
+
     controller = DTMFLoopController()
-    mode = lowlevel.kSMToneDetectionMinDuration64
-    fname = None
 
-    options, args = getopt.getopt(sys.argv[1:], 'c:m:t:f:lh?')
-
-    for o, a in options:
-        if o == '-c':
-            card = int(a)
-        elif o == '-m':
-            module = int(a)
-        elif o == '-t':
-            aculab.lowlevel.cvar.TiNGtrace = int(a)
-        elif o == '-f':
-            fname = a
-        elif o == '-l':
-            mode = lowlevel.kSMToneLenDetectionMinDuration64
-        else:
-            usage()
-
-    channels = [SpeechChannel(controller, card, module),
-                SpeechChannel(controller, card, module)]
+    channels = [SpeechChannel(controller, options.card, options.module),
+                SpeechChannel(controller, options.card, options.module)]
 
     connection = connect(channels[0], channels[1])
 
-    channels[0].listen_for('dtmf/fax', mode)
+    channels[0].listen_for('dtmf/fax', options.mode)
     
     channels[0].record('dtmf.al', max_silence = 1.0)
-    if fname:
-        channels[1].play(fname)
+    if options.file_name:
+        channels[1].play(options.file_name)
     else:
         channels[1].digits('0123456789*#')
 

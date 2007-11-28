@@ -5,16 +5,9 @@
 # Connect a VMPrx/VMPtx pair over IP, and play/detect DTMF on connect
 # Prosody Channels
 
-import sys
-import os
-import getopt
-import threading
 import logging
-import struct
-import time
-import traceback
 import aculab.lowlevel as lowlevel
-from aculab import defaultLogging
+import aculab
 from aculab.error import AculabError
 from aculab.speech import SpeechChannel
 from aculab.rtp import VMPtx, VMPrx
@@ -28,7 +21,7 @@ class RTPLoop:
         self.speechrx = SpeechChannel(controller, card, module, user_data=self)
         self.speechtx = SpeechChannel(controller, card, module, user_data=self)
 
-        self.speechrx.listen_for('dtmf/fax', mode)
+        self.speechrx.listen_for('dtmf/fax', options.mode)
 
         self.connections = [self.speechrx.listen_to(self.vmprx),
                             self.vmptx.listen_to(self.speechtx)]
@@ -44,13 +37,13 @@ class RTPLoopController:
         user_data.vmptx.configure(sd)
 
         # convert: regenerate, eliminate: False
-        user_data.vmptx.config_tones(regenerate, False)
+        user_data.vmptx.config_tones(options.regenerate, False)
 
         # detect: True, regen: False
         user_data.vmprx.config_tones(True, False)
 
-        if fname:
-            user_data.speechtx.play(fname)
+        if options.file_name:
+            user_data.speechtx.play(options.file_name)
         else:
             user_data.speechtx.digits('0123456789*#')
             
@@ -77,44 +70,30 @@ class RTPLoopController:
     def silence_done(self, channel, reason, duration, user_data):
         raise StopIteration    
         
-def usage():
-    print '''usage: dtmfrtploop.py [-c <card>] [-m <module>] [-t <tingtrace>]
-    -l turns on digit recognition via kSMToneLenDetectionMinDuration64
-
-    If -f is given, <file> is played. If no file is specified,
-    0123456789*# plus CNG is generated.
-    '''
-    sys.exit(-2)
-
 if __name__ == '__main__':
 
-    log = defaultLogging(logging.DEBUG)
+    log = aculab.defaultLogging(logging.DEBUG)
 
-    card = 0
-    module = 0
+    parser = aculab.defaultOptions(
+        description='Detect DTMF and CNG on a VMPrx/VMPtx pair connected '\
+        'via RTP.')
+
+    parser.add_option('-l', '--lendetect', action='store_const', dest='mode',
+                      default=lowlevel.kSMToneDetectionMinDuration64,
+                      const=lowlevel.kSMToneLenDetectionMinDuration64,
+                      help='Use kSMToneLenDetectionMinDuration64 for the' \
+                      'tone detection mode.')
+
+    parser.add_option('-r', '--regenerate', action='store_const',
+                      default=0, const=1,
+                      help='On the VMPtx, regenerate DTMF from RFC2833.')
+
+    parser.add_option('-f', '--file-name', 
+                      help='Play FILE instead of sending 0123456789*#')
+
+    options, args = parser.parse_args()
+
     controller = RTPLoopController()
-    regenerate = False
-    fname = None
-    mode = lowlevel.kSMToneDetectionMinDuration64
-
-    options, args = getopt.getopt(sys.argv[1:], 'c:m:t:f:rlh?')
-
-    for o, a in options:
-        if o == '-c':
-            card = int(a)
-        elif o == '-m':
-            module = int(a)
-        elif o == '-t':
-            aculab.lowlevel.cvar.TiNGtrace = int(a)
-        elif o == '-f':
-            fname = a            
-        elif o == '-r':
-            regenerate = True
-        elif o == '-l':
-            mode = lowlevel.kSMToneLenDetectionMinDuration64
-        else:
-            usage()
-
-    loop = RTPLoop(controller, card, module)
+    loop = RTPLoop(controller, options.card, options.module)
 
     SpeechReactor.run()

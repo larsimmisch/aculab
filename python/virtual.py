@@ -3,7 +3,6 @@
 # Copyright (C) 2004-2007 Lars Immisch
 
 import sys
-import getopt
 from aculab.error import AculabError
 from aculab.reactor import CallReactor
 from aculab.lowlevel import *
@@ -21,25 +20,22 @@ class RepeatedVirtualCallController(VirtualCallController):
     def ev_idle(self, call):
         call.openin()
 
-def usage():
-    print 'usage: virtual.py [-p <port>] [-r]'
-    sys.exit(-2)
-
 if __name__ == '__main__':
-    port = 0
+
+    parser = aculab.defaultOptions(
+        description='Wait for and accept an incoming virtual call.',
+        repeat=True)
+
+    parser.add_option('-n', '--numcalls', action='store', type='int',
+                      default=1, help='Accept NUMCALLS in parallel')
+
+    options, args = parser.parse_args()
+
     controller = VirtualCallController()
 
-    options, args = getopt.getopt(sys.argv[1:], 'p:r?')
-
-    for o, a in options:
-        if o == '-p':
-            port = int(a)
-        elif o == '-r':
-            controller = RepeatedVirtualCallController()
-        else:
-            usage()
-
-    c = CallHandle(controller, port=port, timeslot=-1)
-    c.openin(cnf=lowlevel.CNF_TSVIRTUAL)
+    for i in range(options.numcalls):
+            c = CallHandle(controller, card=options.card,
+                           port=options.port, timeslot=-1)
+            c.openin(cnf=lowlevel.CNF_TSVIRTUAL)
 
     CallReactor.run()

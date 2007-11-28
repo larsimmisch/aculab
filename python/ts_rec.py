@@ -8,9 +8,7 @@ import getopt
 import threading
 import logging
 import struct
-import time
 import aculab
-import traceback
 from aculab.error import AculabError
 from aculab.snapshot import Snapshot
 from aculab.speech import SpeechChannel, Glue

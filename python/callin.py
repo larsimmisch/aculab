@@ -3,7 +3,6 @@
 # Copyright (C) 2002-2007 Lars Immisch
 
 import sys
-import getopt
 import logging
 import aculab
 from aculab.error import AculabError
@@ -41,52 +40,36 @@ class IncomingCallController:
         call.disconnect()
 
     def ev_idle(self, call, model):
-        raise StopIteration
+        if options.repeat:
+            call.openin()
+        else:
+            raise StopIteration
         
-class RepeatedIncomingCallController(IncomingCallController):
-
-    def ev_idle(self, call, model):
-        call.openin()
-
-def usage():
-    print '''usage: callin.py [-n <numcalls>] [-c <card> ] [-p <port>] [-t <timeslot>] [-r]
-
-    The options -t <timeslot> and -n <numcalls> conflict and can not be used at
-    the same time.'''
-    sys.exit(-2)
-
 if __name__ == '__main__':
 
-    aculab.defaultLogging(logging.DEBUG)
+    log = aculab.defaultLogging(logging.DEBUG)
 
-    card = 0
-    port = 0
-    timeslot = None
-    numcalls = 1
+    parser = aculab.defaultOptions(
+        description='Wait for and accept an incoming call.\n' \
+        'The options -s and -n conflict and can not be used at the same time',
+        repeat=True)
+
+    parser.add_option('-s', '--timeslot', action='store', type='int',
+                      default = None, help='Timeslot to use.')
+    parser.add_option('-n', '--numcalls', action='store', type='int',
+                      default = 1, help='Calls to open')
+
+    options, args = parser.parse_args()
+
+    if options.timeslot is not None and options.numcalls:
+        print parser.print_help()
+        sys.exit(2)
+        
     controller = IncomingCallController()
 
-    options, args = getopt.getopt(sys.argv[1:], 'n:c:p:t:r?')
-
-    for o, a in options:
-        if o == '-c':
-            card = int(a)
-        elif o == '-p':
-            port = int(a)
-        elif o == '-n':
-            if timeslot is not None:
-                usage()
-            numcalls = int(a)
-        elif o == '-t':
-            if numcalls > 1:
-                usage()
-            timeslot = int(a)
-        elif o == '-r':
-            controller = RepeatedIncomingCallController()
-        else:
-            usage()
-
-    for i in range(numcalls):
-        c = Call(controller, card=card, port=port, timeslot=timeslot)
+    for i in range(options.numcalls):
+        c = Call(controller, card=options.card, port=options.port,
+                 timeslot=options.timeslot)
 
     try:
         CallReactor.run()

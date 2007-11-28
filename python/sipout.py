@@ -3,9 +3,9 @@
 # Copyright (C) 2007 Lars Immisch
 
 import sys
-import getopt
 import logging
-from aculab import defaultLogging
+from aculab import defaultLogging, defaultOptions
+from aculab.lowlevel import cvar
 from aculab.speech import SpeechChannel
 from aculab.reactor import SpeechReactor, CallReactor
 from aculab.switching import connect
@@ -19,9 +19,12 @@ class CallData:
         # Create the call handle here, do the openout in ready
         self.number = number
         self.call = SIPHandle(controller, self)
-        self.vmptx = VMPtx(controller, user_data=self)
-        self.vmprx = VMPrx(controller, user_data=self)
-        self.speech = SpeechChannel(controller, user_data=self)
+        self.vmptx = VMPtx(controller, card=options.card,
+                           module=options.module, user_data=self)
+        self.vmprx = VMPrx(controller, card=options.card,
+                           module=options.module, user_data=self)
+        self.speech = SpeechChannel(controller, card=options.card,
+                           module=options.module, user_data=self)
         self.connection = None
 
     def vmprx_ready(self, vmprx):
@@ -43,13 +46,13 @@ class CallData:
 
     def connect(self):
         self.connection = connect((self.vmptx, self.vmprx), self.speech)
-        self.speech.listen_for()
 
-        if fax:
-            self.speech.tone(23, 1.0)
-            # self.speech.faxtx(fax)
+        if options.fax:
+            # self.speech.tone(23, 1.0)
+            self.speech.faxtx(options.fax)
         else:
-            self.speech.play('12345CNG.al')
+            self.speech.listen_for()
+            self.speech.play(options.file_name)
 
     def close(self):
         for attr in ['connection', 'call', 'speech', 'vmprx', 'vmptx']:
@@ -85,32 +88,33 @@ class OutgoingCallController:
         user_data.close()
         raise StopIteration
         
-def usage():
-    print '''usage: sipout.py [-n <numcalls>] <number>'''
-    sys.exit(-2)
-
 if __name__ == '__main__':
 
     defaultLogging(logging.DEBUG)
     log = logging.getLogger('app')
 
-    numcalls = 1
-    fax = None
+    parser = defaultOptions(
+        usage='usage: %prog [options] <number>',
+        description='Make an outgoing SIP call and play a prompt.')
+
+    parser.add_option('-f', '--file-name', default='12345CNG.al',
+                      help='Play FILE instead of 12345CNG.al')
+
+    parser.add_option('-x', '--fax', 
+                      help='Send Fax FILE instead of playing a prompt.')
+
+    parser.add_option('-n', '--numcalls', type='int', default=1,
+                      help='Process NUMCALLS calls in parallel.')
+
+    options, args = parser.parse_args()
+
+    if not args:
+        parser.print_help()
+        sys.exit(2)
+
     controller = OutgoingCallController()
 
-    options, args = getopt.getopt(sys.argv[1:], 'n?f:')
-    if not args:
-        usage()
-
-    for o, a in options:
-        if o == '-n':
-            numcalls = int(a)
-        elif o == '-f':
-            fax = a
-        else:
-            usage()
-
-    for i in range(numcalls):
+    for i in range(options.numcalls):
         c = CallData(controller, args[0])
 
     try:

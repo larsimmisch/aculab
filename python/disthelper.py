@@ -13,7 +13,7 @@ def usage():
     print "disthelper.py -i | -l | -L | -v | <file>+"
     sys.exit(2)
 
-# copied from distutils.dir_utils. 
+# copied from distutils.dir_utils and extended with ignore list.
 
 def copy_tree (src, dst,
                preserve_mode=1,
