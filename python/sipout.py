@@ -8,7 +8,7 @@ from aculab import defaultLogging, defaultOptions
 from aculab.lowlevel import cvar
 from aculab.speech import SpeechChannel
 from aculab.reactor import SpeechReactor, CallReactor
-from aculab.switching import connect
+from aculab.switching import connect, Connection
 from aculab.sip import SIPHandle
 from aculab.rtp import VMPrx, VMPtx
 from aculab.sdp import SDP
@@ -46,6 +46,10 @@ class CallData:
 
     def connect(self):
         self.connection = connect((self.vmptx, self.vmprx), self.speech)
+
+        #self.connection = Connection(
+        #    endpoints = [self.vmptx.listen_to(self.speech.get_timeslot()),
+        #                 self.speech.listen_to(self.vmprx.get_timeslot())])
 
         if options.fax:
             # self.speech.tone(23, 1.0)
@@ -101,7 +105,7 @@ if __name__ == '__main__':
                       help='Play FILE instead of 12345CNG.al')
 
     parser.add_option('-x', '--fax', 
-                      help='Send Fax FILE instead of playing a prompt.')
+                      help='Send Fax FILE_NAME instead of playing a prompt.')
 
     parser.add_option('-n', '--numcalls', type='int', default=1,
                       help='Process NUMCALLS calls in parallel.')

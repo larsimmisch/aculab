@@ -29,11 +29,11 @@ class CallData:
         self.connection = None
 
     def connect(self):
-        # self.connection = connect((self.vmptx, self.vmprx), self.speech)
+        self.connection = connect((self.vmptx, self.vmprx), self.speech)
 
-        self.connection = Connection(
-            endpoints = [self.vmptx.listen_to(self.speech.get_timeslot()),
-                         self.speech.listen_to(self.vmprx.get_timeslot())])
+        #self.connection = Connection(
+        #    endpoints = [self.vmptx.listen_to(self.speech.get_timeslot()),
+        #                 self.speech.listen_to(self.vmprx.get_timeslot())])
 
         #self.connection = Connection(
         #    endpoints = [self.speech.listen_to(self.vmprx.get_timeslot())])
@@ -91,7 +91,7 @@ class IncomingCallController:
             user_data.speech.play(options.file_name)
         else:
             user_data.speech.record('sipin.al', max_silence = 5.0)
-        
+
     def play_done(self, channel, reason, f, duration, user_data):
         # The call might be gone already
         if user_data.call:

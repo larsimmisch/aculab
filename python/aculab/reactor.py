@@ -332,7 +332,7 @@ else: # os.name == 'nt'
             # listen to the read fd of our pipe
             self.poll.register(self.pipe[0], select.POLLIN )
 
-        def add(self, handle, method, mask = select.POLLIN|select.POLLOUT):
+        def add(self, handle, method, mask = select.POLLIN):
             """Add a new handle to the reactor.
 
             @param handle: A file descriptor. On Unix, use the C{fd} member of
