@@ -81,6 +81,10 @@ class build_ext_swig_in_package(build_ext):
                         os.path.join(dtk, 'include', 'cl_lib.h'),
                         'cl_lib.patch'])
 
+            self.spawn(['patch', '-o', 'acu_type.h2',
+                        os.path.join(dtk, 'include', 'acu_type.h'),
+                        'acu_type.patch'])
+
             swig = self.swig or self.find_swig()
             swig_cmd = [swig, '-xml', '-xmllite']
             swig_cmd.extend(self.swig_opts)
@@ -199,7 +203,7 @@ elif os.name == 'posix':
             define_macros.append(('HAVE_FAX', None))
             include_dirs.append(dtk + fax + '/include')
             lib_dirs.append(dtk + fax + '/lib')
-            libs.extend(['faxlib', 'actiff'])
+            libs.extend(['faxlib', 'actiff', 'fontconfig'])
             extra_objects = [dtk + '/ting/libutil/gen-LINUX_V6/aculog.o',
                              dtk + '/ting/libutil/gen-LINUX_V6/vseprintf.o',   
                              dtk + '/ting/libutil/gen-LINUX_V6/bfile.o',   
@@ -225,7 +229,7 @@ elif os.name == 'posix':
         libs = ['mvcl', 'mvsw', 'mvsm']
         sources = ["lowlevel.i"]
     
-swig_opts = ['-modern', '-new_repr'] + \
+swig_opts = ['-modern', '-new_repr', '-DTiNG_USE_UNDECORATED_NAMES'] + \
             [macroify(d) for d in define_macros] + \
             ['-I%s' % i for i in include_dirs]
 

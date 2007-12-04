@@ -272,7 +272,6 @@ class VMPrx(RTPBase):
         sd.addMediaDescription(self.media_description(enable_rfc2833))
 
         sd.setServerIP(self.address)
-        sd.addSessionAttribute('direction', 'sendrecv')
 
         if configure:
             self.configure(sd)

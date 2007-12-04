@@ -873,6 +873,8 @@ class SpeechChannel(Lockable):
 
         self.name = 'sc-%04x' % self.channel
 
+        # log.debug('%s allocated', self.name)
+
         self.info = lowlevel.SM_CHANNEL_INFO_PARMS()
         self.info.channel = alloc.channel
 
