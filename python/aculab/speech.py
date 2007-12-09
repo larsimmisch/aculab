@@ -148,8 +148,8 @@ class PlayJobBase(object):
             # Ok. We are not finished yet.
             # Add a reactor to self and add the write event to it.
             self.reactor = self.channel.reactor
-            self.reactor.add(os_event(self.channel.event_write),
-                             self.fill_play_buffer)
+            self.reactor.addWriter(os_event(self.channel.event_write),
+                                   self.fill_play_buffer)
 
         return self
 
@@ -435,8 +435,8 @@ class RecordJob(object):
                   self.agc, self.volume)
                   
         # add the read event to the reactor
-        self.channel.reactor.add(os_event(self.channel.event_read),
-                                 self.on_read)
+        self.channel.reactor.addReader(os_event(self.channel.event_read),
+                                       self.on_read)
 
     def done(self):                
         """Called internally upon completion."""
@@ -586,8 +586,8 @@ class DigitsJob(object):
                   self.digit_duration)
 
         # add the write event to the reactor
-        self.channel.reactor.add(os_event(self.channel.event_write),
-                                 self.on_write)
+        self.channel.reactor.addWriter(os_event(self.channel.event_write),
+                                       self.on_write)
 
     def on_write(self):
         if self.channel is None:
@@ -682,8 +682,8 @@ class ToneJob(object):
                   self.channel.name, self.tone, self.duration)
 
         # add the write event to the reactor
-        self.channel.reactor.add(os_event(self.channel.event_write),
-                                 self.on_write)
+        self.channel.reactor.addWriter(os_event(self.channel.event_write),
+                                       self.on_write)
 
     def on_write(self):
         if self.channel is None:
@@ -763,8 +763,8 @@ class DCReadJob(object):
         control.blocking = self.blocking
 
         # add the read event to the reactor
-        self.channel.reactor.add(os_event(self.channel.event_read),
-                                 self.on_read)
+        self.channel.reactor.addReader(os_event(self.channel.event_read),
+                                       self.on_read)
 
         rc = lowlevel.smdc_rx_control(control)
         if rc:
@@ -1235,7 +1235,7 @@ class SpeechChannel(Lockable):
             self.event_recog = self.set_event(lowlevel.kSMEventTypeRecog)
         
             # add the recog event to the reactor
-            self.reactor.add(os_event(self.event_recog), self.on_recog)
+            self.reactor.addReader(os_event(self.event_recog), self.on_recog)
 
     def dc_config(self, protocol, pconf, encoding, econf):
         """Configure the channel for data communications.

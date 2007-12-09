@@ -411,7 +411,7 @@ class CTBus(object):
 
         rc = lowlevel.sw_set_output(switch, output)
         if rc:
-            raise AculabError(rc, 'sw_set_output')
+            raise AculabError(rc, 'sw_set_output(%s)' % switch)
 
         return CTBusEndpoint(switch, sink)
 
@@ -668,19 +668,22 @@ def connect(a, b, bus=DefaultBus(), force_bus=False):
                             btx.listen_to(bus.invert(c.timeslots[1])) ]
 
             return c
-        
-    # nonpathological case
-    #c.endpoints = [ brx.speak_to(c.timeslots[0]),
-    #                atx.listen_to(c.timeslots[0]),
-    #                arx.speak_to(c.timeslots[1]),
-    #                btx.listen_to(c.timeslots[1]) ]
 
-    c.endpoints = [ bus.listen_to(brx.get_switch(), c.timeslots[0],
-                                  brx.get_timeslot()),
-                    atx.listen_to(c.timeslots[0]),
-                    bus.listen_to(arx.get_switch(), c.timeslots[1],
-                                  arx.get_timeslot()),
-                    btx.listen_to(c.timeslots[1]) ]
+    if brx.get_switch() < 0 or arx.get_switch() < 0:
+        # old ISA Prosody daughter boards have no real switch
+        c.endpoints = [ brx.speak_to(c.timeslots[0]),
+                        atx.listen_to(c.timeslots[0]),
+                        arx.speak_to(c.timeslots[1]),
+                        btx.listen_to(c.timeslots[1]) ]
+
+    else:
+        # Finally, the nonpathological case
+        c.endpoints = [ bus.listen_to(brx.get_switch(), c.timeslots[0],
+                                      brx.get_timeslot()),
+                        atx.listen_to(c.timeslots[0]),
+                        bus.listen_to(arx.get_switch(), c.timeslots[1],
+                                      arx.get_timeslot()),
+                        btx.listen_to(c.timeslots[1]) ]
 
     return c
 

@@ -226,7 +226,7 @@ if os.name == 'nt':
             self.reactors = []
             self.running = False
 
-        def add(self, handle, method, mask = None):
+        def add(self, handle, method, read = True):
             """Add a new handle to the reactor.
 
             @param handle: The handle of the Event to watch.
@@ -332,20 +332,42 @@ else: # os.name == 'nt'
             # listen to the read fd of our pipe
             self.poll.register(self.pipe[0], select.POLLIN )
 
-        def add(self, handle, method, mask = select.POLLIN):
-            """Add a new handle to the reactor.
+        def addReader(self, handle, method):
+            """Add a new handle to the reactor watching POLLIN events.
+            @param handle: A file descriptor. On Unix, use the C{fd} member of
+            the C{tSMEventId} structure.
+            @param method: This will be called when the event is fired.
+
+            This method blocks until I{handle} is added by the reactor thread.
+            """
+
+            self.add(handle, method, select.POLLIN)
+
+        def addWriter(self, handle, method):
+            """Add a new handle to the reactor watching POLLOUT events.
 
             @param handle: A file descriptor. On Unix, use the C{fd} member of
             the C{tSMEventId} structure.
             @param method: This will be called when the event is fired.
-            @param mask: Bitmask of POLLIN, POLLPRI, POLLOUT, POLLERR, POLLHUP
-            or POLLNVAL or None for a default mask.
+
+            This method blocks until I{handle} is added by the reactor thread.
+            """
+            
+            self.add(handle, method, select.POLLOUT)
+            
+        def add(self, handle, method, mask):
+            """Used internally. Add a handle to the reactor.
+
+            @param handle: A file descriptor. On Unix, use the C{fd} member of
+            the C{tSMEventId} structure.
+            @param method: This will be called when the event is fired.
+            @param mask: POLLIN or POLLOUT.
 
             This method blocks until I{handle} is added by reactor thread"""
 
             if not callable(method):
                 raise ValueError('method must be callable')
-            
+
             if threading.currentThread() == self or not self.isAlive():
                 # log.debug('adding fd: %d %s', handle, method.__name__)
                 self.handles[handle] = method
