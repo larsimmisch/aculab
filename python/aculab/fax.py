@@ -35,17 +35,26 @@ def fax_global_data():
 
 class FaxJob:
 
-    def __init__(self, channel, file, subscriber_id, job_data):
+    def __init__(self, channel, file, subscriber_id, vmp = (None, None)):
+        """Initialize a FAX job.
+
+        @param channel: The Prosody channel to send/receive the FAX on.
+        @param file: a file name.
+        @param subscriber_id: a string containing the alphanumerical subscriber
+        id.
+        @param vmp: a vmptx/vmprx pair if this is sent via RTP.
+        """
         self.channel = channel
         self.file = None
         self.filename = file
-        self.job_data = job_data
         self.session = None
         self.logfile = None
         self.trace = None
+        self.vmp = vmp
         self.subscriber_id = subscriber_id
 
     def create_session(self, mode):
+        """Create the job (unfortunately called session by aculab)."""
         self.mode = mode
 
         session = lowlevel.SMFAX_SESSION()
@@ -54,8 +63,10 @@ class FaxJob:
             session.module = self.channel.module.open.module_id
         else:
             session.module = self.channel.module
-        
+
         session.channel = self.channel.channel
+        session.vmptx = self.vmp[0].vmptx
+        session.vmprx = self.vmp[1].vmprx
         # accept five percent bad lines
         session.user_options.max_percent_badlines = 0.10
         session.user_options.max_consec_badlines = 20
@@ -86,6 +97,7 @@ class FaxJob:
         self.session = session
 
     def trace_on(self, level = 0x7fffffff):
+        """Enable tracing for the FAX."""
         # open logfile for tracing
         rc, self.logfile = lowlevel.bfile()
         if rc:
@@ -112,6 +124,7 @@ class FaxJob:
         self.close()
         
     def close(self):
+        """Close the FAX job and aal open files."""
         if self.session:
             lowlevel.smfax_close_session(self.session)
             self.session = None
@@ -125,6 +138,7 @@ class FaxJob:
             self.file = None
 
     def stop(self):
+        """Stop the FAX job."""
         if self.session:
             log.debug('%s fax stop', self.channel.name)
 
@@ -133,6 +147,7 @@ class FaxJob:
                 raise AculabFAXError(rc, 'smfax_rude_interrupt')
 
     def done(self, reason = None):
+        """Called internally when the job is complete or stopped."""
 
         function = 'faxrx_done'
         if self.mode == lowlevel.kSMFaxModeTransmitter:
@@ -150,19 +165,35 @@ class FaxJob:
 
 class FaxRxJob(FaxJob, threading.Thread):
     
-    def __init__(self, channel, file, subscriber_id = '', job_data = None):
+    def __init__(self, channel, file, subscriber_id = '', vmp = (None, None)):
+        """Prepare to receive a FAX.
+        
+        @param channel: The Prosody channel to send/receive the FAX on.
+        @param file: a file name.
+        @param subscriber_id: a string containing the alphanumerical subscriber
+        id.
+        @param vmp: a vmptx/vmprx pair if this is sent via RTP."""
 
         threading.Thread.__init__(self, name='faxrx ' + channel.name)
 
-        FaxJob.__init__(self, channel, file, subscriber_id, job_data)
+        FaxJob.__init__(self, channel, file, subscriber_id, vmp)
         
         self.file, rc = lowlevel.actiff_write_open(file, None)
         if rc:
             raise OSError(rc, 'actiff_write_open')
                 
     def run(self):
-        log.debug('%s faxrx(%s)',
-                  self.channel.name, str(self.filename))
+        """Receive a FAX."""
+
+        extra = ''
+        if self.vmp[0] != None:
+            extra = extra + 'tx: ' + self.vmp[0].name
+        if self.vmp[1] != None:
+            extra = extra + ' rx: ' + self.vmp[1].name
+        
+        log.debug('%s faxrx(%s, %s) %s',
+                  self.channel.name, str(self.filename), self.subscriber_id,
+                  extra)
 
         self.create_session(lowlevel.kSMFaxModeReceiver)
 
@@ -171,7 +202,11 @@ class FaxRxJob(FaxJob, threading.Thread):
         neg = lowlevel.SMFAX_NEGOTIATE_PARMS()
         neg.fax_session = self.session
         neg.page_props = lowlevel.ACTIFF_PAGE_PROPERTIES()
-        rc = lowlevel.smfax_rx_negotiate(neg)
+
+        try:
+            rc = lowlevel.smfax_negotiate(neg)
+        except AttributeError:
+            rc = lowlevel.smfax_rx_negotiate(neg)            
 
         if rc != lowlevel.kSMFaxStateMachineRunning:
             self.done(AculabFAXError(rc, 'smfax_rx_negotiate'))
@@ -218,11 +253,18 @@ class FaxRxJob(FaxJob, threading.Thread):
 
 class FaxTxJob(FaxJob, threading.Thread):
     
-    def __init__(self, channel, file, subscriber_id = '', job_data = None):
+    def __init__(self, channel, file, subscriber_id = '',  vmp = (None, None)):
+        """Prepare to receive a FAX.
+        
+        @param channel: The Prosody channel to send/receive the FAX on.
+        @param file: a file name.
+        @param subscriber_id: a string containing the alphanumerical subscriber
+        id.
+        @param vmp: a vmptx/vmprx pair if this is sent via RTP."""
 
         threading.Thread.__init__(self, name='faxtx ' + channel.name)
 
-        FaxJob.__init__(self, channel, file, subscriber_id, job_data)
+        FaxJob.__init__(self, channel, file, subscriber_id, vmp)
                 
         self.file, rc = lowlevel.actiff_read_open(file)
         if rc:
@@ -234,8 +276,16 @@ class FaxTxJob(FaxJob, threading.Thread):
             self.page_count += 1
         
     def run(self):
-        log.debug('%s faxtx(%s)',
-                  self.channel.name, str(self.filename))
+        """Send a FAX."""
+
+        extra = ''
+        if self.vmp[0] != None:
+            extra = extra + 'tx: ' + self.vmp[0].name
+        if self.vmp[1] != None:
+            extra = extra + ' rx: ' + self.vmp[1].name
+        
+        log.debug('%s faxtx(%s, %s) %s', self.channel.name, str(self.filename),
+                  self.subscriber_id, extra)
 
         self.create_session(lowlevel.kSMFaxModeTransmitter)
 
@@ -250,7 +300,11 @@ class FaxTxJob(FaxJob, threading.Thread):
         neg = lowlevel.SMFAX_NEGOTIATE_PARMS()
         neg.fax_session = self.session
         neg.page_props = page_props
-        rc = lowlevel.smfax_tx_negotiate(neg)
+
+        try:
+            rc = lowlevel.smfax_negotiate(neg)
+        except AttributeError:
+            rc = lowlevel.smfax_tx_negotiate(neg)            
 
         if rc != lowlevel.kSMFaxStateMachineRunning:
             self.done(AculabFAXError(rc, 'smfax_tx_negotiate'))

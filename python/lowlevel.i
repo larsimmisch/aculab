@@ -111,6 +111,7 @@ typedef struct {
 
 // The OUTPUT typemap doesn't set *perrno to 0, so we must do this manually
 // %apply (int *OUTPUT) { int *perrno };
+
 %apply (int *OUTPUT) { ACU_PORT_ID *sip_port };
 
 #ifdef WIN32
@@ -148,8 +149,11 @@ BLOCKING(dpns_transit_details)
 BLOCKING(dpns_set_l2_ch)
 BLOCKING(dpns_l2_state)
 BLOCKING(dpns_watchdog)
-BLOCKING(smfax_rx_negotiate)
+/* In the current FAX API, smfax_rx_negotiate and smfax_tx_negotiate are just
+   aliases for smfax_negotiate. */
 BLOCKING(smfax_tx_negotiate)
+BLOCKING(smfax_rx_negotiate)
+BLOCKING(smfax_negotiate)
 BLOCKING(smfax_rx_page)
 BLOCKING(smfax_tx_page)
 BLOCKING(sm_t38gw_worker_fn)
@@ -177,6 +181,10 @@ BLOCKING(sm_t38gw_worker_fn)
 %ignore dpns_watchdog;
 %ignore call_handle_2_chan;
 %ignore call_version;
+
+// Immutable structure members
+%immutable sm_vmptx_generate_tones_parms::num;
+%immutable sm_vmptx_generate_tones_parms::tones;
 #endif
 
 %ignore BFILE;
@@ -533,6 +541,56 @@ GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 	}
 }
 
+%extend SM_VMPTX_CREATE_TONESET_PARMS {
+	void set_default_toneset(void) {
+		self->toneset = kSMVMPTxDefaultToneSet;
+	}
+}
+
+%extend SM_VMPTX_GENERATE_TONES_PARMS {
+	~SM_VMPTX_GENERATE_TONES_PARMS(void) {
+		if (self->tones)
+			free(self->tones);
+
+		free(self);
+	}
+
+	PyObject *set_tones(PyObject *args) {
+		PyObject *item;
+		int i;
+
+		if (!PyList_Check(args))
+		{
+			PyErr_SetString(PyExc_TypeError, "expected a list");
+			return NULL;
+		}
+
+		if (self->tones)
+			free(self->tones);
+
+		self->tones = (int*)calloc(PyList_Size(args), sizeof(int));
+
+		for (i = 0; i < PyList_Size(args); ++i)
+		{
+			item = PyList_GetItem(args, i);
+			if (!PyInt_Check(item))
+			{
+				free(self->tones);
+				self->tones = NULL;
+				PyErr_SetString(PyExc_TypeError, "expected a list of ints");
+				return NULL;
+			}
+			self->tones[i] = PyInt_AsLong(item);
+		}
+
+		self->num = i;
+
+		Py_INCREF(Py_None);
+		return Py_None;
+	}
+}
+
+
 %extend SM_FMPTX_CONFIG_PARMS {
 	PyObject *set_destination(PyObject *args) {
 		return set_inaddr(args, &self->destination);
@@ -541,12 +599,6 @@ GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 		return set_inaddr(args, &self->source);
 	}
 }
-
-%extend SM_VMPTX_CREATE_TONESET_PARMS {
-	void set_default_toneset(void) {
-		self->toneset = kSMVMPTxDefaultToneSet;
-	}
-};
 
 #endif
 

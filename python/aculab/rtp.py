@@ -24,7 +24,7 @@ import select
 log = logging.getLogger('rtp')
 log_switch = logging.getLogger('switch')
 
-rfc2833_digits = {
+rfc2833_id2name = {
     0: '0', 1: '1', 2: '2', 3: '3', 4: '4',
     5: '5', 6: '6', 7: '7', 8: '8', 9: '9',
     10: '*', 11: '#', 12: 'A', 13: 'B', 14: 'C', 15: 'D',
@@ -32,6 +32,15 @@ rfc2833_digits = {
     37: 'V21_1_0', 38: 'V21_1_1', 39: 'V21_2_0', 40: 'V21_2_1',
     41: 'CRdi', 42: 'CRdr', 43: 'CRe', 44: 'ESi', 45: 'ESr', 46: 'MRdi',
     47: 'MRdr', 48: 'MRe', 49: 'CT' }
+
+rfc2833_name2id = {
+    '0': 0, '1': 1, '2': 2, '3': 3, '4': 4,
+    '5': 5, '6': 6, '7': 7, '8': 8, '9': 9,
+    '*': 10, '#': 11, 'A': 12, 'B': 13, 'C': 14, 'D': 15,
+    'R': 16, 'ANS': 32, '/ANS': 33, 'ANSam': 34, '/ANSam': 35, 'CNG': 36,
+    'V21_1_0': 37, 'V21_1_1': 38, 'V21_2_0': 39, 'V21_2_1': 40,
+    'CRdi': 41, 'CRdr': 42, 'CRe': 43, 'ESi': 44, 'ESr': 45, 'MRdi': 46,
+    'MRdr': 47, 'MRe': 48, 'CT': 49 }
 
 class RTPBase(Lockable):
     """Internal baseclass for RTP tx/rx classes that manages connections
@@ -103,8 +112,6 @@ class VMPrx(RTPBase):
          - vmprx_newssrc(vmprx, address, ssrc, user_data)
          - dtmf(vmprx, digit, user_data)."""
 
-        RTPBase.__init__(self, card, module, mutex, user_data, ts_type)
-        
         self.controller = controller
         self.reactor = reactor
 
@@ -117,6 +124,8 @@ class VMPrx(RTPBase):
         self.address = socket.INADDR_ANY
         self.tdm = None
 
+        RTPBase.__init__(self, card, module, mutex, user_data, ts_type)
+        
         # create vmprx
         vmprx = lowlevel.SM_VMPRX_CREATE_PARMS()
         vmprx.module = self.module.open.module_id
@@ -202,7 +211,7 @@ class VMPrx(RTPBase):
             log.debug('%s tone: %d, volume: %f', self.name,
                       tone, volume)
 
-            self.controller.dtmf(self, rfc2833_digits[tone], self.user_data)
+            self.controller.dtmf(self, rfc2833_id2name[tone], self.user_data)
             
         elif status.status == lowlevel.kSMVMPrxStatusEndTone:
             # ignore in the logging
@@ -268,7 +277,14 @@ class VMPrx(RTPBase):
         
     def default_sdp(self, configure=False, enable_rfc2833 = True):
         # Create a default SDP
+
+        md = sdp.MediaDescription()
+        md.setLocalPort(self.rtp_port)
+        md.addRtpMap(sdp.PT_PCMA)
+        md.addRtpMap(sdp.PT_PCMU)
+        
         sd = sdp.SDP()
+        
         sd.addMediaDescription(self.media_description(enable_rfc2833))
 
         sd.setServerIP(self.address)
@@ -361,14 +377,14 @@ class VMPtx(RTPBase):
                  user_data = None, ts_type = lowlevel.kSMTimeslotTypeALaw,
                  reactor = SpeechReactor):
 
-        RTPBase.__init__(self, card, module, mutex, user_data, ts_type)
-
         self.controller = controller
         self.reactor = reactor
 
         # initialize early 
         self.vmptx = None
         self.event_vmptx = None
+
+        RTPBase.__init__(self, card, module, mutex, user_data, ts_type)
 
         # create vmptx
         vmptx = lowlevel.SM_VMPTX_CREATE_PARMS()
@@ -416,15 +432,18 @@ class VMPtx(RTPBase):
         status.vmptx = self.vmptx
 
         rc = lowlevel.sm_vmptx_status(status)
-        log.debug('%s vmptx status: %s', self.name,
-                  names.vmptx_status_names[status.status])
 
         if status.status == lowlevel.kSMVMPtxStatusStopped:
+            log.debug('%s vmptx stopped', self.name)
+
             self.reactor.remove(self.event_vmptx)
             self.event_vmptx = None
             
             rc = lowlevel.sm_vmptx_destroy(self.vmptx)
             self.vmptx = None
+        else:
+            log.debug('%s vmptx status: %s', self.name,
+                      names.vmptx_status_names[status.status])
 
     def tdm_connect(self):
         """Connect the Transmitter to a timeslot on its DSP's timeslot range.
@@ -583,6 +602,26 @@ class VMPtx(RTPBase):
 
             return VMPtxEndpoint(self, tdm)
 
+    def tones(self, tones, length = 0.04, interval = 0.1):
+        """Send RFC 2833 digits.
+
+        @param tones: a list of RFC 2833 tone names. See L{rfc2833_id2name}
+        for a list of valid names.
+        @param length: the length in seconds. Must be a multiple of 0.01
+        (10ms). The default is 0.04s (40ms).
+        @param interval: the interval between tones, in seconds. The default
+        is 0.1s (100ms)."""
+
+        tp = lowlevel.SM_VMPTX_GENERATE_TONE_PARMS()
+        tp.vmptx = self.vmptx
+        tp.duration = int(duration * 1000)
+        tp.interval = int(interval * 1000)
+        
+
+        rc = lowlevel.sm_vmptx_generate_tones(tp)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_vmptx_generate_tones')
+
 class FMPrx(RTPBase):
     """An RTP T.38 receiver (untested/incomplete).
 
@@ -601,8 +640,6 @@ class FMPrx(RTPBase):
          - fmprx_running(vmprx, user_data)
         """
 
-        RTPBase.__init__(self, card, module, mutex, user_data, ts_type)
-        
         self.controller = controller
         self.reactor = reactor
 
@@ -615,6 +652,8 @@ class FMPrx(RTPBase):
         self.sdp = None
         self.tdm = None
 
+        RTPBase.__init__(self, card, module, mutex, user_data, ts_type)
+        
         # create vmprx
         fmprx = lowlevel.SM_FMPRX_CREATE_PARMS()
         fmprx.module = self.module.open.module_id
@@ -683,20 +722,8 @@ class FMPrx(RTPBase):
             # self.rtp_address = status.ports_address()
             log.debug('%s fmprx: rtp address: %s rtp port: %d, rtcp port: %d',
                       self.name, self.address, self.rtp_port, self.rtcp_port)
-
         
-            # Create our SDP
-            md = sdp.MediaDescription()
-            md.setLocalPort(self.rtp_port)
-            md.addRtpMap(sdp.PT_PCMU)
-            md.addRtpMap(sdp.PT_PCMA)
-            md.addRtpMap(sdp.PT_NTE)
-    
-            sdp = sdp.SDP()
-            sdp.setServerIP(self.address)
-            sdp.addMediaDescription(md)
-
-            self.controller.fmprx_ready(self, self.sdp, self.user_data)
+            self.controller.fmprx_ready(self, self.user_data)
 
         elif status.status == lowlevel.kSMFMPrxStatusStopped:
             self.reactor.remove(self.event_fmprx)
@@ -729,6 +756,27 @@ class FMPrx(RTPBase):
     def get_datafeed(self):
         """Used internally by the switching protocol."""
         return self.datafeed
+
+    def default_sdp(self):
+        """Create a default SDP for T.38."""
+
+        # The values are guesswork for now
+
+        md = sdp.MediaDescription('image %d udptl t38' % self.rtp_port)
+        md._a = { 'T38FaxVersion': (3,),
+              'T38maxBitRate': (9600,),
+              'T38FaxFillBitRemoval': (0,),
+              'T38FaxTranscodingMMR': (0,),
+              'T38FaxTranscodingJBIG': (0,),
+              'T38FaxRateManagement': ('transferredTCF',),
+              'T38FaxMaxBuffer': (284,),
+              'T38FaxMaxDatagram': (128,0),
+              'T38FaxUdpEC': ('t38UDPRedundancy',) }
+        
+        sd = sdp.SDP()
+        sd.addMediaDescription(md)
+
+        return sd
             
 class FMPtx(RTPBase):
     """An RTP T.38 transmitter (untested/incomplete).
@@ -739,14 +787,14 @@ class FMPtx(RTPBase):
                  user_data = None, ts_type = lowlevel.kSMTimeslotTypeData,
                  reactor = SpeechReactor):
 
-        RTPBase.__init__(self, card, module, mutex, user_data, ts_type)
-
         self.controller = controller
         self.reactor = reactor
 
         # initialize early 
         self.event_fmptx = None
         self.event_fmprx = None
+
+        RTPBase.__init__(self, card, module, mutex, user_data, ts_type)
 
         # create fmptx
         fmptx = lowlevel.SM_FMPTX_CREATE_PARMS()

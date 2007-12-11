@@ -43,7 +43,7 @@ def guess_filetype(fn):
     elif ext == '.sw':
         return (lowlevel.kSMDataFormat16bit, 8000, 16000)
 
-    return lowlevel.kSMDataFormatALawPCM
+    return (lowlevel.kSMDataFormatALawPCM, 8000, 8000)
 
 tonetype = { lowlevel.kSMRecognisedNothing: 'nothing',
              lowlevel.kSMRecognisedTrainingDigit: 'training digit',
@@ -68,11 +68,12 @@ class PlayJobBase(object):
     Subclasses must override C{get_data(len)}. C{get_data} must fill
     the buffer C{self.data} and return the length of the data.
 
-    The must also override and call {done}. It is their responsibility to call
-    C{channel.job_done()} in {done}.
+    They must also override and call C{done} on this class for internal
+    bookkeeping and it is the subclasses responsibility to call
+    C{channel.job_done()} in C{done}.
 
     If the attribute C{datadesc} is present, it will be used for
-    logging, when the output starts.
+    logging.
     """
 
     # Used for debug output
@@ -148,7 +149,7 @@ class PlayJobBase(object):
             # Ok. We are not finished yet.
             # Add a reactor to self and add the write event to it.
             self.reactor = self.channel.reactor
-            self.reactor.addWriter(os_event(self.channel.event_write),
+            self.reactor.addReader(os_event(self.channel.event_write),
                                    self.fill_play_buffer)
 
         return self
@@ -586,7 +587,8 @@ class DigitsJob(object):
                   self.digit_duration)
 
         # add the write event to the reactor
-        self.channel.reactor.addWriter(os_event(self.channel.event_write),
+        # Irritatingly, POLLIN gets signalled with TiNG 2
+        self.channel.reactor.addReader(os_event(self.channel.event_write),
                                        self.on_write)
 
     def on_write(self):
@@ -682,7 +684,7 @@ class ToneJob(object):
                   self.channel.name, self.tone, self.duration)
 
         # add the write event to the reactor
-        self.channel.reactor.addWriter(os_event(self.channel.event_write),
+        self.channel.reactor.addReader(os_event(self.channel.event_write),
                                        self.on_write)
 
     def on_write(self):
@@ -1321,17 +1323,27 @@ class SpeechChannel(Lockable):
 
         self.start(job)
 
-    def faxrx(self, file, subscriber_id = ''):
-        """Receive a FAX asynchronously."""
+    def faxrx(self, file, subscriber_id = '', vmp = (None, None)):
+        """Receive a FAX asynchronously.
 
-        job = FaxRxJob(self, file, subscriber_id)
+        @param file: The name of a TIFF file that will receive the image.
+        @param subscriber_id: The alphanumerical id of the station.
+        @param vmp: A pair of (vmptx, vmprx) if this FAX is to be received
+        on a RTP connection."""
+
+        job = FaxRxJob(self, file, subscriber_id, vmp)
 
         self.start(job)        
 
-    def faxtx(self, file, subscriber_id = ''):
-        """Transmit a FAX asynchronously."""
+    def faxtx(self, file, subscriber_id = '', vmp = (None, None)):
+        """Transmit a FAX asynchronously.
 
-        job = FaxTxJob(self, file, subscriber_id)
+        @param file: The name of a TIFF file that contains the image to send.
+        @param subscriber_id: The alphanumerical id of the station.
+        @param vmp: A pair of (vmptx, vmprx) if this FAX is to be received
+        on a RTP connection."""
+
+        job = FaxTxJob(self, file, subscriber_id, vmp)
 
         self.start(job)        
 

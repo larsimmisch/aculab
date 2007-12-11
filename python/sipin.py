@@ -54,7 +54,7 @@ class IncomingCallController:
 
         vmprx.configure(sd)
 
-        log.debug('sent SDP:\n%s', sd)
+        log.debug('accepting call with SDP:\n%s', sd)
 
         user_data.call.accept(sd)
 

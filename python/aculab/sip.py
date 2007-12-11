@@ -88,6 +88,8 @@ class SIPHandle(CallHandleBase):
         outparms.response_notification_mask = response_notification_mask
         outparms.call_options = call_options
         outparms.media_offer_answer = media
+        if custom_headers:
+            outparms.custom_headers = custom_headers
         
         # it is permissible to do an openout after an openin
         # we save the handle from openin in this case

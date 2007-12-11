@@ -53,7 +53,7 @@ class CallData:
 
         if options.fax:
             # self.speech.tone(23, 1.0)
-            self.speech.faxtx(options.fax)
+            self.speech.faxtx(options.fax, vmp=(self.vmptx, self.vmprx))
         else:
             self.speech.listen_for()
             self.speech.play(options.file_name)

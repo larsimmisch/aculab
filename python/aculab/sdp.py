@@ -520,11 +520,9 @@ if __name__ == '__main__':
     md.addRtpMap(PT_PCMA)
     md.addRtpMap(PT_NTE)
     
-
     sdp = SDP()
     sdp.setServerIP('192.168.11.224')
     sdp.addMediaDescription(md)
-    
     s = str(sdp)
 
     # print s
@@ -553,3 +551,20 @@ a=T38FaxUdpEC:t38UDPRedundancy'''
     sdp = SDP(t38)
     print sdp.getAddress('image')
     print sdp.getMediaDescription('image')._a['T38FaxVersion']
+
+    md = MediaDescription('image 8092 udptl t38')
+    md._a = { 'T38FaxVersion': (3,),
+              'T38maxBitRate': (9600,),
+              'T38FaxFillBitRemoval': (0,),
+              'T38FaxTranscodingMMR': (0,),
+              'T38FaxTranscodingJBIG': (0,),
+              'T38FaxRateManagement': ('transferredTCF',),
+              'T38FaxMaxBuffer': (284,),
+              'T38FaxMaxDatagram': (128,0),
+              'T38FaxUdpEC': ('t38UDPRedundancy',) }
+    
+    sdp = SDP()
+    sdp.setServerIP('192.168.11.224')
+    sdp.addMediaDescription(md)
+
+    print sdp
