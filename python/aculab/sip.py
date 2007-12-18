@@ -83,7 +83,7 @@ class SIPHandle(CallHandleBase):
         outparms.net = self.port
         outparms.destination_addr = destination_address
         outparms.originating_addr = originating_address
-        outparms.contact_addr = contact_address
+        outparms.contact_address = contact_address
         outparms.request_notification_mask = request_notification_mask
         outparms.response_notification_mask = response_notification_mask
         outparms.call_options = call_options
@@ -213,7 +213,12 @@ class SIPHandle(CallHandleBase):
         else:
             self.handle = None
             self.name = 'sip-00000000'
-            
+
+    def close(self):
+        """Alias for release."""
+
+        self.release()
+        
     def ev_incoming_call_det(self):
         self.get_details()
 

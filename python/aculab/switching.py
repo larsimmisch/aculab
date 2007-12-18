@@ -618,6 +618,10 @@ def connect(a, b, bus=DefaultBus(), force_bus=False):
     # - get_datafeed: None or the datafeed
     #
     # - get_timeslot: None or the transmit timeslot
+    #
+    # - listen_to
+    #
+    # - speak_to
 
     c = Connection(bus)
 

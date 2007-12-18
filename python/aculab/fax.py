@@ -14,7 +14,7 @@ from util import translate_card, TiNG_version
 from reactor import SpeechReactor
 # The following are only needed for type comparisons
 if TiNG_version[0] >= 2:
-    from rtp import VMPtx, VMPtx, FMPtx, FMPrx
+    from rtp import VMPtx, VMPrx, FMPtx, FMPrx
     from switching import TDMtx, TDMrx
 
 __all__ = ['FaxRxJob', 'FaxTxJob']
@@ -35,14 +35,14 @@ def fax_global_data():
 
 class FaxJob:
 
-    def __init__(self, channel, file, subscriber_id, vmp = (None, None)):
+    def __init__(self, channel, file, subscriber_id, transport = (None, None)):
         """Initialize a FAX job.
 
         @param channel: The Prosody channel to send/receive the FAX on.
         @param file: a file name.
         @param subscriber_id: a string containing the alphanumerical subscriber
         id.
-        @param vmp: a vmptx/vmprx pair if this is sent via RTP.
+        @param transport: a tx/rx pair of VMP, FMP or TDM.
         """
         self.channel = channel
         self.file = None
@@ -50,7 +50,7 @@ class FaxJob:
         self.session = None
         self.logfile = None
         self.trace = None
-        self.vmp = vmp
+        self.transport = transport
         self.subscriber_id = subscriber_id
 
     def create_session(self, mode):
@@ -61,18 +61,31 @@ class FaxJob:
 
         if TiNG_version[0] >= 2:
             session.module = self.channel.module.open.module_id
+            tx, rx = self.transport
+            if tx is not None and rx is not None:
+                if type(tx) == VMPtx and type(rx) == VMPrx:
+                    session.set_transport(lowlevel.kSMFaxTransportType_VMP,
+                                          tx.vmptx, rx.vmprx)
+                elif type(tx) == FMPtx and type(rx) == FMPrx:
+                    session.set_transport(lowlevel.kSMFaxTransportType_FMP,
+                                          tx.fmptx, rx.fmprx)
+                elif type(tx) == TDMtx and type(rx) == TDMrx:
+                    session.set_transport(lowlevel.kSMFaxTransportType_TDM,
+                                          tx.tdmtx, rx.tdmrx)
+                else:
+                    raise ValueError('transport must be tx, rx pair of VMP, ' \
+                                     'FMP or TDM')
+                
         else:
             session.module = self.channel.module
 
         session.channel = self.channel.channel
-        session.vmptx = self.vmp[0].vmptx
-        session.vmprx = self.vmp[1].vmprx
         # accept five percent bad lines
         session.user_options.max_percent_badlines = 0.10
         session.user_options.max_consec_badlines = 20
         session.user_options.ecm_continue_to_correct = 0
         session.user_options.drop_speed_on_ctc = 0
-        session.user_options.fax_modem_fb = 0
+        session.user_options.max_modem_fb = 0
         session.user_options.page_retries = 2
         session.user_options.fax_mode = mode
         session.fax_caps.v27ter = 1
@@ -124,7 +137,7 @@ class FaxJob:
         self.close()
         
     def close(self):
-        """Close the FAX job and aal open files."""
+        """Close the FAX job and all open files."""
         if self.session:
             lowlevel.smfax_close_session(self.session)
             self.session = None
@@ -165,18 +178,20 @@ class FaxJob:
 
 class FaxRxJob(FaxJob, threading.Thread):
     
-    def __init__(self, channel, file, subscriber_id = '', vmp = (None, None)):
+    def __init__(self, channel, file, subscriber_id = '',
+                 transport = (None, None)):
         """Prepare to receive a FAX.
         
         @param channel: The Prosody channel to send/receive the FAX on.
         @param file: a file name.
         @param subscriber_id: a string containing the alphanumerical subscriber
         id.
-        @param vmp: a vmptx/vmprx pair if this is sent via RTP."""
+        @param transport: a tx/rx pair of VMP, FMP or TDM.
+        """
 
         threading.Thread.__init__(self, name='faxrx ' + channel.name)
 
-        FaxJob.__init__(self, channel, file, subscriber_id, vmp)
+        FaxJob.__init__(self, channel, file, subscriber_id, transport)
         
         self.file, rc = lowlevel.actiff_write_open(file, None)
         if rc:
@@ -186,10 +201,10 @@ class FaxRxJob(FaxJob, threading.Thread):
         """Receive a FAX."""
 
         extra = ''
-        if self.vmp[0] != None:
-            extra = extra + 'tx: ' + self.vmp[0].name
-        if self.vmp[1] != None:
-            extra = extra + ' rx: ' + self.vmp[1].name
+        if self.transport[0] != None:
+            extra = extra + 'tx: ' + self.transport[0].name
+        if self.transport[1] != None:
+            extra = extra + ' rx: ' + self.transport[1].name
         
         log.debug('%s faxrx(%s, %s) %s',
                   self.channel.name, str(self.filename), self.subscriber_id,
@@ -253,18 +268,20 @@ class FaxRxJob(FaxJob, threading.Thread):
 
 class FaxTxJob(FaxJob, threading.Thread):
     
-    def __init__(self, channel, file, subscriber_id = '',  vmp = (None, None)):
+    def __init__(self, channel, file, subscriber_id = '',
+                 transport = (None, None)):
         """Prepare to receive a FAX.
         
         @param channel: The Prosody channel to send/receive the FAX on.
         @param file: a file name.
         @param subscriber_id: a string containing the alphanumerical subscriber
         id.
-        @param vmp: a vmptx/vmprx pair if this is sent via RTP."""
+        @param transport: a tx/rx pair of VMP, FMP or TDM.
+        """
 
         threading.Thread.__init__(self, name='faxtx ' + channel.name)
 
-        FaxJob.__init__(self, channel, file, subscriber_id, vmp)
+        FaxJob.__init__(self, channel, file, subscriber_id, transport)
                 
         self.file, rc = lowlevel.actiff_read_open(file)
         if rc:
@@ -279,10 +296,10 @@ class FaxTxJob(FaxJob, threading.Thread):
         """Send a FAX."""
 
         extra = ''
-        if self.vmp[0] != None:
-            extra = extra + 'tx: ' + self.vmp[0].name
-        if self.vmp[1] != None:
-            extra = extra + ' rx: ' + self.vmp[1].name
+        if self.transport[0] != None:
+            extra = extra + 'tx: ' + self.transport[0].name
+        if self.transport[1] != None:
+            extra = extra + ' rx: ' + self.transport[1].name
         
         log.debug('%s faxtx(%s, %s) %s', self.channel.name, str(self.filename),
                   self.subscriber_id, extra)

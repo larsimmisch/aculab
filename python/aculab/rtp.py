@@ -55,8 +55,7 @@ class RTPBase(Lockable):
 
     def close(self):
         """Close the TDM connection."""
-        if self.user_data:
-            self.user_data = None
+        self.user_data = None
             
         if self.tdm:
             self.tdm.close()
@@ -658,13 +657,13 @@ class FMPrx(RTPBase):
         fmprx = lowlevel.SM_FMPRX_CREATE_PARMS()
         fmprx.module = self.module.open.module_id
         # vmprx.set_address(self.card.ip_address)
-        rc = lowlevel.sm_fmprx_create(vmprx)
+        rc = lowlevel.sm_fmprx_create(fmprx)
         if rc:
             raise AculabSpeechError(rc, 'sm_fmprx_create')
 
         self.fmprx = fmprx.fmprx
 
-        self.name = 'frx-%08x' % self.vmprx
+        self.name = 'frx-%08x' % self.fmprx
 
         # get the event
         efmprx = lowlevel.SM_FMPRX_EVENT_PARMS()

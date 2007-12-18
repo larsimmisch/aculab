@@ -80,6 +80,8 @@ typedef struct t38jobdata
 
 %}
 
+%pythonnondynamic;
+
 // %include "typemaps.i"
 
 #ifdef TiNG_USE_V6
@@ -102,8 +104,16 @@ typedef struct {
 
 %apply int { ACU_ERR, ACU_UINT, ACU_UCHAR, ACU_ULONG, ACU_INT, ACU_LONG, 
 			 ACU_PORT_ID, ACU_CALL_HANDLE, ACU_CARD_ID, tSMCardId, 
-             ACU_RESOURCE_ID, tSM_INT, tSM_UT32, tSMVMPrxId, tSMVMPtxId,
+             ACU_RESOURCE_ID, tSM_INT, tSM_UT32, 
 			 ACU_QUEUE_ID, ACU_EVENT_QUEUE };
+
+
+/* These are pointers to incomplete structs. Wrapping them as a int means 
+   we lose SWIGs type checking, but if we don't do it, we get (incorrect)
+   memory leak warnings */
+%apply int { tSMVMPrxId, tSMVMPtxId, tSMFMPrxId, tSMFMPtxId, 
+			 tSMTDMtxId, tSMTDMrxId };
+
 
 %apply char[ANY] { ACU_CHAR[ANY] };
 
@@ -181,6 +191,8 @@ BLOCKING(sm_t38gw_worker_fn)
 %ignore dpns_watchdog;
 %ignore call_handle_2_chan;
 %ignore call_version;
+
+%ignore smfax_session::data_transport;
 
 // Immutable structure members
 %immutable sm_vmptx_generate_tones_parms::num;
@@ -590,13 +602,99 @@ GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 	}
 }
 
-
 %extend SM_FMPTX_CONFIG_PARMS {
 	PyObject *set_destination(PyObject *args) {
 		return set_inaddr(args, &self->destination);
 	}
 	PyObject *set_source(PyObject *args) {
 		return set_inaddr(args, &self->source);
+	}
+}
+
+%extend SMFAX_SESSION {
+	~SMFAX_SESSION(void)
+	{
+		if (self->data_transport.transport)
+			free(self->data_transport.transport);
+
+		free(self);
+	}
+
+	PyObject *set_transport(int ty, int tx, int rx)
+	{
+		self->data_transport.transport = 
+			(SMFAX_TRANSPORT_MEDIUM*)malloc(sizeof(SMFAX_TRANSPORT_MEDIUM));
+		
+		switch (ty)
+		{
+		case kSMFaxTransportType_VMP:
+			self->data_transport.transport->vmp.tx = (tSMVMPtxId)tx;
+			self->data_transport.transport->vmp.rx = (tSMVMPrxId)rx;
+			break;
+		case kSMFaxTransportType_FMP:
+			self->data_transport.transport->fmp.tx = (tSMFMPtxId)tx;
+			self->data_transport.transport->fmp.rx = (tSMFMPrxId)rx;
+			break;
+		case kSMFaxTransportType_TDM:
+			self->data_transport.transport->tdm.tx = (tSMTDMtxId)tx;
+			self->data_transport.transport->tdm.rx = (tSMTDMrxId)rx;
+			break;
+		default:
+			PyErr_SetString(PyExc_ValueError, "type must be one of: kSMFaxTransportType_VMP, kSMFaxTransportType_FMP or kSMFaxTransportType_TDM");
+			return NULL;
+		}
+
+		self->data_transport.type = ty;
+
+#if 0
+		if (!PyArg_ParseTuple(args, "OO:set_transport", &tx, &rx))
+		{
+			PyErr_SetString(PyExc_TypeError, "expected tx, rx");
+			return NULL;
+		}
+
+		if (SWIG_IsOK(SWIG_ConvertPtr(
+						  tx, &self->data_transport.transport->vmp.tx, 
+						  MAKE_SWIGTYPE(tSMVMPtxId),
+						  SWIG_POINTER_EXCEPTION)) &&
+			SWIG_IsOK(SWIG_ConvertPtr(
+						  rx, &self->data_transport.transport->vmp.rx, 
+						  MAKE_SWIGTYPEtSMVMPrxId), 
+						  SWIG_POINTER_EXCEPTION)))
+		{
+			self->data_transport.type = kSMFaxTransportType_VMP;
+		}
+		else if (SWIG_IsOK(SWIG_ConvertPtr(
+							   tx, &self->data_transport.transport->fmp.tx,
+							   MAKE_SWIGTYPE(tSMFMPtxId), 
+							   SWIG_POINTER_EXCEPTION)) &&
+				 SWIG_IsOK(SWIG_ConvertPtr(
+							   rx, &self->data_transport.transport->fmp.rx, 
+							   MAKE_SWIGTYPE(tSMFMPrxId), 
+							   SWIG_POINTER_EXCEPTION)))
+		{
+			self->data_transport.type = kSMFaxTransportType_FMP;
+		}
+		else if (SWIG_IsOK(SWIG_ConvertPtr(
+							   tx, &self->data_transport.transport->tdm.tx, 
+							   MAKE_SWIGTYPE(tSMTDMtxId), 
+							   SWIG_POINTER_EXCEPTION)) &&
+				 SWIG_IsOK(SWIG_ConvertPtr(
+							   rx, &self->data_transport.transport->tdm.rx, 
+							   MAKE_SWIGTYPE(tSMTDMrxId), 
+							   SWIG_POINTER_EXCEPTION)))
+		{
+			self->data_transport.type = kSMFaxTransportType_TDM;
+		}
+		else
+		{
+			PyErr_SetString(PyExc_TypeError, "expected a tuple (tx, rx)");
+			return NULL;
+		}
+#endif
+
+		Py_INCREF(Py_None);
+		return Py_None;
 	}
 }
 

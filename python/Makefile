@@ -65,7 +65,7 @@ smosintf.h2: $(DTK)/speech/include/smosintf.h smosintf.patch
 	patch -o $@ $(DTK)/speech/include/smosintf.h smosintf.patch
 
 lowlevel_wrap.c aculab/lowlevel.py: lowlevel.i smosintf.h2
-	$(SWIG) $(SWIG_DEFINES) -modern -new_repr -python $(DEFINES) $(SWIG_INCLUDE) $<
+	$(SWIG) $(SWIG_DEFINES) -O -new_repr -python $(DEFINES) $(SWIG_INCLUDE) $<
 	mv lowlevel.py aculab
 endif
 

@@ -53,17 +53,17 @@ class CallData:
 
         if options.fax:
             # self.speech.tone(23, 1.0)
-            self.speech.faxtx(options.fax, vmp=(self.vmptx, self.vmprx))
+            self.speech.faxtx(options.fax, transport=(self.vmptx, self.vmprx))
         else:
             self.speech.listen_for()
             self.speech.play(options.file_name)
 
     def close(self):
-        for attr in ['connection', 'call', 'speech', 'vmprx', 'vmptx']:
-            o = getattr(self, attr)
-            if hasattr(o, 'close'):
-                o.close()
-            setattr(self, attr, None)
+        self.connection.close()
+        self.speech.close(self.vmprx, self.vmptx)
+        # set all resources to None
+        self.speech = self.connection = self.call = None
+        self.vmprx = self.vmptx = None
 
 class OutgoingCallController:
 
@@ -90,14 +90,17 @@ class OutgoingCallController:
 
     def ev_idle(self, call, user_data):
         user_data.close()
-        raise StopIteration
-        
+        if options.repeat:
+            CallData(self, args[0])
+        else:
+            raise StopIteration
+                     
 if __name__ == '__main__':
 
     defaultLogging(logging.DEBUG)
     log = logging.getLogger('app')
 
-    parser = defaultOptions(
+    parser = defaultOptions(True,
         usage='usage: %prog [options] <number>',
         description='Make an outgoing SIP call and play a prompt.')
 
@@ -119,7 +122,7 @@ if __name__ == '__main__':
     controller = OutgoingCallController()
 
     for i in range(options.numcalls):
-        c = CallData(controller, args[0])
+        CallData(controller, args[0])
 
     try:
         SpeechReactor.start()

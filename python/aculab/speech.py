@@ -857,6 +857,7 @@ class SpeechChannel(Lockable):
         self.channel = None
         self.datafeed = None
         self.name = 'sc-0000'
+        self.close_queue = None
 
         self.card, self.module = translate_card(card, module)
 
@@ -929,11 +930,29 @@ class SpeechChannel(Lockable):
             if hasattr(self, 'name'):
                 log.debug('%s closed', self.name)
 
-    def close(self):
+        if self.close_queue:
+            for c in self.close_queue:
+                c.close()
+
+        self.close_queue = None
+
+    def close(self, *args):
         """Close the channel.
 
         If the channel is active, all pending jobs will be stopped before
-        the channel is freed."""
+        the channel is freed.
+
+        @param *args: this can be a list of VMPs, FMPs TDMs, Connections
+        or Calls that will be closed when the channel is idle.
+        The Fax-Libraries in particular will gladly dump core when
+        VMPs or FMPs are closed before the job is finished.
+        """
+
+        if self.close_pending or self.close_queue:
+            raise RuntimeError, "SpeechChannel is already stopping"
+
+        self.close_queue = args
+        
         if self.job:
             self.lock()
             self.close_pending = True
@@ -1323,7 +1342,7 @@ class SpeechChannel(Lockable):
 
         self.start(job)
 
-    def faxrx(self, file, subscriber_id = '', vmp = (None, None)):
+    def faxrx(self, file, subscriber_id = '', transport = (None, None)):
         """Receive a FAX asynchronously.
 
         @param file: The name of a TIFF file that will receive the image.
@@ -1331,11 +1350,11 @@ class SpeechChannel(Lockable):
         @param vmp: A pair of (vmptx, vmprx) if this FAX is to be received
         on a RTP connection."""
 
-        job = FaxRxJob(self, file, subscriber_id, vmp)
+        job = FaxRxJob(self, file, subscriber_id, transport)
 
         self.start(job)        
 
-    def faxtx(self, file, subscriber_id = '', vmp = (None, None)):
+    def faxtx(self, file, subscriber_id = '', transport = (None, None)):
         """Transmit a FAX asynchronously.
 
         @param file: The name of a TIFF file that contains the image to send.
@@ -1343,7 +1362,7 @@ class SpeechChannel(Lockable):
         @param vmp: A pair of (vmptx, vmprx) if this FAX is to be received
         on a RTP connection."""
 
-        job = FaxTxJob(self, file, subscriber_id, vmp)
+        job = FaxTxJob(self, file, subscriber_id, transport)
 
         self.start(job)        
 
