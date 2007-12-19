@@ -68,7 +68,7 @@ class OutgoingCallController:
 
     def ev_call_connected(self, call, user_data):
         if options.t_hangup is not None:
-            tt.add(t_hangup, call.disconnect)
+            tt.add(options.t_hangup, call.disconnect)
         user_data.stop()
         log.info(statistics)
 
@@ -144,7 +144,7 @@ if __name__ == '__main__':
     parser.add_option('-x', '--t-hangup', type='int', 
                       help='Disconnect x seconds after being connected.')
 
-    parser.add_option('-l', '--numbers', action='callback',
+    parser.add_option('-l', '--numbers', type='string', action='callback',
                       callback=read_called_numbers,
                       help='Read the called party numbers from NUMBERS.')
 
