@@ -80,7 +80,9 @@ typedef struct t38jobdata
 
 %}
 
-%pythonnondynamic;
+#if SWIG_VERSION==0x010328
+%feature("python:nondynamic");
+#endif
 
 // %include "typemaps.i"
 
