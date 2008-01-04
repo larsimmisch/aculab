@@ -29,7 +29,7 @@ def cli_display(cli):
             line2 = vc.fn.value
             for t in vc.tel_list:
                 if tel_normalize(cli) == tel_normalize(t.value):
-                    line2 = '%s %s' % (line2, tel_type(t.params['TYPE']))
+                    line2 = '%s %s' % (line2, tel_type(t))
 
     except ImportError:
         log.info('Cannot import vcard', exc_info=1)

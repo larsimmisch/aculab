@@ -46,8 +46,7 @@ class AsyncEmail(threading.Thread):
                 suffix = '(%s)' % self.cli
                 for t in vc.tel_list:
                     if tel_normalize(self.cli) == tel_normalize(t.value):
-                        suffix = '(%s: %s)' % (tel_type(t.params['TYPE']),
-                                               self.cli)
+                        suffix = '(%s: %s)' % (tel_type(t), self.cli)
 
                 subject = 'Answering machine message from %s %s' \
                           % (vc.fn.value, suffix)

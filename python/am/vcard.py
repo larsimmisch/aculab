@@ -8,8 +8,8 @@ from vobject.base import readComponents
 
 addresses = '/var/addresses/All.vcf'
 
-def tel_type(t):
-    types = t.params.get('TYPE', None)
+def tel_type(tel):
+    types = tel.params.get('TYPE', None)
     if types:
         for t in types:
             n = t.lower()
