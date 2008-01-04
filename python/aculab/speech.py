@@ -148,9 +148,15 @@ class PlayJobBase(object):
         if not self.fill_play_buffer():
             # Ok. We are not finished yet.
             # Add a reactor to self and add the write event to it.
+            # Unfortunately, Aculab was inconsistent, and in TiNG,
+            # the replay event is a read event (POLLIN instead of POLLOUT)
             self.reactor = self.channel.reactor
-            self.reactor.addReader(os_event(self.channel.event_write),
-                                   self.fill_play_buffer)
+            if TiNG_version[0] < 2:
+                self.reactor.addWriter(os_event(self.channel.event_write),
+                                       self.fill_play_buffer)
+            else:
+                self.reactor.addReader(os_event(self.channel.event_write),
+                                       self.fill_play_buffer)
 
         return self
 
