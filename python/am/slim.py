@@ -4,7 +4,7 @@ import threading
 
 log = logging.getLogger('slim')
 
-server = 'bernoulli'
+server = 'borel'
 players = [ '00:04:20:05:82:60', '00:04:20:02:05:47' ]
 
 def slim_display(line1, line2, duration, player = None):
