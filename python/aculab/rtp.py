@@ -80,18 +80,6 @@ class RTPBase(Lockable):
 
         return self.tdm.timeslots[0]
 
-    def get_module(self):
-        """Return a unique identifier for module comparisons.
-        Used by switching."""
-
-        return self.module
-
-    def get_switch(self):
-        """Return a unique identifier for switch card comparisons.
-        Used by switching."""
-
-        return self.card
-
 class VMPrx(RTPBase):
     """An RTP speech receiver.
 
@@ -616,10 +604,40 @@ class VMPtx(RTPBase):
         tp.duration = int(duration * 1000)
         tp.interval = int(interval * 1000)
         
-
         rc = lowlevel.sm_vmptx_generate_tones(tp)
         if rc:
             raise AculabSpeechError(rc, 'sm_vmptx_generate_tones')
+
+class VMP(RTPBase):
+    """An RTP speech data transmitter/receiver.
+
+    Combines a VMPtx and a VMPrx"""
+
+    def __init__(self, controller, card = 0, module = 0, mutex = None,
+                 user_data = None, ts_type = lowlevel.kSMTimeslotTypeALaw,
+                 reactor = SpeechReactor):
+
+        self.tx = self.rx = None
+        self.tx = VMPtx(controller, card, module, mutex, user_data, ts_type,
+                        reactor)
+
+        self.rx = VMPrx(controller, card, module, mutex, user_data, ts_type,
+                        reactor)
+
+    def get_switch(self):
+        """Return a unique identifier for switch card comparisons.
+        Used by switching."""
+
+        return self.tx.get_switch()
+
+    def get_module(self):
+        return self.tx.get_module()
+
+    def listen_to(self, other):
+        return self.tx.listen_to(other)
+
+    def get_datafeed(self):
+        return self.rx.get_datafeed()
 
 class FMPrx(RTPBase):
     """An RTP T.38 receiver (untested/incomplete).
