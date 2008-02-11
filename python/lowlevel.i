@@ -108,11 +108,14 @@ typedef struct {
 			 ACU_QUEUE_ID, ACU_EVENT_QUEUE };
 
 
-/* These are pointers to incomplete structs. Wrapping them as a int means 
-   we lose SWIGs type checking, but if we don't do it, we get (incorrect)
-   memory leak warnings */
+/* These are pointers to incomplete structs, used as opaque handle types. 
+   Wrapping them as a int means we lose SWIGs type checking, but if we don't 
+   do it, we get (incorrect) memory leak warnings. 
+
+   There might be a better way, but I am not aware of one.
+*/
 %apply int { tSMVMPrxId, tSMVMPtxId, tSMFMPrxId, tSMFMPtxId, 
-			 tSMTDMtxId, tSMTDMrxId };
+			 tSMTDMtxId, tSMTDMrxId, tSMVMPTxToneSetId };
 
 
 %apply char[ANY] { ACU_CHAR[ANY] };
