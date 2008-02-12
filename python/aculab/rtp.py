@@ -181,6 +181,8 @@ class VMPrx(RTPBase):
         status.vmprx = self.vmprx
 
         rc = lowlevel.sm_vmprx_status(status)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_vmprx_status')
         
         if status.status == lowlevel.kSMVMPrxStatusGotPorts:
             self.rtp_port = status.u.ports.RTP_Port
@@ -419,6 +421,8 @@ class VMPtx(RTPBase):
         status.vmptx = self.vmptx
 
         rc = lowlevel.sm_vmptx_status(status)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_vmptx_status')
 
         if status.status == lowlevel.kSMVMPtxStatusStopped:
             log.debug('%s vmptx stopped', self.name)
