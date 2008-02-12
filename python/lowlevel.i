@@ -613,7 +613,7 @@ GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 		return set_inaddr(args, &self->source);
 	}
 }
-
+#ifdef HAVE_FAX
 %extend SMFAX_SESSION {
 	~SMFAX_SESSION(void)
 	{
@@ -622,7 +622,6 @@ GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 
 		free(self);
 	}
-
 	PyObject *set_transport(int ty, int tx, int rx)
 	{
 		self->data_transport.transport = 
@@ -701,6 +700,7 @@ GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 	}
 }
 
+#endif
 #endif
 
 %define SIZED_STRUCT(name) 
