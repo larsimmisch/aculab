@@ -265,7 +265,7 @@ class TDMtx(object):
         """Create a TDM transmitter.
 
         @param ts: a tuple (stream, timeslot, [timeslot_type])
-        timeslot_type is optional.
+        timeslot_type is optional and defaults to kSMTimeslotTypeData.
 
         See U{sm_tdmtx_create
         <http://www.aculab.com/support/TiNG/gen/\
@@ -302,7 +302,7 @@ class TDMtx(object):
 
     def listen_to(self, other):
         """Listen to another (datafeed) endpoint."""
-        if hasattr(other, 'get_datafeed'):
+        if hasattr(other, 'get_datafeed') and other.get_datafeed():
             connect = lowlevel.SM_TDMTX_DATAFEED_CONNECT_PARMS()
             connect.tdmtx = self.tdmtx
             connect.data_source = other.get_datafeed()
@@ -313,10 +313,10 @@ class TDMtx(object):
                     rc, 'sm_tdmtx_datafeed_connect(%s)' % other.name,
                     self.name)
 
-            log.debug('%s := %s', self.name, other.name)
+            log.debug('%s := %s (datafeed)', self.name, other.name)
         else:
             raise ValueError('%s := %s: cannot connect to instance without '\
-                             'get_datafeed() method' % (self.name, other.name))
+                             'datafeed' % (self.name, other))
 
     def __repr__(self):
         return self.name
@@ -325,10 +325,10 @@ class TDMrx(object):
     """A TDM receiver."""
     
     def __init__(self, ts, card = 0, module = 0):
-        """Create a TDM transmitter.
+        """Create a TDM receiver.
 
         @param ts: a tuple (stream, timeslot, [timeslot_type])
-        timeslot_type is optional.
+        timeslot_type is optional and defaults to kSMTimeslotTypeData.
 
         See U{sm_tdmrx_create
         <http://www.aculab.com/support/TiNG/gen/\
@@ -338,6 +338,7 @@ class TDMrx(object):
         self.card, self.module = translate_card(card, module)
         # Initialize early
         self.tdmrx = None
+        self.ts = ts
         self.datafeed = None
 
         tdmrx = lowlevel.SM_TDMRX_CREATE_PARMS()
@@ -381,6 +382,22 @@ class TDMrx(object):
         """Used internally by the switching protocol."""
         return self.datafeed
 
+    def listen_to(self, other):
+        """Listen to another timeslot."""
+        
+        output = lowlevel.OUTPUT_PARMS()
+        output.ost, output.ots = self.ts[:2]
+        output.mode = lowlevel.CONNECT_MODE
+        output.ist, output.its = other[:2]
+
+        rc = lowlevel.sw_set_output(self.card.card_id, output)
+        if rc:
+            raise AculabError(rc, 'sw_set_output(%s)' % switch)
+
+        log.debug("%s := %d:%d", self.name, other[0], other[1])
+
+        # return self
+
     def __repr__(self):
         return self.name
 
@@ -409,9 +426,15 @@ class CTBus(object):
         output.ist = source[0]
         output.its = source[1]
 
+        if hasattr(switch, 'card_id'):
+            switch = switch.card_id
+
         rc = lowlevel.sw_set_output(switch, output)
         if rc:
             raise AculabError(rc, 'sw_set_output(%s)' % switch)
+
+        log.debug("%s %d:%d := %d:%d", self.__class__.__name__,
+                  sink[0], sink[1], source[0], source[1])
 
         return CTBusEndpoint(switch, sink)
 
@@ -585,7 +608,7 @@ class Connection:
         if self.endpoints or self.timeslots:
             self.close()
 
-def connect(a, b, bus=DefaultBus(), force_bus=False):
+def connect(a, b, bus=DefaultBus(), force_timeslot=False, force_bus=False):
     """Create a duplex connection between a and b.
 
     @param a: a duplex capable entity (like a CallHandle or a SpeechChannel)
@@ -593,6 +616,10 @@ def connect(a, b, bus=DefaultBus(), force_bus=False):
         
     @param b: a duplex capable entity (like a CallHandle or a SpeechChannel)
     or a tuple of (tx, rx).
+
+    @param force_timeslot: make the connection using timeslots.
+
+    @param force_bus: force the connection through a loopback on the bus.
 
     @return: A L{Connection} object containing all endpoints and timeslots
     allocated for the connection. This object will dissolve the
@@ -635,7 +662,7 @@ def connect(a, b, bus=DefaultBus(), force_bus=False):
     else:
         btx = brx = b
 
-    if not force_bus:
+    if not force_bus and not force_timeslot:
         # Optimizations first
 
         # TiNG version 2: same module, make datafeed connections
@@ -647,11 +674,13 @@ def connect(a, b, bus=DefaultBus(), force_bus=False):
 
             return c
 
+    if not force_bus:
         # Same card or module, connect directly
         if arx.get_switch() == brx.get_switch() \
                and atx.get_switch() == btx.get_switch() \
                or (atx.get_module() == brx.get_module() \
                    and btx.get_module() == arx.get_module()):
+
             c.endpoints = [atx.listen_to(brx.get_timeslot()),
                            btx.listen_to(arx.get_timeslot())]
             return c
