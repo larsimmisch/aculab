@@ -40,6 +40,11 @@
 */
 #define MAKE_SWIGTYPE(X) SWIGTYPE_p_##X
 
+// For compatibility with earlier SWIG versions
+#ifndef SWIG_POINTER_OWN
+#define SWIG_POINTER_OWN 1
+#endif
+
 unsigned char bitrev[] = {
 	0x00, 0x80, 0x40, 0xc0, 0x20, 0xa0, 0x60, 0xe0, 0x10, 0x90, 0x50, 0xd0, 
 	0x30, 0xb0, 0x70, 0xf0,	0x08, 0x88, 0x48, 0xc8, 0x28, 0xa8, 0x68, 0xe8, 
@@ -206,6 +211,11 @@ BLOCKING(sm_t38gw_worker_fn)
 %ignore TiNG_PRINTF_MODULE;
 %ignore FORMAT_EVENT;
 %ignore FORMAT_SOCKADDR_IN;
+
+// Explicitly rename from to _from (from is a Python keyword).
+// Later SWIG versions do this automatically, but at leat 1.3.24 
+// does not do it yet.
+%rename("_from") from;
 
 // The typedef name doesn't work here. 
 %ignore sm_ts_data_parms::data;
