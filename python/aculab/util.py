@@ -25,7 +25,7 @@ def swig_value(s):
 
 def os_event(event):
     if os.name == 'nt':
-        return pywintypes.HANDLE(event)
+        return 
 
     return event.fd
 

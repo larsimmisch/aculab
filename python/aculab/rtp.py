@@ -1,4 +1,4 @@
-# Copyright (C) 2007 Lars Immisch
+# Copyright (C) 2007-2008 Lars Immisch
 
 """RTP and speech processing functions.
 
@@ -17,7 +17,7 @@ from switching import VMPtxEndpoint, FMPtxEndpoint, TDMrx, TDMtx, Connection
 from reactor import SpeechReactor
 from snapshot import Snapshot
 from error import *
-from util import Lockable, os_event, translate_card
+from util import Lockable, translate_card
 
 import select
 
@@ -133,7 +133,7 @@ class VMPrx(RTPBase):
         if rc:
             raise AculabSpeechError(rc, 'sm_vmprx_get_event')
 
-        self.event_vmprx = os_event(evmprx.event)
+        self.event_vmprx = evmprx.event
 
         # log.debug('%s event fd: %d', self.name, self.event_vmprx)
 
@@ -147,7 +147,7 @@ class VMPrx(RTPBase):
 
         self.datafeed = datafeed.datafeed
 
-        self.reactor.add(self.event_vmprx, self.on_vmprx, select.POLLIN)
+        self.reactor.add(self.event_vmprx, self.on_vmprx)
         
     def close(self):
         """Stop the receiver."""
@@ -392,11 +392,11 @@ class VMPtx(RTPBase):
         if rc:
             raise AculabSpeechError(rc, 'sm_vmptx_get_event')
 
-        self.event_vmptx = os_event(evmptx.event)
+        self.event_vmptx = evmptx.event
 
         # log.debug('%s event fd: %d', self.name, self.event_vmptx)
 
-        self.reactor.add(self.event_vmptx, self.on_vmptx, select.POLLIN)
+        self.reactor.add(self.event_vmptx, self.on_vmptx)
 
     def close(self):
         """Stop the transmitter."""
@@ -695,7 +695,7 @@ class FMPrx(RTPBase):
         if rc:
             raise AculabSpeechError(rc, 'sm_fmprx_get_event')
 
-        self.event_fmprx = os_event(efmprx.event)
+        self.event_fmprx = efmprx.event
 
         log.debug('%s event fd: %d', self.name, self.event_fmprx)
 
@@ -709,7 +709,7 @@ class FMPrx(RTPBase):
 
         self.datafeed = datafeed.datafeed
 
-        self.reactor.add(self.event_fmprx, self.on_fmprx, select.POLLIN)
+        self.reactor.add(self.event_fmprx, self.on_fmprx)
         
     def close(self):
         """Stop the receiver."""
@@ -834,11 +834,11 @@ class FMPtx(RTPBase):
         if rc:
             raise AculabSpeechError(rc, 'sm_fmptx_get_event')
 
-        self.event_fmptx = os_event(efmptx.event)
+        self.event_fmptx = efmptx.event
 
         log.debug('%s event fd: %d', self.name, self.event_fmptx)
 
-        self.reactor.add(self.event_fmptx, self.on_fmptx, select.POLLIN)
+        self.reactor.add(self.event_fmptx, self.on_fmptx)
 
     def close(self):
         """Stop the transmitter."""

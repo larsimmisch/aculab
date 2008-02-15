@@ -226,11 +226,12 @@ if os.name == 'nt':
             self.reactors = []
             self.running = False
 
-        def add(self, handle, method, read = True):
+        def add(self, event, method):
             """Add a new handle to the reactor.
 
-            @param handle: The handle of the Event to watch.
+            @param event: The event to watch.
             @param method: This will be called when the event is fired."""
+            handle = pywintypes.HANDLE(event)
             self.mutex.acquire()
             try:
                 for d in self.reactors:
@@ -249,11 +250,12 @@ if os.name == 'nt':
             finally:
                 self.mutex.release()
 
-        def remove(self, handle):
-            """Remove a handle from the reactor.
+        def remove(self, event):
+            """Remove an event from the reactor.
 
             @param handle: The handle of the Event to watch."""
 
+            handle = pywintypes.HANDLE(event)
             self.mutex.acquire()
             try:
                 for d in self.reactors:
@@ -332,78 +334,61 @@ else: # os.name == 'nt'
             # listen to the read fd of our pipe
             self.poll.register(self.pipe[0], select.POLLIN )
 
-        def addReader(self, handle, method):
-            """Add a new handle to the reactor watching POLLIN events.
-            @param handle: A file descriptor. On Unix, use the C{fd} member of
-            the C{tSMEventId} structure.
+        def add(self, event, method):
+            """Add an event to the reactor.
+
+            @param handle: A C{tSMEventId} structure or something that
+            has an fd and a mode member. The mode should be a bitmask
+            of select.POLLOUT, select.POLLIN, etc.
             @param method: This will be called when the event is fired.
-
-            This method blocks until I{handle} is added by the reactor thread.
-            """
-
-            self.add(handle, method, select.POLLIN)
-
-        def addWriter(self, handle, method):
-            """Add a new handle to the reactor watching POLLOUT events.
-
-            @param handle: A file descriptor. On Unix, use the C{fd} member of
-            the C{tSMEventId} structure.
-            @param method: This will be called when the event is fired.
-
-            This method blocks until I{handle} is added by the reactor thread.
-            """
-            
-            self.add(handle, method, select.POLLOUT)
-            
-        def add(self, handle, method, mask):
-            """Used internally. Add a handle to the reactor.
-
-            @param handle: A file descriptor. On Unix, use the C{fd} member of
-            the C{tSMEventId} structure.
-            @param method: This will be called when the event is fired.
-            @param mask: POLLIN or POLLOUT.
 
             This method blocks until I{handle} is added by reactor thread"""
 
             if not callable(method):
                 raise ValueError('method must be callable')
 
+            handle = event.fd
+
             if threading.currentThread() == self or not self.isAlive():
                 # log.debug('adding fd: %d %s', handle, method.__name__)
                 self.handles[handle] = method
-                self.poll.register(handle, mask)
+                self.poll.register(handle, event.mode)
             else:
                 # log.debug('self adding: %d %s', handle, method.__name__)
-                event = threading.Event()
+                levent = threading.Event()
                 self.mutex.acquire()
                 self.handles[handle] = method
                 # function 1 is add
-                self.queue.append((1, handle, event, mask))
+                self.queue.append((1, handle, levent, event.mode))
                 self.mutex.release()
                 self.pipe[1].write('1')
-                event.wait()
+                levent.wait()
 
-        def remove(self, handle):
+        def remove(self, event):
             """Remove a handle from the reactor.
 
-            @param handle: Typically the C{tSMEventId} associated with the
+            @param event: Typically the C{tSMEventId} associated with the
             event, but any object with an C{fd} attribute will work also.
 
-            This method blocks until handle is removed by the reactor thread."""
+            This method blocks until handle is removed by the reactor thread.
+            """
+
+            handle = event.fd
+            
             if threading.currentThread() == self or not self.isAlive():
                 # log.debug('removing fd: %d', handle)
                 del self.handles[handle]
                 self.poll.unregister(handle)
             else:
                 # log.debug('removing fd: %d', handle)
-                event = threading.Event()
+                levent = threading.Event()
                 self.mutex.acquire()
                 del self.handles[handle]
                 # function 0 is remove
-                self.queue.append((0, handle, event, None))
+                self.queue.append((0, handle, levent, None))
                 self.mutex.release()
                 self.pipe[1].write('0')
-                event.wait()
+                levent.wait()
 
         def run(self):
             'Run the reactor.'

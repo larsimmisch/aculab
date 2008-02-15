@@ -1,4 +1,4 @@
-# Copyright (C) 2002-2007 Lars Immisch
+# Copyright (C) 2002-2008 Lars Immisch
 
 """Higher level speech processing functions.
 
@@ -25,7 +25,7 @@ from fax import FaxRxJob, FaxTxJob
 from reactor import SpeechReactor
 from switching import (Connection, CTBusEndpoint, SpeechEndpoint, TDMrx, TDMtx,
                        DefaultBus, connect)
-from util import os_event, TiNG_version
+from util import TiNG_version
 from error import *
 
 __all__ = ['PlayJob', 'RecordJob', 'DigitsJob', 'ToneJob', 'SilenceJob',
@@ -129,7 +129,8 @@ class PlayJobBase(object):
         replay.speed = self.speed
         replay.volume = self.volume
         replay.type = self.filetype
-        replay.sampling_rate = self.sampling_rate
+        if TiNG_version[0] >= 2:
+            replay.sampling_rate = self.sampling_rate
 
         rc = lowlevel.sm_replay_start(replay)
         if rc:
@@ -148,15 +149,8 @@ class PlayJobBase(object):
         if not self.fill_play_buffer():
             # Ok. We are not finished yet.
             # Add a reactor to self and add the write event to it.
-            # Unfortunately, Aculab was inconsistent, and in TiNG,
-            # the replay event is a read event (POLLIN instead of POLLOUT)
             self.reactor = self.channel.reactor
-            if TiNG_version[0] < 2:
-                self.reactor.addWriter(os_event(self.channel.event_write),
-                                       self.fill_play_buffer)
-            else:
-                self.reactor.addReader(os_event(self.channel.event_write),
-                                       self.fill_play_buffer)
+            self.reactor.add(self.channel.event_write, self.fill_play_buffer)
 
         return self
 
@@ -168,8 +162,8 @@ class PlayJobBase(object):
         
         # remove the write event from the reactor
         if self.reactor:
-            self.reactor.remove(os_event(self.channel.event_write))
-
+            self.reactor.remove(self.channel.event_write)
+            
         # Compute reason.
         reason = None
         if self.stop_offset:
@@ -418,7 +412,6 @@ class RecordJob(object):
         record = lowlevel.SM_RECORD_PARMS()
         record.channel = self.channel.channel
         record.type = self.filetype
-        record.sampling_rate = self.sampling_rate
         record.max_octets = self.max_octets
         record.max_elapsed_time = int(self.max_elapsed_time * 1000)
         record.max_silence = int(self.max_silence * 1000)
@@ -427,6 +420,7 @@ class RecordJob(object):
         else:
             # We abuse the fact that False == kSMToneDetectionNone
             record.tone_elimination_mode = self.elimination
+            record.sampling_rate = self.sampling_rate
             
         record.agc = self.agc
         record.volume = self.volume
@@ -442,14 +436,13 @@ class RecordJob(object):
                   self.agc, self.volume)
                   
         # add the read event to the reactor
-        self.channel.reactor.addReader(os_event(self.channel.event_read),
-                                       self.on_read)
+        self.channel.reactor.add(self.channel.event_read, self.on_read)
 
     def done(self):                
         """Called internally upon completion."""
         
         # remove the read event from the reactor
-        self.channel.reactor.remove(os_event(self.channel.event_read))
+        self.channel.reactor.remove(self.channel.event_read)
 
         channel = self.channel
 
@@ -593,9 +586,7 @@ class DigitsJob(object):
                   self.digit_duration)
 
         # add the write event to the reactor
-        # Irritatingly, POLLIN gets signalled with TiNG 2
-        self.channel.reactor.addReader(os_event(self.channel.event_write),
-                                       self.on_write)
+        self.channel.reactor.add(self.channel.event_write, self.on_write)
 
     def on_write(self):
         if self.channel is None:
@@ -618,7 +609,7 @@ class DigitsJob(object):
                 reason = AculabStopped()
 
             # remove the write event from to the reactor
-            channel.reactor.remove(os_event(channel.event_write))
+            channel.reactor.remove(channel.event_write)
 
             log.debug('%s digits_done(reason=\'%s\')',
                       channel.name, reason)
@@ -632,7 +623,7 @@ class DigitsJob(object):
         log.debug('%s digits_stop()', self.channel.name)
 
         # remove the write event from the reactor
-        self.channel.reactor.remove(os_event(self.channel.event_write))
+        self.channel.reactor.remove(self.channel.event_write)
 
         # Position is only nonzero when play was stopped.
         channel = self.channel
@@ -690,8 +681,7 @@ class ToneJob(object):
                   self.channel.name, self.tone, self.duration)
 
         # add the write event to the reactor
-        self.channel.reactor.addReader(os_event(self.channel.event_write),
-                                       self.on_write)
+        self.channel.reactor.add(self.channel.event_write, self.on_write)
 
     def on_write(self):
         if self.channel is None:
@@ -711,7 +701,7 @@ class ToneJob(object):
             reason = None
 
             # remove the write event from to the reactor
-            channel.reactor.remove(os_event(channel.event_write))
+            channel.reactor.remove(channel.event_write)
             
             log.debug('%s tone_done(reason=\'%s\')',
                       channel.name, reason)
@@ -730,7 +720,7 @@ class ToneJob(object):
                                     self.channel.name)
 
         # remove the write event from the reactor
-        self.channel.reactor.remove(os_event(self.channel.event_write))
+        self.channel.reactor.remove(self.channel.event_write)
 
         channel = self.channel
         
@@ -771,8 +761,7 @@ class DCReadJob(object):
         control.blocking = self.blocking
 
         # add the read event to the reactor
-        self.channel.reactor.addReader(os_event(self.channel.event_read),
-                                       self.on_read)
+        self.channel.reactor.add(self.channel.event_read, self.on_read)
 
         rc = lowlevel.smdc_rx_control(control)
         if rc:
@@ -792,7 +781,7 @@ class DCReadJob(object):
             raise AculabSpeechError(rc, 'smdc_stop', self.channel.name)
 
         # remove the write event from the reactor
-        self.channel.reactor.remove(os_event(self.channel.event_read))
+        self.channel.reactor.remove(self.channel.event_read)
 
         # Position is only nonzero when play was stopped.
         channel = self.channel
@@ -921,7 +910,7 @@ class SpeechChannel(Lockable):
                 lowlevel.smd_ev_free(self.event_write)
                 self.event_write = None
             if self.event_recog:
-                self.reactor.remove(os_event(self.event_recog))
+                self.reactor.remove(self.event_recog)
                 lowlevel.smd_ev_free(self.event_recog)
                 self.event_recog = None
 
@@ -1262,7 +1251,7 @@ class SpeechChannel(Lockable):
             self.event_recog = self.set_event(lowlevel.kSMEventTypeRecog)
         
             # add the recog event to the reactor
-            self.reactor.addReader(os_event(self.event_recog), self.on_recog)
+            self.reactor.add(self.event_recog, self.on_recog)
 
     def dc_config(self, protocol, pconf, encoding, econf):
         """Configure the channel for data communications.
