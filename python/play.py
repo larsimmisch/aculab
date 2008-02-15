@@ -19,6 +19,7 @@ class PlayApp(Glue):
 
     def __init__(self, controller, module, call):
         Glue.__init__(self, controller, module, call, False)
+        self.speech.listen_for()
         self.timer = None
         self.jobs = [PlayJob(self.speech, fn) for fn in fplay]
         self.iter = self.job_generator()
@@ -37,7 +38,7 @@ class PlayApp(Glue):
             timer.cancel(self.timer)
 
     def timed_switch(self):
-        self.connection = connect(self.call, self.speech)
+        self.connection = connect(self.call, self.speech, force_bus=True)
         j = self.iter.next()
         if j:
             self.speech.start(j)
@@ -73,7 +74,7 @@ class PlayController(object):
                  call.name, call.details.destination_addr, cli,
                  call.details.stream, call.details.ts)
 
-        call.user_data = PlayApp(self, module, call)
+        call.user_data = PlayApp(self, options.module, call)
         call.accept()
         
     def ev_call_connected(self, call, user_data):
