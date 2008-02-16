@@ -1,17 +1,21 @@
 # Copyright (C) 2002-2008 Lars Immisch
 
-"""Higher level speech processing functions.
+"""Higher-level speech processing functions.
 
-This module contains the SpeechChannel, which is a full duplex prosody channel,
-and higher level speech processing functions.
+This module contains the L{SpeechChannel} - a full duplex prosody
+channel with speech processing functions like C{play}, C{record}, C{digits}
+or C{tone}.
 
-These higher level speech processing functions are internally represented as
-jobs, but the job can be used explicitly to create, store or retrieve speech
-operations.
+Internally, all speech processing functions in this module are represented as
+I{jobs}. A job starts an audio operation, monitors it while it is running,
+and notifies the L{SpeechChannel} when it is finished. Also, a jobs can
+stop its operation.
 
-The design goal is to encapsulate every speech operation as a job.
-The only exception is DTMF recognition: this is always active and not
-represented by a job."""
+For simple applications, jobs may be ignored, but they are a useful building
+block for IVR-type applications. For an example, look at am/am.py. Thus is an
+an answering machine that implements its user interaction as a queue of jobs.
+"""
+
 
 import sys
 import os
@@ -65,16 +69,14 @@ if TiNG_version[0] >= 2:
 class PlayJobBase(object):
     """An Abstract Base Class for playing samples through a L{SpeechChannel}.
 
-    Subclasses must override C{get_data(len)}. C{get_data} must fill
-    the buffer C{self.data} and return the length of the data.
+    Subclasses must implement C{get_data(len)} to fill
+    the buffer C{data}. C{get_data(len)} must return the length of the
+    data written.
 
-    They must also override and call C{done} on this class for internal
-    bookkeeping and it is the subclasses responsibility to call
-    C{channel.job_done()} in C{done}.
+    Subclasses must overwrite C{done}, and, in their implementation, they must
+    call C{PlayJobBase.done} and C{self.channel.job_done(...)}.
 
-    If subclasses have an attribute C{name} is present, it will be used for
-    logging.
-    """
+    Read the code for more details."""
 
     # Used for debug output
     name = 'play_base'
@@ -121,8 +123,8 @@ class PlayJobBase(object):
 
         Start playback.
 
-        Applications should call L{SpeechChannel.play} or L
-        {SpeechChannel.start}
+        Applications should call L{SpeechChannel.play} or
+        L{SpeechChannel.start}
         """
         
         replay = lowlevel.SM_REPLAY_PARMS()
@@ -1405,6 +1407,10 @@ class SpeechChannel(Lockable):
         self.start(job)        
 
     def on_recog(self):
+        """I{Reactor callback}.
+
+        Called when a DTMF digit or a tone is recognised."""
+
         # log.debug('%s on_recog', self.name)
         recog = lowlevel.SM_RECOGNISED_PARMS()
         tone = None
@@ -1442,10 +1448,12 @@ class SpeechChannel(Lockable):
                     self.unlock()
 
     def stop(self):
+        """Stop the current job."""
         if self.job:
             self.job.stop()
 
     def job_done(self, job, fn, reason, *args, **kwargs):
+        """I{Internal job support}."""
         args = args + (self.user_data,)
 
         self.lock()
@@ -1491,11 +1499,12 @@ class Conference(Lockable):
 class Glue(object):
     """Glue logic to tie a SpeechChannel to a Call.
 
-    This class is meant to be a base-class for the data of a single call
-    with a Prosody channel for speech processing.
+    This class is used to model the per-call data
+    of a call leg that has a Prosody channel for speech processing.
 
-    It will allocate a I{SpeechChannel} upon creation and connect it to the
-    call.
+    When created, a Glue object will allocate a I{SpeechChannel}
+    and connect it to the call.
+    
     When deleted, it will close and disconnect the I{SpeechChannel}."""
     
     def __init__(self, controller, module, call, auto_connect = True):
