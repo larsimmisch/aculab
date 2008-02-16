@@ -72,7 +72,7 @@ class PlayJobBase(object):
     bookkeeping and it is the subclasses responsibility to call
     C{channel.job_done()} in C{done}.
 
-    If the attribute C{datadesc} is present, it will be used for
+    If subclasses have an attribute C{name} is present, it will be used for
     logging.
     """
 
@@ -117,10 +117,12 @@ class PlayJobBase(object):
         self.data = lowlevel.SM_TS_DATA_PARMS()
 
     def start(self):
-        """Start the playback.
+        """I{Generic job interface method}.
 
-        I{Do not call this method directly - call
-        SpeechChannel.start(playjob) instead}
+        Start playback.
+
+        Applications should call L{SpeechChannel.play} or L
+        {SpeechChannel.start}
         """
         
         replay = lowlevel.SM_REPLAY_PARMS()
@@ -155,7 +157,9 @@ class PlayJobBase(object):
         return self
 
     def done(self):
-        """I{Used internally}. Must be overwritten and called in subclasses.
+        """I{Generic job interface method}.
+
+        Must be overwritten and called in subclasses when the job is complete.
 
         @return: a tuple (reason, duration). Duration is in seconds.
         """
@@ -178,7 +182,7 @@ class PlayJobBase(object):
         return reason, duration
 
     def fill_play_buffer(self):
-        """I{Used internally} to fill the play buffers on the board.
+        """I{Reactor callback} - fills the play buffers on the board.
         
         @returns: True if completed"""
         
@@ -216,8 +220,14 @@ class PlayJobBase(object):
                 self.offset = self.offset + l
 
     def stop(self):
-        """Stop an abstract PlayJob. The internal position will be updated
-        based upon the information available from the drivers."""
+        """I{Generic job interface method}.
+
+        Stops the PlayJob.
+
+        Applications should call L{SpeechChannel.stop}.
+
+        The internal position C{stop_offset} will be updated with
+        the information from the driver."""
 
         stop = lowlevel.SM_REPLAY_ABORT_PARMS()
         stop.channel = self.channel.channel
@@ -241,6 +251,14 @@ class PlayJob(PlayJobBase):
                  filetype = None):
         """Create a PlayJob.
 
+        See U{sm_replay_start
+        <http://www.aculab.com/support/TiNG/gen/apifn-sm_replay_start.html>}
+        for more information about the parameters.
+
+        See also L{SpeechChannel.play}.
+
+        The sampling rate is currently hardcoded to 8000.
+        
         @param channel: The L{SpeechChannel} that will play the file.
         @param f: Either a filename (string) or a file descriptor.
         If a string is passed in, the associated file will be opened for
@@ -256,12 +274,6 @@ class PlayJob(PlayJobBase):
         same as 100: normal speed.
         @param volume: The volume adjustment in db.
         @param filetype: The file type. The default is C{kSMDataFormatALawPCM}.
-        
-        The sampling rate is hardcoded to 8000.
-
-        See U{sm_replay_start
-        <http://www.aculab.com/support/TiNG/gen/apifn-sm_replay_start.html>}
-        for more information about the parameters.
         """
 
         PlayJobBase.__init__(self, channel, agc, speed, volume, filetype)
@@ -288,7 +300,7 @@ class PlayJob(PlayJobBase):
         self.datadesc = str(self.file)
         
     def done(self):
-        """I{Used internally}."""
+        """I{Generic job interface method}."""
 
         reason, duration = PlayJobBase.done(self)
         
@@ -302,6 +314,8 @@ class PlayJob(PlayJobBase):
         self.channel.job_done(self, 'play_done', reason, duration, f)
 
     def get_data(self, length):
+        """I{PlayJobBase interface method}."""
+                
         return self.data.read(self.file, length)
 
 class SilenceJob(PlayJobBase):
@@ -312,7 +326,7 @@ class SilenceJob(PlayJobBase):
     def __init__(self, channel, duration = 0.0):
         """Create a SilenceJob.
 
-        @param channel: The L{SpeechChannel} that will play the file.
+        @param channel: The L{SpeechChannel} that will play silence.
         @param duration: The length of the silence in seconds.
         """
 
@@ -322,13 +336,15 @@ class SilenceJob(PlayJobBase):
         self.duration = int(duration * self.data_rate)
         
     def done(self):
-        """I{Used internally}."""
+        """I{Generic job interface method}."""
 
         reason, duration = PlayJobBase.done(self)
         
         self.channel.job_done(self, 'silence_done', reason, duration)
 
     def get_data(self, length):
+        """I{PlayJobBase interface method}."""
+
         r = self.duration - self.offset 
         if r < length:
             length = r
@@ -345,10 +361,18 @@ class RecordJob(object):
     
     def __init__(self, channel, f, max_octets = 0,
                  max_elapsed_time = 0.0, max_silence = 0.0,
-                 elimination = False,
-                 agc = False, volume = 0, filetype = None):
-        """Create a RecordJob. The recording will be in alaw, 8kHz.
+                 elimination = False, agc = False, volume = 0,
+                 filetype = None):
+        """Create a RecordJob.
 
+        The sampling rate is currently hardcoded to 8000.
+
+        See U{sm_record_start
+        <http://www.aculab.com/support/TiNG/gen/apifn-sm_record_start.html>}
+        for more information about the parameters.
+
+        See also L{SpeechChannel.record}.
+        
         @param channel: The SpeechChannel that will do the recording.
         @param f: Either a string (filename) or a fd for the file.
         If a string is passed in, the associated file will be opened for
@@ -365,14 +389,8 @@ class RecordJob(object):
         @param elimination: Activates silence elimination if not zero.
         @param agc: Nonzero values activate Automatic Gain Control        
         @param volume: The volume adjustment in db.
-        @param filetype: The file type. By default, C{kSMDataFormatALawPCM}
-        will be used.
-
-        The sampling rate is hardcoded to 8000.
-
-        See U{sm_record_start
-        <http://www.aculab.com/support/TiNG/gen/apifn-sm_record_start.html>}
-        for more information about the parameters.        
+        @param filetype: The file type. If no type can be deduced from the
+        filename, C{kSMDataFormatALawPCM} will be used.
         """
 
         self.channel = channel
@@ -404,9 +422,12 @@ class RecordJob(object):
         self.reason = None
 
     def start(self):
-        """Start the recording.
+        """I{Generic job interface method}
 
-        I{Do not call this method directly - call SpeechChannel.start instead}
+        Start the recording.
+
+        Applications should use L{SpeechChannel.record} or
+        L{SpeechChannel.start}.
         """
         
         record = lowlevel.SM_RECORD_PARMS()
@@ -439,7 +460,7 @@ class RecordJob(object):
         self.channel.reactor.add(self.channel.event_read, self.on_read)
 
     def done(self):                
-        """Called internally upon completion."""
+        """I{Generic job interface method}."""
         
         # remove the read event from the reactor
         self.channel.reactor.remove(self.channel.event_read)
@@ -452,14 +473,15 @@ class RecordJob(object):
             self.file = None
             f = self.filename
         
-        # no locks held
         log.debug('%s record_done(reason=\'%s\', length=%.3fs)',
                   channel.name, self.reason, self.duration)
 
         channel.job_done(self, 'record_done', self.reason, self.duration, f)
     
     def on_read(self):
-        """Used internally, called whenever recorded data is available."""
+        """I{Reactor callback},
+
+        Called whenever recorded data is available."""
         
         status = lowlevel.SM_RECORD_STATUS_PARMS()
 
@@ -529,7 +551,12 @@ class RecordJob(object):
                 self.data.write(self.file)
 
     def stop(self):
-        """Stop the recording."""
+        """I{Generic job interface method}.
+
+        Stop the recording.
+
+        Applications should use L{SpeechChannel.stop} to stop a pending job.
+        """
         
         abort = lowlevel.SM_RECORD_ABORT_PARMS()
         abort.channel = self.channel.channel
@@ -546,18 +573,19 @@ class DigitsJob(object):
                  digit_duration = 0):
         """Prepare to play a string of DTMF digits.
 
+        See U{sm_play_digits
+        <http://www.aculab.com/support/TiNG/gen/apifn-sm_play_digits.html>}
+        for more information about the parameters. I{Only C{kSMDTMFDigits} is
+        supported as C{type}}.
+
+        See also L{SpeechChannel.digits}.
+
         @param digits: String of DTMF Digits. A digit can be from 0-9, A-D, *
         and #.
         @param inter_digit_delay: Delay between digits in B{milliseconds}. Zero
         for the default value (exact value unknown).
         @param digit_duration: Duration of each digit in B{milliseconds}. Zero
         for the default value (exact value unknown).
-
-        See U{sm_play_digits
-        <http://www.aculab.com/support/TiNG/gen/apifn-sm_play_digits.html>}
-        for more information about the parameters.
-
-        Only C{kSMDTMFDigits} is supported as C{type}.
         """
         
         self.channel = channel
@@ -567,8 +595,10 @@ class DigitsJob(object):
         self.stopped = False
 
     def start(self):
-        """Do not call this method directly - call L{SpeechChannel.start}
-        instead."""
+        """I{Generic job interface method}.
+
+        Applications should use L{SpeechChannel.digits} or
+        L{SpeechChannel.start}."""
         
         dp = lowlevel.SM_PLAY_DIGITS_PARMS()
         dp.channel = self.channel.channel
@@ -589,6 +619,8 @@ class DigitsJob(object):
         self.channel.reactor.add(self.channel.event_write, self.on_write)
 
     def on_write(self):
+        """I{Reactor callback}."""
+        
         if self.channel is None:
             return
         
@@ -617,7 +649,7 @@ class DigitsJob(object):
             channel.job_done(self, 'digits_done', reason)
                 
     def stop(self):
-        """Stop the playing of digits."""
+        """I{Generic job interface method}."""
         
         self.stopped = True
         log.debug('%s digits_stop()', self.channel.name)
@@ -644,6 +676,12 @@ class ToneJob(object):
     def __init__(self, channel, tone, duration = 0.0):
         """Prepare to play a list of tones.
 
+        See U{sm_play_tone
+        <http://www.aculab.com/support/TiNG/gen/apifn-sm_play_tone.html>}
+        for more information about the parameters.
+
+        See also L{SpeechChannel.tones}.
+
         @param tone: A predefined tone id.
         See the U{list of pre-loaded output tones
         <http://www.aculab.com/support/TiNG/prospapi_outtones.html>} for
@@ -651,22 +689,17 @@ class ToneJob(object):
         0.0 is infinite.
 
         @param duration: the duration in seconds (float).
-
-        See U{sm_play_tone
-        <http://www.aculab.com/support/TiNG/gen/apifn-sm_play_tone.html>}
-        for more information about the parameters.
         """
         
         self.channel = channel
         self.tone = tone
         self.duration = duration
 
-    def start_tone(self):
-        """Used internally: start the tone at the current offset."""
-        
     def start(self):
-        """Do not call this method directly - call L{SpeechChannel.start}
-        instead."""
+        """I{Generic job interface method}.
+
+        Applications should call L{SpeechChannel.tones} or
+        L{SpeechChannel.start}."""
 
         tp = lowlevel.SM_PLAY_TONE_PARMS()
         tp.channel = self.channel.channel
@@ -684,6 +717,8 @@ class ToneJob(object):
         self.channel.reactor.add(self.channel.event_write, self.on_write)
 
     def on_write(self):
+        """I{Reactor callback}."""
+        
         if self.channel is None:
             return
         
@@ -709,7 +744,7 @@ class ToneJob(object):
             channel.job_done(self, 'tone_done', reason)
                 
     def stop(self):
-        """Stop the tone."""
+        """I{Generic job interface}."""
         
         self.stopped = True
         log.debug('%s tone_stop()', self.channel.name)
@@ -732,7 +767,7 @@ class ToneJob(object):
         channel.job_done(self, 'digits_done', reason) #, pos)
 
 class DCReadJob(object):
-    """A DataComms receive job."""
+    """A DataComms receive job - experimental"""
     
     def __init__(self, channel, cmd, min_to_collect, min_idle = 0,
                  blocking = 0):
@@ -750,7 +785,10 @@ class DCReadJob(object):
         self.blocking = blocking
 
     def start(self):
-        'Do not call this method directly - call SpeechChannel.start instead'
+        """I{Generic job interface}.
+
+        Applications should call L{SpeechChannel.start}
+        """
 
         control = lowlevel.SMDC_RX_CONTROL_PARMS()
 
@@ -773,9 +811,15 @@ class DCReadJob(object):
                   self.min_idle, self.blocking)
 
     def on_read(self):
+        """I{Reactor callback}."""
+        
         self.channel.controller.dc_read(self.channel)
 
     def stop(self):
+        """I{Generic job interface}.
+
+        Applications should call L{SpeechChannel.stop}."""
+        
         rc = lowlevel.smdc_stop(self.channel.channel)
         if rc:
             raise AculabSpeechError(rc, 'smdc_stop', self.channel.name)
@@ -795,9 +839,8 @@ class DCReadJob(object):
 class SpeechChannel(Lockable):
     """A full duplex Prosody channel.
 
-    DTMF detection is started by default.
-
-    Logging: output from a SpeechChannel is prefixed with C{sc-}"""
+    Logging: a SpeechChannel instance name is prefixed with C{sc-}.
+    The I{log name} is C{speech}."""
         
     def __init__(self, controller, card = 0, module = 0, mutex = None,
                  user_data = None, ts_type = lowlevel.kSMTimeslotTypeALaw,
@@ -1292,7 +1335,7 @@ class SpeechChannel(Lockable):
             job.start()
     
     def play(self, file, volume = 0, agc = 0, speed = 0, filetype = None):
-        """Play an file.
+        """Play a file.
 
         This is a shorthand to create and start a L{PlayJob}."""
 

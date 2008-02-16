@@ -110,7 +110,7 @@ class FaxJob:
         self.session = session
 
     def trace_on(self, level = 0x7fffffff):
-        """Enable tracing for the FAX."""
+        """Enable tracing for the FAX (probably broken)."""
         # open logfile for tracing
         rc, self.logfile = lowlevel.bfile()
         if rc:
@@ -151,7 +151,7 @@ class FaxJob:
             self.file = None
 
     def stop(self):
-        """Stop the FAX job."""
+        """I{Generic job interface method}"""
         if self.session:
             log.debug('%s fax stop', self.channel.name)
 
@@ -160,7 +160,7 @@ class FaxJob:
                 raise AculabFAXError(rc, 'smfax_rude_interrupt')
 
     def done(self, reason = None):
-        """Called internally when the job is complete or stopped."""
+        """I{Generic job interface method}."""
 
         function = 'faxrx_done'
         if self.mode == lowlevel.kSMFaxModeTransmitter:
@@ -406,8 +406,8 @@ if TiNG_version[0] >= 2:
 
             rc = lowlevel.sm_t38gw_worker_fn(parms)
             if rc:
-                log.error('t38gw-%x sm_t38gw_worker_fn failed: %s', self.session,
-                          sm_error_names[rc])
+                log.error('t38gw-%x sm_t38gw_worker_fn failed: %s',
+                          self.session, sm_error_names[rc])
             else:
                 log.info('t38gw-%x sm_t38gw_worker_fn exited', self.session)
 
@@ -436,8 +436,8 @@ if TiNG_version[0] >= 2:
             """Create a fax job.
 
             @param controller: a controller that implements...
-            @param local: a tuple (tx, rx) of either TDM, VMP or FMP for the local
-            (sending) side.
+            @param local: a tuple (tx, rx) of either TDM, VMP or FMP for the
+            local (sending) side.
             @param remote: a tuple (tx, rx) of either TDM, VMP or FMP for the
             remote (receiving side)
             @returns: a tSMT38GWJobId

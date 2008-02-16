@@ -1,5 +1,5 @@
 # Copyright (c) 2001-2004 Twisted Matrix Laboratories for OrderedDict
-# Copyright (C) 2003-2007 Lars Immisch
+# Copyright (C) 2003-2008 Lars Immisch
 
 """Utility classes: L{OrderedDict}, L{Lockable} and L{EventQueue}."""
 
@@ -12,9 +12,6 @@ lowlevel.sm_get_driver_info(_driver_info)
 TiNG_version = (_driver_info.major, _driver_info.minor)
 del _driver_info
 
-if os.name == 'nt':
-    import pywintypes
-
 def swig_value(s):
     a = s.find('_')
     if a != -1:
@@ -22,12 +19,6 @@ def swig_value(s):
         return s[a+1:o]
 
     return s            
-
-def os_event(event):
-    if os.name == 'nt':
-        return 
-
-    return event.fd
 
 def translate_card(card, module):
     if TiNG_version[0] < 2:
