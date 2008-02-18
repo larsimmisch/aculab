@@ -1,18 +1,19 @@
 # Copyright (C) 2002-2008 Lars Immisch
 
-"""Higher-level speech processing functions.
+"""The L{SpeechChannel} and higher level speech processing functions.
 
-This module contains the L{SpeechChannel} - a full duplex prosody
-channel with speech processing functions like C{play}, C{record}, C{digits}
-or C{tone}.
+The SpeechChannel is a full duplex prosody channel with speech processing
+functions like L{play <SpeechChannel.play>}, L{record <SpeechChannel.record>},
+L{digits <SpeechChannel.digits>} or L{tone <SpeechChannel.tone>}.
 
 Internally, all speech processing functions in this module are represented as
 I{jobs}. A job starts an audio operation, monitors it while it is running,
-and notifies the L{SpeechChannel} when it is finished. Also, a jobs can
+and notifies the L{SpeechChannel} when it is finished. Also, a job can
 stop its operation.
 
 For simple applications, jobs may be ignored, but they are a useful building
-block for IVR-type applications. For an example, look at am/am.py. Thus is an
+block for IVR-type applications. For an example, look at U{am/am.py
+<http://svn.ibp.de/projects/aculab/browser/trunk/python/am/am.py>}. This is an
 an answering machine that implements its user interaction as a queue of jobs.
 """
 
@@ -39,6 +40,13 @@ log = logging.getLogger('speech')
 log_switch = logging.getLogger('switch')
 
 def guess_filetype(fn):
+    """Guess format, sampling rate and data rate from the file extension.
+
+    Currently recognized are C{.al} (alaw, 8kHz) C{.ul} (mulaw, 8kHz)
+    and C{.sw} (16bit/sample, signed, 8 kHz).
+
+    @return: a tuple (format, sampling rate, data rate).
+    """
     ext = os.path.splitext(fn)[1]
     if ext == '.al':
         return (lowlevel.kSMDataFormatALawPCM, 8000, 8000)
@@ -85,18 +93,15 @@ class PlayJobBase(object):
                  filetype = None):
         """Create an abstract PlayJob.
 
+        I{Related Aculab documentation}: U{sm_replay_start
+        <http://www.aculab.com/support/TiNG/gen/apifn-sm_replay_start.html>}.
+
         @param channel: The L{SpeechChannel} that will play the file.
         @param agc: A nonzero value activates automatic gain control
         @param speed: The speed for used for replaying in percent. 0 is the
         same as 100: normal speed.
         @param volume: The volume adjustment in db.
         @param filetype: The file type. The default is C{kSMDataFormatALawPCM}.
-        
-        The sampling rate is hardcoded to 8000.
-
-        See U{sm_replay_start
-        <http://www.aculab.com/support/TiNG/gen/apifn-sm_replay_start.html>}
-        for more information about the parameters.
         """
         
         self.channel = channel
@@ -186,7 +191,7 @@ class PlayJobBase(object):
     def fill_play_buffer(self):
         """I{Reactor callback} - fills the play buffers on the board.
         
-        @returns: True if completed"""
+        @return: True if completed"""
         
         status = lowlevel.SM_REPLAY_STATUS_PARMS()
 
@@ -253,26 +258,26 @@ class PlayJob(PlayJobBase):
                  filetype = None):
         """Create a PlayJob.
 
-        See U{sm_replay_start
-        <http://www.aculab.com/support/TiNG/gen/apifn-sm_replay_start.html>}
-        for more information about the parameters.
+        I{Related Aculab documentation}: U{sm_replay_start
+        <http://www.aculab.com/support/TiNG/gen/apifn-sm_replay_start.html>}.
 
-        See also L{SpeechChannel.play}.
+        I{See} L{SpeechChannel.play} for a shorthand.
 
-        The sampling rate is currently hardcoded to 8000.
-        
         @param channel: The L{SpeechChannel} that will play the file.
-        @param f: Either a filename (string) or a file descriptor.
-        If a string is passed in, the associated file will be opened for
-        playing and closed upon completion. Filename extensions will be
+        @param f: Either a I{filename} or a I{fd}.
+        
+        If a filename is passed in, the associated file will be opened for
+        reading and closed upon completion. Filename extensions will be
         treated as a hint for the file type, but only if filetype is not
         C{None}. Currently recognized filename extensions are C{.al}, C{.ul}
         and C{sw}.
-        If a file descriptor d is passed in, the file will be left open (and
+
+        If a file descriptor is passed in, the file will be left open (and
         the file pointer will be left at the position where the replay
-        stopped).
-        @param agc: A nonzero value activates automatic gain control
-        @param speed: The speed for used for replaying in percent. 0 is the
+        stopped.
+        
+        @param agc: A nonzero value activates automatic gain control.
+        @param speed: The replay speed in percent. 0 is the
         same as 100: normal speed.
         @param volume: The volume adjustment in db.
         @param filetype: The file type. The default is C{kSMDataFormatALawPCM}.
@@ -321,7 +326,12 @@ class PlayJob(PlayJobBase):
         return self.data.read(self.file, length)
 
 class SilenceJob(PlayJobBase):
-    """Play silence on a L{SpeechChannel}."""
+    """Play silence on a L{SpeechChannel}.
+
+    This isn't really useful, because it is generally better to just
+    output nothing for silence. I wrote it while I was hunting for subtle
+    switching noises.
+    """
 
     name = 'silence'
 
@@ -367,25 +377,23 @@ class RecordJob(object):
                  filetype = None):
         """Create a RecordJob.
 
-        The sampling rate is currently hardcoded to 8000.
+        I{Related Aculab documentation}: U{sm_record_start
+        <http://www.aculab.com/support/TiNG/gen/apifn-sm_record_start.html>}.
 
-        See U{sm_record_start
-        <http://www.aculab.com/support/TiNG/gen/apifn-sm_record_start.html>}
-        for more information about the parameters.
-
-        See also L{SpeechChannel.record}.
+        I{See} L{SpeechChannel.record} for a shorthand.
         
         @param channel: The SpeechChannel that will do the recording.
-        @param f: Either a string (filename) or a fd for the file.
+        @param f: Either a I{filename} or a I{fd} for the file to record.
+        
         If a string is passed in, the associated file will be opened for
-        recording and closed upon completion. Filename extensions will be
+        writing and closed upon completion. Filename extensions will be
         treated as a hint for the file type, but only if filetype is not
         C{None}. Currently recognized filename extensions are C{.al}, C{.ul}
         and C{.sw}.
         If a fd is passed in, the file will be left open and not be reset
         to the beginning.
         @param max_octets: Maximum length of the recording (in bytes)
-        @param max_elapsed_time: Maximum length the recording in seconds.
+        @param max_elapsed_time: Maximum length of the recording in B{seconds}.
         @param max_silence: Maximum length of silence in seconds, before the
         recording is terminated.
         @param elimination: Activates silence elimination if not zero.
@@ -481,7 +489,7 @@ class RecordJob(object):
         channel.job_done(self, 'record_done', self.reason, self.duration, f)
     
     def on_read(self):
-        """I{Reactor callback},
+        """I{Reactor callback}.
 
         Called whenever recorded data is available."""
         
@@ -575,14 +583,14 @@ class DigitsJob(object):
                  digit_duration = 0):
         """Prepare to play a string of DTMF digits.
 
-        See U{sm_play_digits
-        <http://www.aculab.com/support/TiNG/gen/apifn-sm_play_digits.html>}
-        for more information about the parameters. I{Only C{kSMDTMFDigits} is
-        supported as C{type}}.
+        I{Related Aculab documentation} U{sm_play_digits
+        <http://www.aculab.com/support/TiNG/gen/apifn-sm_play_digits.html>}.
 
-        See also L{SpeechChannel.digits}.
+        I{Only C{kSMDTMFDigits} is supported as C{type}}.
 
-        @param digits: String of DTMF Digits. A digit can be from 0-9, A-D, *
+        I{See} L{SpeechChannel.digits} for shorthand.
+
+        @param digits: String of DTMF Digits. A digit can be 0-9, A-D, *
         and #.
         @param inter_digit_delay: Delay between digits in B{milliseconds}. Zero
         for the default value (exact value unknown).
@@ -678,11 +686,10 @@ class ToneJob(object):
     def __init__(self, channel, tone, duration = 0.0):
         """Prepare to play a list of tones.
 
-        See U{sm_play_tone
-        <http://www.aculab.com/support/TiNG/gen/apifn-sm_play_tone.html>}
-        for more information about the parameters.
+        I{Related Aculab documentation} U{sm_play_tone
+        <http://www.aculab.com/support/TiNG/gen/apifn-sm_play_tone.html>}.
 
-        See also L{SpeechChannel.tones}.
+        I{See} L{SpeechChannel.tones} for a shorthand.
 
         @param tone: A predefined tone id.
         See the U{list of pre-loaded output tones
@@ -775,9 +782,8 @@ class DCReadJob(object):
                  blocking = 0):
         """Receive binary (possible modulated) data.
 
-        See U{smdc_rx_control
-        <http://www.aculab.com/support/TiNG/gen/apifn-smdc_rx_control.html>}
-        for more information about the parameters.
+        I{Related Aculab documentation}: U{smdc_rx_control
+        <http://www.aculab.com/support/TiNG/gen/apifn-smdc_rx_control.html>}.
         """
         
         self.channel = channel
@@ -841,8 +847,8 @@ class DCReadJob(object):
 class SpeechChannel(Lockable):
     """A full duplex Prosody channel.
 
-    Logging: a SpeechChannel instance name is prefixed with C{sc-}.
-    The I{log name} is C{speech}."""
+    I{Logging}: SpeechChannels are prefixed with C{sc-} and the I{log name} is
+    C{speech}."""
         
     def __init__(self, controller, card = 0, module = 0, mutex = None,
                  user_data = None, ts_type = lowlevel.kSMTimeslotTypeALaw,
@@ -876,7 +882,7 @@ class SpeechChannel(Lockable):
         for more details.
 
         @param reactor: The reactor used to dispatch controller methods.
-        By default, a single reactor is used for all channels.
+        By default, a single L{SpeechReactor} is used for all channels.
         """
 
         Lockable.__init__(self, mutex)
@@ -984,7 +990,7 @@ class SpeechChannel(Lockable):
 
         @param *args: this can be a list of VMPs, FMPs TDMs, Connections
         or Calls that will be closed when the channel is idle.
-        The Fax-Libraries in particular will gladly dump core when
+        The FAX libraries in particular will gladly dump core when
         VMPs or FMPs are closed before the job is finished.
         """
 
@@ -1138,7 +1144,8 @@ class SpeechChannel(Lockable):
         transmitter instance (VMPtx, FMPtx or TDMtx), which must be on
         the same module.
 
-        Used internally. Applications should use L{switching.connect}."""
+        Applications should normally use L{switching.connect}.
+        """
 
         if hasattr(source, 'get_datafeed') and source.get_datafeed():
             connect = lowlevel.SM_CHANNEL_DATAFEED_CONNECT_PARMS()
@@ -1198,9 +1205,9 @@ class SpeechChannel(Lockable):
     def speak_to(self, sink):
         """Speak to a timeslot.
 
-        @param sink: a tuple (stream, timeslot).
-        
-        Used internally. Applications should use L{switching.connect}."""
+        Applications should normally use L{switching.connect}.
+
+        @param sink: a tuple (stream, timeslot)."""
 
         if self.info.card == -1:
             output = lowlevel.SM_SWITCH_CHANNEL_PARMS()
@@ -1252,8 +1259,8 @@ class SpeechChannel(Lockable):
         """Start DTMF/Tone detection.
 
         @param toneset: toneset for DTMF/tone detection. The default toneset
-        will recognize DTMF only. The string 'dtmf/fax' will use a combined
-        DTMF/FAX toneset.
+        will recognize DTMF only. The magic string value 'dtmf/fax' will
+        activate a combined DTMF/FAX toneset.
 
         @param mode: the algorithm to use for tone detection.
         See U{sm_listen_for
@@ -1301,10 +1308,8 @@ class SpeechChannel(Lockable):
     def dc_config(self, protocol, pconf, encoding, econf):
         """Configure the channel for data communications.
 
-        See U{smdc_channel_config
-        <http://www.aculab.com/support/TiNG/gen/apifn-smdc_channel_config.html>}
-        for more information about the parameters.
-
+        I{Related Aculab documentation}: U{smdc_channel_config
+        <http://www.aculab.com/support/TiNG/gen/apifn-smdc_channel_config.html>}.
         """
         
         config = lowlevel.SMDC_CHANNEL_CONFIG_PARMS()
@@ -1327,8 +1332,8 @@ class SpeechChannel(Lockable):
     def start(self, job):
         """Start a job.
 
-        Only a single job may run at the same time. This is somewhat arbitrary
-        limitation that merely simplifies the implementation."""
+        Only a single job may run at the same time. This is a somewhat
+        arbitrary limitation that merely simplifies the implementation."""
         if self.job:
             raise RuntimeError('Already executing job')
 
@@ -1348,9 +1353,11 @@ class SpeechChannel(Lockable):
     def record(self, file, max_octets = 0,
                max_elapsed_time = 0.0, max_silence = 0.0, elimination = 0,
                agc = 0, volume = 0, filetype = None):
-        """Record to an alaw file.
+        """Record to a file.
 
-        This is a shorthand to create and starts a L{RecordJob}."""
+        This is a shorthand to create and start a L{RecordJob}.
+        
+        See L{RecordJob} for a description of the parameters."""
 
         job = RecordJob(self, file, max_octets,
                         max_elapsed_time, max_silence, elimination,
@@ -1359,7 +1366,11 @@ class SpeechChannel(Lockable):
         self.start(job)
 
     def tone(self, tone, duration = 0.0):
-        """Send a predefined output tone."""
+        """Send a predefined output tone.
+
+        This is a shorthand to create and start a L{ToneJob}.
+        
+        See L{ToneJob} for a description of the parameters."""
 
         job = ToneJob(self, tone, duration)
 
@@ -1383,24 +1394,24 @@ class SpeechChannel(Lockable):
         self.start(job)
 
     def faxrx(self, file, subscriber_id = '', transport = (None, None)):
-        """Receive a FAX asynchronously.
+        """Receive a FAX.
 
         @param file: The name of a TIFF file that will receive the image.
         @param subscriber_id: The alphanumerical id of the station.
-        @param vmp: A pair of (vmptx, vmprx) if this FAX is to be received
-        on a RTP connection."""
+        @param transport: A pair of (vmptx, vmprx) or (fmptx, fmprx) if this
+        FAX is to be received on a RTP connection."""
 
         job = FaxRxJob(self, file, subscriber_id, transport)
 
         self.start(job)        
 
     def faxtx(self, file, subscriber_id = '', transport = (None, None)):
-        """Transmit a FAX asynchronously.
+        """Transmit a FAX.
 
         @param file: The name of a TIFF file that contains the image to send.
         @param subscriber_id: The alphanumerical id of the station.
-        @param vmp: A pair of (vmptx, vmprx) if this FAX is to be received
-        on a RTP connection."""
+        @param vmp: A pair of (vmptx, vmprx) or (fmptx, fmprx) if this FAX is
+        to be sent on a RTP connection."""
 
         job = FaxTxJob(self, file, subscriber_id, transport)
 
@@ -1472,7 +1483,7 @@ class SpeechChannel(Lockable):
             m(job, reason, self.user_data)
 
 class Conference(Lockable):
-    """A Conference: not fully implemented yet."""
+    """A Conference: seriously incomplete."""
 
     def __init__(self, module = None, mutex = None):
         Lockable.__init__(self, mutex)
@@ -1502,10 +1513,10 @@ class Glue(object):
     This class is used to model the per-call data
     of a call leg that has a Prosody channel for speech processing.
 
-    When created, a Glue object will allocate a I{SpeechChannel}
+    When created, a Glue object will allocate a L{SpeechChannel}
     and connect it to the call.
     
-    When deleted, it will close and disconnect the I{SpeechChannel}."""
+    When deleted, it will close and disconnect the L{SpeechChannel}."""
     
     def __init__(self, controller, module, call, auto_connect = True):
         """Allocate a speech channel on module and connect it to the call.

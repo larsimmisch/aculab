@@ -8,22 +8,22 @@ import logging.handlers
 
 __all__ = ['_lowlevel', 'lowlevel', 'names', 'error', 'util',
            'switching', 'callcontrol', 'speech', 'sip', 'sdp', 'rtp', 'fax'
-           'connect', 'daemonize', 'defaultLogging']
+           'daemonize', 'defaultLogging']
 
 # From: http://aspn.activestate.com/ASPN/Cookbook/Python/Recipe/66012
 
 def daemonize(stdout='/dev/null', stderr=None, stdin='/dev/null',
               pidfile=None):
-    '''
-        This forks the current process into a daemon.
-        The stdin, stdout, and stderr arguments are file names that
-        will be opened and used to replace the standard file descriptors
-        in sys.stdin, sys.stdout, and sys.stderr.
-        These arguments are optional and default to /dev/null.
-        Note that stderr is opened unbuffered, so
-        if it shares a file with stdout then interleaved output
-        may not appear in the order that you expect.
-    '''
+    """ This forks the current process into a daemon.
+    
+    The C{stdin}, C{stdout}, and C{stderr} arguments are file names that
+    will be opened and used to replace the standard file descriptors
+    in C{sys.stdin}, C{sys.stdout}, and C{sys.stderr}.
+    
+    These arguments are optional and default to C{/dev/null}.
+    Note that stderr is opened unbuffered, so if it shares a file with stdout
+    then interleaved output may not appear in the order that you expect.
+    """
     import os
     import sys
     
@@ -89,25 +89,31 @@ def defaultLogging(level = logging.WARNING, logfile = None):
         
     return log
 
-
 def set_TiNGtrace(option, opt, value, parser):
+    """Helper function for the option parser: set TiNGtrace."""
+    
     import lowlevel
     lowlevel.cvar.TiNGtrace = value
 
 def defaultOptions(repeat = False, *args, **kwargs):
     """A default option parser.
 
+    I{Related Python documentation:} U{optparse
+    <http://docs.python.org/lib/module-optparse.html>}
+
     Passes all extra args/kwargs on to the OptionParser constructor.
 
-    @param repeat: Include -r or --repeat in the option list. Off by default.
-
-    Understands:
+    The returned option parser understands the following arguments:
 
      - -c CARD or --card=CARD: select card
      - -p PORT or --port=PORT: select port
      - -c MODULE or --module=MODULE: select module
      - -t TiNGtrace or --tingtrace=TiNGtrace: select TiNGtrace level (0-9)
      - -r or --repeat: repeat after hangup
+
+    @param repeat: Include -r or --repeat in the option list. Off by default.
+
+    @return: an option parser with the default options listed above.
     """
 
     parser = optparse.OptionParser(*args, **kwargs)

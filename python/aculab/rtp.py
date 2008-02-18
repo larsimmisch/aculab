@@ -236,7 +236,7 @@ class VMPrx(RTPBase):
         This method internally allocates a L{TDMtx} on the module's
         timeslot range.
 
-        See L{ProsodyTimeslots}.
+        I{See} L{ProsodyTimeslots}.
 
         I{Used internally}."""
         self.tdm = Connection(self.module.timeslots)
@@ -441,7 +441,7 @@ class VMPtx(RTPBase):
         This method internally allocates a L{TDMtx} on the module's
         timeslot range.
 
-        See L{ProsodyTimeslots}.
+        I{See} L{ProsodyTimeslots}.
 
         I{Used internally}."""
         self.tdm = Connection(self.module.timeslots)
@@ -596,7 +596,7 @@ class VMPtx(RTPBase):
     def tones(self, tones, length = 0.04, interval = 0.1):
         """Send RFC 2833 digits.
 
-        @param tones: a list of RFC 2833 tone names. See L{rfc2833_id2name}
+        @param tones: a list of RFC 2833 tone names. I{See} L{rfc2833_id2name}
         for a list of valid names.
         @param length: the length in seconds. Must be a multiple of 0.01
         (10ms). The default is 0.04s (40ms).
@@ -762,7 +762,7 @@ class FMPrx(RTPBase):
         This method internally allocates a L{TDMtx} on the module's
         timeslot range.
 
-        See L{ProsodyTimeslots}.
+        I{See} L{ProsodyTimeslots}.
 
         I{Used internally}."""
         self.tdm = Connection(self.module.timeslots)
@@ -878,7 +878,7 @@ class FMPtx(RTPBase):
         This method internally allocates a L{TDMtx} on the module's
         timeslot range.
 
-        See L{ProsodyTimeslots}.
+        I{See} L{ProsodyTimeslots}.
 
         I{Used internally}."""
         self.tdm = Connection(self.module.timeslots)

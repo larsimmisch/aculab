@@ -1,6 +1,6 @@
 # Copyright (C) 2002-2007 Lars Immisch
 
-"""L{connect} and support classes.
+"""L{connect} and supporting classes.
 
 This module contains Connection endpoints, Connection objects and CT busses."""
 
