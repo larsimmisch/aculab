@@ -873,13 +873,14 @@ class SpeechChannel(Lockable):
         controller method is invoked and released as soon as it returns.
 
         @param user_data: The data associated with this channel. In MVC terms,
-        this would be the I{model}. In most of the examples, this is a L{Glue}
-        subclass.
+        this would be the I{model}. In most of the examples, this is L{Glue}
+        or a subclass.
 
         @param ts_type: The encoding to use on the timeslot, either alaw, mulaw
-        or raw data. See U{sm_config_module_switching
-        <http://www.aculab.com/support/TiNG/gen/apifn-sm_config_module_switching.html>}
-        for more details.
+        or raw data.
+        
+        I{Related Aculab documentation}: U{sm_config_module_switching
+        <http://www.aculab.com/support/TiNG/gen/apifn-sm_config_module_switching.html>}.
 
         @param reactor: The reactor used to dispatch controller methods.
         By default, a single L{SpeechReactor} is used for all channels.
@@ -988,8 +989,10 @@ class SpeechChannel(Lockable):
         If the channel is active, all pending jobs will be stopped before
         the channel is freed.
 
-        @param *args: this can be a list of VMPs, FMPs TDMs, Connections
-        or Calls that will be closed when the channel is idle.
+        @param *args: this can be a list of L{VMPrx}, L{VMPtx}, L{FMPtx},
+        L{FMPrx}, L{TDMtx}, L{TDMrx}, L{Connection}
+        or L{Call} that will be closed when the channel is idle.
+        .
         The FAX libraries in particular will gladly dump core when
         VMPs or FMPs are closed before the job is finished.
         """
@@ -1207,6 +1210,10 @@ class SpeechChannel(Lockable):
 
         Applications should normally use L{switching.connect}.
 
+        This is only supported on pre Prosody-X hardware; On Prosody-X,
+        L{connect <switching.connect>} will automatically use the datafeed
+        API. 
+
         @param sink: a tuple (stream, timeslot)."""
 
         if self.info.card == -1:
@@ -1258,8 +1265,11 @@ class SpeechChannel(Lockable):
                    
         """Start DTMF/Tone detection.
 
+        I{Related Aculab documentation}: U{sm_listen_for
+        <http://www.aculab.com/support/TiNG/gen/apifn-sm_listen_for.html>}.
+
         @param toneset: toneset for DTMF/tone detection. The default toneset
-        will recognize DTMF only. The magic string value 'dtmf/fax' will
+        will recognize DTMF only. The magic string C{'dtmf/fax'} will
         activate a combined DTMF/FAX toneset.
 
         @param mode: the algorithm to use for tone detection.
@@ -1344,7 +1354,10 @@ class SpeechChannel(Lockable):
     def play(self, file, volume = 0, agc = 0, speed = 0, filetype = None):
         """Play a file.
 
-        This is a shorthand to create and start a L{PlayJob}."""
+        This is a shorthand to create and start a L{PlayJob}.
+
+        See L{PlayJob <PlayJob.__init__>} for a description of the
+        parameters."""
 
         job = PlayJob(self, file, agc, volume, speed, filetype)
 
@@ -1356,8 +1369,9 @@ class SpeechChannel(Lockable):
         """Record to a file.
 
         This is a shorthand to create and start a L{RecordJob}.
-        
-        See L{RecordJob} for a description of the parameters."""
+
+        See L{RecordJob <RecordJob.__init__>} for a description of the
+        parameters."""
 
         job = RecordJob(self, file, max_octets,
                         max_elapsed_time, max_silence, elimination,
@@ -1370,14 +1384,20 @@ class SpeechChannel(Lockable):
 
         This is a shorthand to create and start a L{ToneJob}.
         
-        See L{ToneJob} for a description of the parameters."""
+        See L{ToneJob <ToneJob.__init__>} for a description of the parameters.
+        """
 
         job = ToneJob(self, tone, duration)
 
         self.start(job)
 
     def digits(self, digits, inter_digit_delay = 0, digit_duration = 0):
-        """Send a string of DTMF digits."""
+        """Send a string of DTMF digits.
+        
+        This is a shorthand to create and start a L{DigitsJob}.
+        
+        See L{DigitsJob <DigitsJob.__init__>} for a description of the
+        parameters."""
 
         job = DigitsJob(self, digits, inter_digit_delay,
                         digit_duration)
