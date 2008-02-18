@@ -1,6 +1,6 @@
 # Copyright (C) 2004-2007 Lars Immisch
 
-"""FAX Job classes for the SpeechChannel."""
+"""FAX jobs for the L{SpeechChannel}."""
 
 import sys
 import os
@@ -24,6 +24,11 @@ log = logging.getLogger('fax')
 _fax_global_data = None
 
 def fax_global_data():
+    """Global data needed for FAX API.
+
+    I{Related Aculab documentation}: U{smfax_lib_init
+    <http://www.aculab.com/support/v6_api/Fax/smfax_lib_init.htm>}.
+    """
     global _fax_global_data
     if not _fax_global_data:
         _fax_global_data = lowlevel.SMFAX_GLOBAL_DATA()
@@ -34,6 +39,7 @@ def fax_global_data():
     return _fax_global_data
 
 class FaxJob:
+    """Base class for L{FaxTxJob} and L{FaxRxJob}."""
 
     def __init__(self, channel, file, subscriber_id, transport = (None, None)):
         """Initialize a FAX job.
@@ -54,7 +60,8 @@ class FaxJob:
         self.subscriber_id = subscriber_id
 
     def create_session(self, mode):
-        """Create the job (unfortunately called session by aculab)."""
+        """Create the job (unfortunately called session by aculab).
+        """
         self.mode = mode
 
         session = lowlevel.SMFAX_SESSION()
@@ -177,6 +184,11 @@ class FaxJob:
         channel.job_done(self, function, reason)
 
 class FaxRxJob(FaxJob, threading.Thread):
+    """Job to receive a FAX.
+
+    The Aculab FAX API is blocking, so we must start a new thread to receive
+    the FAX in it.
+    """
     
     def __init__(self, channel, file, subscriber_id = '',
                  transport = (None, None)):
@@ -267,6 +279,10 @@ class FaxRxJob(FaxJob, threading.Thread):
             self.done(AculabFAXError(rc, 'FaxRxJob'))
 
 class FaxTxJob(FaxJob, threading.Thread):
+    """Job to transmit a FAX.
+    
+    The Aculab FAX API is blocking, so we must start a new thread to send
+    the FAX in it."""
     
     def __init__(self, channel, file, subscriber_id = '',
                  transport = (None, None)):
@@ -378,6 +394,9 @@ class FaxTxJob(FaxJob, threading.Thread):
 
 if TiNG_version[0] >= 2:
     class T38GWSession(threading.Thread):
+        """A T.38 gateway session.
+
+        Should be good for about 6 concurrent T.38 gateway jobs."""
 
         def __init__(self):
             threading.Thread.__init__(self, name='t38gwsession')
@@ -429,13 +448,15 @@ if TiNG_version[0] >= 2:
 
 
     class T38GWJob:
+        """Create a T.38 gateway job that will relay T.38 to T.30 over
+        an audio connection."""
 
         def __init__(self, controller, local, remote, card = 0, module = 0,
                      modems = None, asn1 = 3, user_data = None,
                      reactor = SpeechReactor):
-            """Create a fax job.
+            """Create a T.38 gateway job.
 
-            @param controller: a controller that implements...
+            @param controller: a controller that implements ...
             @param local: a tuple (tx, rx) of either TDM, VMP or FMP for the
             local (sending) side.
             @param remote: a tuple (tx, rx) of either TDM, VMP or FMP for the
@@ -518,6 +539,7 @@ if TiNG_version[0] >= 2:
             self.reactor.add(self.fd, self.notify)
 
         def notify(self):
+            """I{Reactor callback}."""
             status = lowlevel.SM_T38GW_JOB_STATUS_PARMS()
             status.job = self.job
 
@@ -530,6 +552,10 @@ if TiNG_version[0] >= 2:
             self.controller.t38gw_terminated(self)
 
         def close(self):
+            """Close the T.38 gateway job.
+
+            Should not be running (no auto-stop implemented).
+            """
             if self.job:
                 rc = lowlevel.sm_t38gw_destroy_job(self.job)
                 self.job = None
@@ -541,6 +567,7 @@ if TiNG_version[0] >= 2:
                 self.fd = None
 
         def stop(self):
+            """Stop (abort) a T.38 gateway job."""
             if self.job:
                 abort = lowlevel.SM_T38GW_ABORT_PARMS()
                 abort.job = self.job
