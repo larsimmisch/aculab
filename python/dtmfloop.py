@@ -49,6 +49,14 @@ if __name__ == '__main__':
     parser.add_option('-f', '--file-name', 
                       help='Play FILE instead of sending 0123456789*#')
 
+    parser.add_option('--timeslot', action='store_true',
+                      help='Connect the channels through timeslots '
+                      '(default are datafeeds if available)')
+
+    parser.add_option('--bus', action='store_true',
+                      help='Connect the channels through the bus '
+                      '(default are datafeeds if available)')
+
     options, args = parser.parse_args()
 
     controller = DTMFLoopController()
@@ -56,7 +64,9 @@ if __name__ == '__main__':
     channels = [SpeechChannel(controller, options.card, options.module),
                 SpeechChannel(controller, options.card, options.module)]
 
-    connection = connect(channels[0], channels[1])
+    connection = connect(channels[0], channels[1],
+                         force_timeslot=options.timeslot,
+                         force_bus=options.bus)
 
     channels[0].listen_for('dtmf/fax', options.mode)
     
