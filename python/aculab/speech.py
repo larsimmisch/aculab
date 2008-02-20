@@ -1123,7 +1123,12 @@ class SpeechChannel(Lockable):
     def get_datafeed(self):
         """Get the datafeed."""
 
-        if TiNG_version[0] < 2:
+        # No datafeed before TiNG 2 and
+        # no datafeed unless it is a Prosody X card
+        
+        # It is possible to *get* a datafeed off non Prosody-X cards,
+        # but it doesn't work
+        if TiNG_version[0] < 2 or not self.card.ip_address:
             return None
 
         if self.datafeed:
