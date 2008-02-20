@@ -61,6 +61,44 @@ class RTPBase(Lockable):
             self.tdm.close()
             self.tdm = None
 
+    def rx_tdm_connect(self):
+        """For Receiver subclasses: connect to a timeslot on its
+        DSP's timeslot range.
+        This method internally allocates a L{TDMtx} on the module's
+        timeslot range.
+
+        See L{ProsodyTimeslots}.
+
+        I{Used internally}."""
+        self.tdm = Connection(self.module.timeslots)
+
+        ts = self.module.timeslots.allocate(self.ts_type)
+
+        tx = TDMtx(ts, self.card, self.module)
+        tx.listen_to(self)
+
+        self.tdm.add(tx, ts)
+
+    def tx_tdm_connect(self):
+        """For Transmitter subclasses: connect to a timeslot on its DSP's
+        timeslot range.
+        
+        This method internally allocates a L{TDMrx} on the module's
+        timeslot range.
+
+        See L{ProsodyTimeslots}.
+
+        I{Used internally}."""
+        self.tdm = Connection(self.module.timeslots)
+
+        ts = self.module.timeslots.allocate(self.ts_type)
+
+        rx = TDMrx(ts, self.card, self.module)
+        self.listen_to(rx)
+
+        self.tdm.add(rx, ts)
+
+
     def get_module(self):
         """Return a unique identifier for module comparisons.
         Used by switching."""
@@ -76,7 +114,7 @@ class RTPBase(Lockable):
     def get_timeslot(self):
         """Return the tx timeslot for TDM switch connections."""
         if not self.tdm:
-            self.tdm_connect()
+            self.rx_tdm_connect()
 
         return self.tdm.timeslots[0]
 
@@ -109,7 +147,6 @@ class VMPrx(RTPBase):
         self.rtp_port = None
         self.rtcp_port = None
         self.address = socket.INADDR_ANY
-        self.tdm = None
 
         RTPBase.__init__(self, card, module, mutex, user_data, ts_type)
         
@@ -231,23 +268,6 @@ class VMPrx(RTPBase):
             log.debug('%s vmprx status: %s', self.name,
                       names.vmprx_status_names[status.status])
             
-    def tdm_connect(self):
-        """Connect the Receiver to a timeslot on its DSP's timeslot range.
-        This method internally allocates a L{TDMtx} on the module's
-        timeslot range.
-
-        I{See} L{ProsodyTimeslots}.
-
-        I{Used internally}."""
-        self.tdm = Connection(self.module.timeslots)
-
-        ts = self.module.timeslots.allocate(self.ts_type)
-
-        tx = TDMtx(ts, self.card, self.module)
-        tx.listen_to(self)
-
-        self.tdm.add(tx, ts)
-
     def get_datafeed(self):
         """Used internally by the switching protocol."""
         return self.datafeed
@@ -436,26 +456,41 @@ class VMPtx(RTPBase):
             log.debug('%s vmptx status: %s', self.name,
                       names.vmptx_status_names[status.status])
 
-    def tdm_connect(self):
-        """Connect the Transmitter to a timeslot on its DSP's timeslot range.
-        This method internally allocates a L{TDMtx} on the module's
-        timeslot range.
-
-        I{See} L{ProsodyTimeslots}.
-
-        I{Used internally}."""
-        self.tdm = Connection(self.module.timeslots)
-
-        ts = self.module.timeslots.allocate(self.ts_type)
-
-        rx = TDMrx(ts, self.card, self.module)
-        self.listen_to(rx)
-
-        self.tdm.add(rx, ts)
-
     def get_datafeed(self):
         """Used internally by the switching protocol."""
         return self.datafeed
+
+    def listen_to(self, source):
+        """Listen to a timeslot or a tx instance.
+
+        I{Switching protocol}. Applications should
+        generally use L{switching.connect}.
+        
+        @param source: a tuple (stream, timeslot, [timeslot_type]) or a
+        transmitter instance (L{VMPtx}, L{FMPtx} or L{TDMtx}), which must be on
+        the same module."""
+        
+        if hasattr(source, 'get_datafeed') and source.get_datafeed():
+            connect = lowlevel.SM_VMPTX_DATAFEED_CONNECT_PARMS()
+            connect.vmptx = self.vmptx
+            connect.data_source = source.get_datafeed()
+
+            rc = lowlevel.sm_vmptx_datafeed_connect(connect)
+            if rc:
+                raise AculabSpeechError(rc, 'sm_vmptx_datafeed_connect')
+
+            log_switch.debug('%s := %s (datafeed)', self.name, source.name)
+
+            return VMPtxEndpoint(self)
+        else:
+            if not self.tdm:
+                self.tx_tdm_connect()
+            
+            self.tdm.endpoints[0].listen_to(other)
+            
+            # log_switch.debug('%s := %d:%d', self.name, other[0], other[1])
+
+            return VMPtxEndpoint(self)
 
     def config_codec(self, pt, fmt,
                      vad_mode = lowlevel.kSMVMPTxVADModeDisabled,
@@ -565,34 +600,6 @@ class VMPtx(RTPBase):
         if rc:
             raise AculabSpeechError(rc, 'sm_vmptx_config_tones')
 
-    def listen_to(self, other):
-        if hasattr(other, 'get_datafeed'):
-            connect = lowlevel.SM_VMPTX_DATAFEED_CONNECT_PARMS()
-            connect.vmptx = self.vmptx
-            connect.data_source = other.get_datafeed()
-
-            rc = lowlevel.sm_vmptx_datafeed_connect(connect)
-            if rc:
-                raise AculabSpeechError(rc, 'sm_vmptx_datafeed_connect')
-
-            log_switch.debug('%s := %s (datafeed)', self.name, other.name)
-
-            return VMPtxEndpoint(self)
-        else:
-            tdm = TDMrx(other, self.card, self.module)
-            
-            connect = lowlevel.SM_VMPTX_DATAFEED_CONNECT_PARMS()
-            connect.vmptx = self.vmptx
-            connect.data_source = tdm.get_datafeed()
-
-            rc = lowlevel.sm_vmptx_datafeed_connect(connect)
-            if rc:
-                raise AculabSpeechError(rc, 'sm_vmptx_datafeed_connect')
-
-            log_switch.debug('%s := %s', self.name, tdm.name)
-
-            return VMPtxEndpoint(self, tdm)
-
     def tones(self, tones, length = 0.04, interval = 0.1):
         """Send RFC 2833 digits.
 
@@ -671,7 +678,6 @@ class FMPrx(RTPBase):
         self.rtp_port = None
         self.rtcp_port = None
         self.sdp = None
-        self.tdm = None
 
         RTPBase.__init__(self, card, module, mutex, user_data, ts_type)
         
@@ -756,23 +762,6 @@ class FMPrx(RTPBase):
 
             if rc:
                 raise AculabSpeechError(rc, 'sm_fmprx_destroy')
-
-    def tdm_connect(self):
-        """Connect the Receiver to a timeslot on its DSP's timeslot range.
-        This method internally allocates a L{TDMtx} on the module's
-        timeslot range.
-
-        I{See} L{ProsodyTimeslots}.
-
-        I{Used internally}."""
-        self.tdm = Connection(self.module.timeslots)
-
-        ts = self.module.timeslots.allocate(self.ts_type)
-
-        tx = TDMtx(ts, self.card, self.module)
-        tx.listen_to(self)
-
-        self.tdm.add(tx, ts)
 
     def get_datafeed(self):
         """Used internally by the switching protocol."""
@@ -873,23 +862,6 @@ class FMPtx(RTPBase):
             rc = lowlevel.sm_fmptx_destroy(self.fmptx)
             self.fmptx = None
 
-    def tdm_connect(self):
-        """Connect the Tranmitter to a timeslot on its DSP's timeslot range.
-        This method internally allocates a L{TDMtx} on the module's
-        timeslot range.
-
-        I{See} L{ProsodyTimeslots}.
-
-        I{Used internally}."""
-        self.tdm = Connection(self.module.timeslots)
-
-        ts = self.module.timeslots.allocate(self.ts_type)
-
-        rx = TDMrx(ts, self.card, self.module)
-        self.listen_to(rx)
-
-        self.tdm.add(rx, ts)
-
     def get_datafeed(self):
         """Used internally by the switching protocol."""
         return self.datafeed
@@ -913,6 +885,15 @@ class FMPtx(RTPBase):
             raise AculabSpeechError(rc, 'sm_fmptx_config')
 
     def listen_to(self, other):
+        """Listen to a timeslot or a tx instance.
+
+        I{Switching protocol}. Applications should
+        generally use L{switching.connect}.
+        
+        @param source: a tuple (stream, timeslot, [timeslot_type]) or a
+        transmitter instance (L{VMPtx}, L{FMPtx} or L{TDMtx}), which must be on
+        the same module."""
+
         if hasattr(other, 'get_datafeed'):
             connect = lowlevel.SM_FMPTX_DATAFEED_CONNECT_PARMS()
             connect.fmptx = self.fmptx
