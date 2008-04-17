@@ -117,7 +117,7 @@ typedef struct {
    Wrapping them as a int means we lose SWIGs type checking, but if we don't 
    do it, we get (incorrect) memory leak warnings. 
 
-   There might be a better way, but I am not aware of one.
+   There might be a better way, but I am not aware of it.
 */
 %apply int { tSMVMPrxId, tSMVMPtxId, tSMFMPrxId, tSMFMPtxId, 
 			 tSMTDMtxId, tSMTDMrxId, tSMVMPTxToneSetId };
@@ -213,7 +213,7 @@ BLOCKING(sm_t38gw_worker_fn)
 %ignore FORMAT_SOCKADDR_IN;
 
 // Explicitly rename from to _from (from is a Python keyword).
-// Later SWIG versions do this automatically, but at leat 1.3.24 
+// Later SWIG versions do this automatically, but at least 1.3.24 
 // does not do it yet.
 %rename("_from") from;
 

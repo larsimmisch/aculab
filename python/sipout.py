@@ -3,9 +3,9 @@
 # Copyright (C) 2007 Lars Immisch
 
 import sys
+import os
 import logging
 from aculab import defaultLogging, defaultOptions
-from aculab.lowlevel import cvar
 from aculab.speech import SpeechChannel
 from aculab.reactor import SpeechReactor, CallReactor
 from aculab.switching import connect, Connection
@@ -41,25 +41,27 @@ class CallData:
 
         self.other_sdp.intersect(self.our_sdp)
 
-        self.vmptx.configure(self.other_sdp)
+        # We need to do symmtric NAT for the Fritzbox
+        self.vmptx.configure(self.other_sdp, self.vmprx.get_rtp_address())
         self.vmptx.config_tones(False, False)
 
     def connect(self):
-        self.connection = connect((self.vmptx, self.vmprx), self.speech)
-
-        #self.connection = Connection(
-        #    endpoints = [self.vmptx.listen_to(self.speech.get_timeslot()),
-        #                 self.speech.listen_to(self.vmprx.get_timeslot())])
 
         if options.fax:
+            trace = os.path.splitext(options.fax)[0] + '.log'
+            
             # self.speech.tone(23, 1.0)
-            self.speech.faxtx(options.fax, transport=(self.vmptx, self.vmprx))
+            self.speech.faxtx(options.fax, transport=(self.vmptx, self.vmprx),
+                              trace=trace)
         else:
+            self.connection = connect((self.vmptx, self.vmprx), self.speech)
+            
             self.speech.listen_for()
             self.speech.play(options.file_name)
 
     def close(self):
-        self.connection.close()
+        if self.connection:
+            self.connection.close()
         self.speech.close(self.vmprx, self.vmptx)
         # set all resources to None
         self.speech = self.connection = self.call = None

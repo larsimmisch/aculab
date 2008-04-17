@@ -1418,27 +1418,31 @@ class SpeechChannel(Lockable):
 
         self.start(job)
 
-    def faxrx(self, file, subscriber_id = '', transport = (None, None)):
+    def faxrx(self, file, subscriber_id = '', transport = (None, None),
+              trace = None):
         """Receive a FAX.
 
         @param file: The name of a TIFF file that will receive the image.
         @param subscriber_id: The alphanumerical id of the station.
         @param transport: A pair of (vmptx, vmprx) or (fmptx, fmprx) if this
-        FAX is to be received on a RTP connection."""
+        FAX is to be received on a RTP/UDPTL connection.
+        @param trace: File name of a trace file. Default is None"""
 
-        job = FaxRxJob(self, file, subscriber_id, transport)
+        job = FaxRxJob(self, file, subscriber_id, transport, trace)
 
         self.start(job)        
 
-    def faxtx(self, file, subscriber_id = '', transport = (None, None)):
+    def faxtx(self, file, subscriber_id = '', transport = (None, None),
+              trace = None):
         """Transmit a FAX.
 
         @param file: The name of a TIFF file that contains the image to send.
         @param subscriber_id: The alphanumerical id of the station.
-        @param vmp: A pair of (vmptx, vmprx) or (fmptx, fmprx) if this FAX is
-        to be sent on a RTP connection."""
+        @param transport: A pair of (vmptx, vmprx) or (fmptx, fmprx) if this
+        FAX is to be sent on a RTP/UDPTL connection.
+        @param trace: File name of a trace file. Default is None"""
 
-        job = FaxTxJob(self, file, subscriber_id, transport)
+        job = FaxTxJob(self, file, subscriber_id, transport, trace)
 
         self.start(job)        
 

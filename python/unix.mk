@@ -37,7 +37,7 @@ SWIG_DEFINES := -DTiNG_USE_UNDECORATED_NAMES
 C_DEFINES := -g -DNDEBUG -D_REENTRANT -fPIC $(DEFINES)
 
 
-ACULAB_INCLUDE = -I$(DTK)/include -I$(DTK)/TiNG/pubdoc/gen -I$(DTK)/TiNG/apilib -I$(DTK)/TiNG/apilib/POSIX -I$(DTK)/TiNG/include -I$(DTK)/$(FAX)/include -I$(DTK)/$(T38GW)/include
+ACULAB_INCLUDE = -I$(DTK)/include -I$(DTK)/TiNG/pubdoc/gen -I$(DTK)/TiNG/apilib -I$(DTK)/TiNG/apilib/POSIX -I$(DTK)/TiNG/libutil -I$(DTK)/TiNG/include -I$(DTK)/$(FAX)/include -I$(DTK)/$(T38GW)/include
 ACULAB_LIBDIR = -L$(DTK)/lib -L$(DTK)/TiNG/lib
 ACULAB_LIBS = -lacu_cl -lacu_sw -lacu_res -lacu_common -lTiNG 
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# Copyright (C) 2002-2007 Lars Immisch
+# Copyright (C) 2002-2008 Lars Immisch
 
 # Connect a VMPrx/VMPtx pair over IP, and play/detect DTMF on connect
 # Prosody Channels

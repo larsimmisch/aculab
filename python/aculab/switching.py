@@ -126,7 +126,7 @@ class SpeechEndpoint(object):
     def close(self):
         """Disconnect the endpoint."""
         
-        if self.channel:
+        if self.channel and self.channel.channel:
             if self.direction == 'datafeed':
                 connect = lowlevel.SM_CHANNEL_DATAFEED_CONNECT_PARMS()
                 connect.channel = self.channel.channel

@@ -38,7 +38,7 @@ class PlayApp(Glue):
             timer.cancel(self.timer)
 
     def timed_switch(self):
-        self.connection = connect(self.call, self.speech, force_bus=True)
+        self.connection = connect(self.call, self.speech)
         j = self.iter.next()
         if j:
             self.speech.start(j)

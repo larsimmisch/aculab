@@ -38,6 +38,15 @@ def fax_global_data():
 
     return _fax_global_data
 
+
+def modem_name(fax_caps):
+    if fax_caps.v17:
+        return 'V.17'
+    if fax_caps.v29:
+        return 'V.29'
+    if fax_caps.v27ter:
+        return 'V.27ter'
+
 class FaxJob:
     """Base class for L{FaxTxJob} and L{FaxRxJob}."""
 
@@ -91,15 +100,13 @@ class FaxJob:
         session.user_options.max_percent_badlines = 0.10
         session.user_options.max_consec_badlines = 20
         session.user_options.ecm_continue_to_correct = 0
-        session.user_options.drop_speed_on_ctc = 0
-        session.user_options.max_modem_fb = 0
+        session.user_options.drop_speed_on_ctc = 1
+        session.user_options.max_modem_fb = 3
         session.user_options.page_retries = 2
         session.user_options.fax_mode = mode
         session.fax_caps.v27ter = 1
         session.fax_caps.v29 = 1
-        # There is currently no V.17 implementation available from Aculab
-        # Todo: check if still valid
-        session.fax_caps.v17 = 0
+        session.fax_caps.v17 = 1
         # Todo: enable if possible
         session.fax_caps.ECM = 0
         session.fax_caps.MR2D = 1
@@ -116,18 +123,14 @@ class FaxJob:
 
         self.session = session
 
-    def trace_on(self, level = 0x7fffffff):
-        """Enable tracing for the FAX (probably broken)."""
+    def trace_on(self, filename = None, level = 0x7fffffff):
+        """Enable tracing for the FAX."""
         # open logfile for tracing
         rc, self.logfile = lowlevel.bfile()
         if rc:
             raise OSError(rc, 'bfile')
 
-        fname = 'faxin.log'
-        if self.mode == lowlevel.kSMFaxModeTransmitter:
-            fname = 'faxout.log'
-
-        rc = lowlevel.bfopen(self.logfile, fname, 'wtcb')
+        rc = lowlevel.bfopen(self.logfile, filename, 'wtcb')
         if rc:
             raise OSError(rc, 'bfopen')
 
@@ -139,19 +142,30 @@ class FaxJob:
         rc = lowlevel.smfax_trace_on(self.trace)
         if rc:
             raise AculabFAXError(rc, 'smfax_trace_on')
+
+    def trace_off(self):
+        if self.logfile:
+            self.trace = lowlevel.SMFAX_TRACE_PARMS()
+            self.trace.fax_session = self.session
+
+            rc = lowlevel.smfax_trace_off(self.trace)
+            if rc:
+                raise AculabFAXError(rc, 'smfax_trace_off')
+
+            lowlevel.bfile_dtor(self.logfile)
+            self.logfile = None
     
     def __del__(self):
         self.close()
         
     def close(self):
         """Close the FAX job and all open files."""
+
+        self.trace_off()
+
         if self.session:
             lowlevel.smfax_close_session(self.session)
             self.session = None
-
-        if self.logfile:
-            lowlevel.bfile_dtor(self.logfile)
-            self.logfile = None
 
         if self.file:
             lowlevel.actiff_close(self.file)
@@ -176,6 +190,9 @@ class FaxJob:
         log.debug('%s %s(reason=\'%s\', exit_code=\'%s\')',
                   self.channel.name, function, reason,
                   fax_error_names[self.session.exit_error_code])
+        
+        if self.trace:
+            self.trace_off()
 
         self.close()
         channel = self.channel
@@ -191,7 +208,7 @@ class FaxRxJob(FaxJob, threading.Thread):
     """
     
     def __init__(self, channel, file, subscriber_id = '',
-                 transport = (None, None)):
+                 transport = (None, None), trace = None):
         """Prepare to receive a FAX.
         
         @param channel: The Prosody channel to send/receive the FAX on.
@@ -199,6 +216,7 @@ class FaxRxJob(FaxJob, threading.Thread):
         @param subscriber_id: a string containing the alphanumerical subscriber
         id.
         @param transport: a tx/rx pair of VMP, FMP or TDM.
+        @param trace: a filename for Aculab T.30 traces. Default is None.
         """
 
         threading.Thread.__init__(self, name='faxrx ' + channel.name)
@@ -208,6 +226,9 @@ class FaxRxJob(FaxJob, threading.Thread):
         self.file, rc = lowlevel.actiff_write_open(file, None)
         if rc:
             raise OSError(rc, 'actiff_write_open')
+
+        self.tracename = tracename
+
                 
     def run(self):
         """Receive a FAX."""
@@ -224,12 +245,14 @@ class FaxRxJob(FaxJob, threading.Thread):
 
         self.create_session(lowlevel.kSMFaxModeReceiver)
 
-        # self.trace_on()
+        if self.trace:
+            self.trace_on(self.trace)
 
         neg = lowlevel.SMFAX_NEGOTIATE_PARMS()
         neg.fax_session = self.session
         neg.page_props = lowlevel.ACTIFF_PAGE_PROPERTIES()
 
+        # Work around a recent name change in the T.30 library
         try:
             rc = lowlevel.smfax_negotiate(neg)
         except AttributeError:
@@ -240,12 +263,13 @@ class FaxRxJob(FaxJob, threading.Thread):
             return
 
         f = self.session.fax_caps
+        modem = modem_name(f)
         log.debug('%s faxrx negotiated:\n' \
-                  '  local: \'%s\', remote: \'%s\'\n'\
-                  '  %d baud, resolution: %d',
+                  '  remote: \'%s\', local: \'%s\'\n'\
+                  '  %d baud, modem: %s',
                   self.channel.name,
-                  f.remote_id, f.subscriber_id,
-                  f.data_rate, f.polling_mode)
+                  f.remote_id.strip(), f.subscriber_id.strip(),
+                  f.data_rate, modem)
 
         while rc == lowlevel.kSMFaxStateMachineRunning:
             process = lowlevel.SMFAX_PAGE_PROCESS_PARMS()
@@ -253,7 +277,7 @@ class FaxRxJob(FaxJob, threading.Thread):
             process.page_handle = lowlevel.ACTIFF_PAGE_HANDLE()
             rc = lowlevel.smfax_rx_page(process)
 
-            log.debug('%s faxrx page received %s', self.channel.name,
+            log.debug('%s faxrx page received. Status: %s', self.channel.name,
                       fax_error_names[rc])
 
             access = lowlevel.SMFAX_PAGE_ACCESS_PARMS()
@@ -268,7 +292,7 @@ class FaxRxJob(FaxJob, threading.Thread):
                 return
 
             rc2 = lowlevel.smfax_close_page(process.page_handle)
-            if rc2:
+            if rc2 != lowlevel.kSMFaxPageOK:
                 self.stop()
                 self.done(AculabFAXError(rc2, 'smfax_close_page'))
                 return
@@ -285,7 +309,7 @@ class FaxTxJob(FaxJob, threading.Thread):
     the FAX in it."""
     
     def __init__(self, channel, file, subscriber_id = '',
-                 transport = (None, None)):
+                 transport = (None, None), trace = None):
         """Prepare to receive a FAX.
         
         @param channel: The Prosody channel to send/receive the FAX on.
@@ -293,6 +317,7 @@ class FaxTxJob(FaxJob, threading.Thread):
         @param subscriber_id: a string containing the alphanumerical subscriber
         id.
         @param transport: a tx/rx pair of VMP, FMP or TDM.
+        @param trace: a filename for Aculab T.30 traces. Default is None.      
         """
 
         threading.Thread.__init__(self, name='faxtx ' + channel.name)
@@ -302,6 +327,8 @@ class FaxTxJob(FaxJob, threading.Thread):
         self.file, rc = lowlevel.actiff_read_open(file)
         if rc:
             raise OSError(rc, 'actiff_read_open')
+
+        self.trace = trace
 
         # count pages in TIFF file
         self.page_count = 0
@@ -322,7 +349,8 @@ class FaxTxJob(FaxJob, threading.Thread):
 
         self.create_session(lowlevel.kSMFaxModeTransmitter)
 
-        # self.trace_on()
+        if self.trace:
+            self.trace_on(self.trace)
 
         page_props = lowlevel.ACTIFF_PAGE_PROPERTIES()
         rc = lowlevel.actiff_page_properties(self.file, page_props)
@@ -344,12 +372,13 @@ class FaxTxJob(FaxJob, threading.Thread):
             return
 
         f = self.session.fax_caps
+        modem = modem_name(f)
         log.debug('%s faxtx negotiated:\n' \
-                  '  local: \'%s\', remote: \'%s\'\n'\
-                  '  %d baud, resolution: %d',
+                  '  remote: \'%s\', local: \'%s\'\n'\
+                  '  %d baud, modem: %s',
                   self.channel.name,
-                  f.remote_id, f.subscriber_id,
-                  f.data_rate, f.polling_mode)
+                  f.remote_id.strip(), f.subscriber_id.strip(),
+                  f.data_rate, modem)
 
         for index in range(self.page_count):
             access = lowlevel.SMFAX_PAGE_ACCESS_PARMS()
@@ -378,19 +407,28 @@ class FaxTxJob(FaxJob, threading.Thread):
                 process.is_last_page = lowlevel.kSMFaxLastPage
             rc = lowlevel.smfax_tx_page(process)
 
-            log.debug('%s faxtx page %d sent %s', self.channel.name, index + 1,
-                      fax_error_names[rc])
+            if process.is_last_page == lowlevel.kSMFaxLastPage:
+                log.debug('%s faxtx page %d/%d sent (last page). Status: %s',
+                          self.channel.name, index + 1, self.page_count,
+                          fax_error_names[rc])
+            else:
+                log.debug('%s faxtx page %d/%d sent. Status: %s',
+                          self.channel.name, index + 1, self.page_count,
+                          fax_error_names[rc])
             
             rc2 = lowlevel.smfax_close_page(process.page_handle)
-            if rc2:
+            if rc2 != lowlevel.kSMFaxPageOK:
                 self.stop()
                 self.done(AculabFAXError(rc2, 'smfax_close_page'))
                 return
 
+            if rc != lowlevel.kSMFaxStateMachineRunning:
+                break
+
         if rc == lowlevel.kSMFaxStateMachineRunning:
             self.done()
         else:
-            self.done(AculabFAXError(rc, 'FaxRxJob'))
+            self.done(AculabFAXError(rc, 'smfax_tx_page'))
 
 if TiNG_version[0] >= 2:
     class T38GWSession(threading.Thread):
