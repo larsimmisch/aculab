@@ -8,7 +8,7 @@ L{digits <SpeechChannel.digits>} or L{tone <SpeechChannel.tone>}.
 
 Internally, all speech processing functions in this module are represented as
 I{jobs}. A job starts an audio operation, monitors it while it is running,
-and notifies the L{SpeechChannel} when it is finished. Also, a job can
+and notifies the C{Controller} when it is finished. Also, a job can
 stop its operation.
 
 For simple applications, jobs may be ignored, but they are a useful building
@@ -75,7 +75,7 @@ if TiNG_version[0] >= 2:
     tonetype[lowlevel.kSMRecognisedANS] = 'ans'
 
 class PlayJobBase(object):
-    """An Abstract Base Class for playing samples through a L{SpeechChannel}.
+    """An Abstract Base Class for jobs that play PCM data.
 
     Subclasses must implement C{get_data(len)} to fill
     the buffer C{data}. C{get_data(len)} must return the length of the
@@ -250,7 +250,7 @@ class PlayJobBase(object):
 
 
 class PlayJob(PlayJobBase):
-    """A PlayJob plays a file through its L{SpeechChannel}."""
+    """Job to play a file."""
 
     name = 'play'
 
@@ -326,9 +326,9 @@ class PlayJob(PlayJobBase):
         return self.data.read(self.file, length)
 
 class SilenceJob(PlayJobBase):
-    """Play silence on a L{SpeechChannel}.
+    """Job to play silence.
 
-    This isn't really useful, because it is generally better to just
+    This job isn't really useful, because it is generally better to just
     output nothing for silence. I wrote it while I was hunting for subtle
     switching noises.
     """
@@ -369,7 +369,7 @@ class SilenceJob(PlayJobBase):
 
 
 class RecordJob(object):
-    """A RecordJob records a file through its L{SpeechChannel}."""
+    """Job to record a file."""
     
     def __init__(self, channel, f, max_octets = 0,
                  max_elapsed_time = 0.0, max_silence = 0.0,
