@@ -486,9 +486,9 @@ class VMPtx(RTPBase):
             if not self.tdm:
                 self.tx_tdm_connect()
             
-            self.tdm.endpoints[0].listen_to(other)
+            self.tdm.endpoints[0].listen_to(source)
             
-            # log_switch.debug('%s := %d:%d', self.name, other[0], other[1])
+            # log_switch.debug('%s := %d:%d', self.name, source[0], source[1])
 
             return VMPtxEndpoint(self)
 
@@ -547,6 +547,7 @@ class VMPtx(RTPBase):
         @param sdp: An instance of class L{SDP}.
 
         @param source_rtp: the receivers source rtp address (as a tuple)
+        Needed for symmetric RTP.
         @param source_rtcp: the receivers source rtcp address (as a tuple)
         @param vad_mode: voice activity detection mode.
         @param ptime: how much data (in ms) to send per packet per packet.
