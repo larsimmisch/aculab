@@ -287,11 +287,6 @@ class VMPrx(RTPBase):
     def default_sdp(self, configure=False, enable_rfc2833 = True):
         # Create a default SDP
 
-        md = sdp.MediaDescription()
-        md.setLocalPort(self.rtp_port)
-        md.addRtpMap(sdp.PT_PCMA)
-        md.addRtpMap(sdp.PT_PCMU)
-        
         sd = sdp.SDP()
         
         sd.addMediaDescription(self.media_description(enable_rfc2833))
