@@ -11,7 +11,7 @@ from aculab.reactor import SpeechReactor, CallReactor
 from aculab.switching import connect, Connection
 from aculab.sip import SIPHandle
 from aculab.rtp import VMPrx, VMPtx
-from aculab.sdp import SDP
+import aculab.sdp as sdp
 
 class CallData:
     
@@ -29,6 +29,13 @@ class CallData:
 
     def vmprx_ready(self, vmprx):
         self.our_sdp = vmprx.default_sdp()# (enable_rfc2833 = False)
+
+        if options.video:
+            md = sdp.MediaDescription('video 0 RTP/AVP')
+            md.setLocalPort(0)
+            md.addRtpMap(sdp.PT_H263)
+            self.our_sdp.addMediaDescription(md)
+        
         vmprx.configure(self.our_sdp)
         
         self.call.openout(self.number, self.our_sdp)
@@ -37,7 +44,7 @@ class CallData:
     def ev_media(self, call):
         # The call has already received the details for us
         # and that's how we get at the SDP:
-        self.other_sdp = SDP(call.details.media_session.received_media.raw_sdp)
+        self.other_sdp = sdp.SDP(call.details.media_session.received_media.raw_sdp)
 
         self.other_sdp.intersect(self.our_sdp)
 
@@ -51,8 +58,8 @@ class CallData:
             trace = os.path.splitext(options.fax)[0] + '.log'
             
             # self.speech.tone(23, 1.0)
-            self.speech.faxtx(options.fax, transport=(self.vmptx, self.vmprx),
-                              trace=trace)
+            self.speech.faxtx(options.fax, 'sipout.py',
+                              (self.vmptx, self.vmprx), trace)
         else:
             self.connection = connect((self.vmptx, self.vmprx), self.speech)
             
@@ -114,6 +121,9 @@ if __name__ == '__main__':
 
     parser.add_option('-n', '--numcalls', type='int', default=1,
                       help='Process NUMCALLS calls in parallel.')
+
+    parser.add_option('-v', '--video', action='store_true', default=False,
+                      help='Add a video codec (test only).')
 
     options, args = parser.parse_args()
 
