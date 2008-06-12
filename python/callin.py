@@ -62,7 +62,7 @@ if __name__ == '__main__':
     options, args = parser.parse_args()
 
     if options.timeslot is not None and options.numcalls:
-        print parser.print_help()
+        parser.print_help()
         sys.exit(2)
         
     controller = IncomingCallController()
