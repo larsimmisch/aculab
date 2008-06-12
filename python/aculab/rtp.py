@@ -14,7 +14,7 @@ import names
 import sdp
 import socket
 from switching import VMPtxEndpoint, FMPtxEndpoint, TDMrx, TDMtx, Connection
-from reactor import SpeechReactor
+from reactor import SpeechReactor, add_event
 from snapshot import Snapshot
 from error import *
 from util import Lockable, translate_card
@@ -162,18 +162,6 @@ class VMPrx(RTPBase):
 
         self.name = 'vrx-%08x' % self.vmprx
 
-        # get the event
-        evmprx = lowlevel.SM_VMPRX_EVENT_PARMS()
-        evmprx.vmprx = self.vmprx
-
-        rc = lowlevel.sm_vmprx_get_event(evmprx)
-        if rc:
-            raise AculabSpeechError(rc, 'sm_vmprx_get_event')
-
-        self.event_vmprx = evmprx.event
-
-        # log.debug('%s event fd: %d', self.name, self.event_vmprx)
-
         # get the datafeed
         datafeed = lowlevel.SM_VMPRX_DATAFEED_PARMS()
 
@@ -184,7 +172,17 @@ class VMPrx(RTPBase):
 
         self.datafeed = datafeed.datafeed
 
-        self.reactor.add(self.event_vmprx, self.on_vmprx)
+        # get the event
+        evmprx = lowlevel.SM_VMPRX_EVENT_PARMS()
+        evmprx.vmprx = self.vmprx
+
+        # log.debug('%s event fd: %d', self.name, self.event_vmprx)
+
+        rc = lowlevel.sm_vmprx_get_event(evmprx)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_vmprx_get_event')
+
+        self.event_vmprx = add_event(self.reactor, evmprx.event, self.on_vmprx)
         
     def close(self):
         """Stop the receiver."""
@@ -254,7 +252,7 @@ class VMPrx(RTPBase):
                     status.u.ssrc.ssrc, self.user_data)
 
         elif status.status == lowlevel.kSMVMPrxStatusStopped:
-            log.debug('%s vmprx stopped', self.name)
+            # log.debug('%s vmprx stopped (%d)', self.name, self.event_vmprx)
             self.reactor.remove(self.event_vmprx)
             self.event_vmprx = None
             self.datafeed = None
@@ -407,11 +405,7 @@ class VMPtx(RTPBase):
         if rc:
             raise AculabSpeechError(rc, 'sm_vmptx_get_event')
 
-        self.event_vmptx = evmptx.event
-
-        # log.debug('%s event fd: %d', self.name, self.event_vmptx)
-
-        self.reactor.add(self.event_vmptx, self.on_vmptx)
+        self.event_vmptx = add_event(self.reactor, evmptx.event, self.on_vmptx)
 
     def close(self):
         """Stop the transmitter."""
@@ -689,18 +683,6 @@ class FMPrx(RTPBase):
 
         self.name = 'frx-%08x' % self.fmprx
 
-        # get the event
-        efmprx = lowlevel.SM_FMPRX_EVENT_PARMS()
-        efmprx.fmprx = self.fmprx
-
-        rc = lowlevel.sm_fmprx_get_event(efmprx)
-        if rc:
-            raise AculabSpeechError(rc, 'sm_fmprx_get_event')
-
-        self.event_fmprx = efmprx.event
-
-        log.debug('%s event fd: %d', self.name, self.event_fmprx)
-
         # get the datafeed
         datafeed = lowlevel.SM_FMPRX_DATAFEED_PARMS()
 
@@ -711,7 +693,15 @@ class FMPrx(RTPBase):
 
         self.datafeed = datafeed.datafeed
 
-        self.reactor.add(self.event_fmprx, self.on_fmprx)
+        # get the event
+        efmprx = lowlevel.SM_FMPRX_EVENT_PARMS()
+        efmprx.fmprx = self.fmprx
+
+        rc = lowlevel.sm_fmprx_get_event(efmprx)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_fmprx_get_event')
+
+        self.event_fmprx = add_event(self.reactor, efmprx.event, self.on_fmprx)
         
     def close(self):
         """Stop the receiver."""
@@ -819,11 +809,7 @@ class FMPtx(RTPBase):
         if rc:
             raise AculabSpeechError(rc, 'sm_fmptx_get_event')
 
-        self.event_fmptx = efmptx.event
-
-        log.debug('%s event fd: %d', self.name, self.event_fmptx)
-
-        self.reactor.add(self.event_fmptx, self.on_fmptx)
+        self.event_fmptx = add_event(self.reactor, efmptx.event, self.on_fmptx)
 
     def close(self):
         """Stop the transmitter."""

@@ -193,8 +193,6 @@ class SIPHandle(CallHandleBase):
             lowlevel.sip_free_details(self.details)
             self.details = None
         
-        self.reactor.remove(self)
-
         if self.handle:
             disconnect = lowlevel.DISCONNECT_XPARMS()
             disconnect.handle = self.handle
@@ -202,6 +200,9 @@ class SIPHandle(CallHandleBase):
             rc = lowlevel.xcall_release(disconnect)
             if rc:
                 raise AculabError(rc, 'call_release', self.name)
+
+            self.reactor.remove(self)
+            self.handle = None
 
         log.debug('%s release()', self.name)
 

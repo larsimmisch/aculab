@@ -588,8 +588,6 @@ class CallHandle(CallHandleBase):
         int for an Aculab cause value.
         """
 
-        self.reactor.remove(self)
-
         # reset details
         self.details = lowlevel.DETAIL_XPARMS()
 
@@ -607,6 +605,8 @@ class CallHandle(CallHandleBase):
             rc = lowlevel.call_release(xcause)
             if rc:
                 raise AculabError(rc, 'call_release', self.name)
+
+            self.reactor.remove(self)
 
         log.debug('%s release(%d)', self.name, xcause.cause)
 

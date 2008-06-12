@@ -1,6 +1,33 @@
 # Copyright (C) 2002-2007 Lars Immisch
 
-"""Various reactors for Windows and Unix."""
+"""Various reactors for Windows and Unix and utilities for portable event
+handling.
+
+The portable event handling is a bit more convoluted than I'd like, but the
+situation is complicated:
+
+On Windows, C{tSMEventId} is a typedef to C{HANDLE}. On Unix, it is a
+structure with an C{fd} and a C{mode} member.
+
+On Unix, we need the mode when adding the event, so it would be logical to
+always pass C{tSMEventId} instances around and deal with the differences
+in the reactor implementations.
+
+But that doesn't work, because the VMPrx etc. manage their own events, and
+(presumably) delete them as soon as they are stopped, so for this part of
+the code - on Unix - it is only safe to keep a reference to the file
+descriptor.
+
+The following strategy is currently used:
+
+We have L{add_event} and L{remove_event} methods in this module.
+
+L{add_event} returns a handle that can be passed directly to reactor.remove.
+The VMPrx etc. store this value and call reactor.remove() directly.
+
+L{remove_event} takes a C{tSMEventId} as event parameter. This is used
+by the L{SpeechChannel} that is required to manage its own events explicitly.
+"""
 
 import threading
 import select
@@ -14,6 +41,41 @@ if os.name == 'nt':
     import pywintypes
     import win32api
     import win32event
+
+    def add_event(reactor, event, method):
+        """Add an event to a reactor.
+
+        @param reactor: The reactor to add the event to
+        @param event: A C{tSMEventId} structure.
+        @return: a OS dependent value that can be used for reactor.remove()
+        """
+        reactor.add(event, method)
+        return event
+
+    def remove_event(reactor, event):
+        """Remove an event for a reactor.
+
+        @param event: A C{tSMEventId} structure.
+        """
+        reactor.remove(event)
+
+else:
+    def add_event(reactor, event, method):
+        """Add an event to a reactor.
+
+        @param reactor: The reactor to add the event to
+        @param event: A C{tSMEventId} structure
+        @return: a OS dependent value that can ve used for reactor.remove()
+        """        
+        reactor.add(event.fd, event.mode, method)
+        return event.fd
+
+    def remove_event(reactor, event):
+        """Remove an event for a reactor.
+
+        @param event: A C{tSMEventId} structure.
+        """
+        reactor.remove(event.fd)
 
 log = logging.getLogger('reactor')
 log_call = logging.getLogger('call')
@@ -33,6 +95,8 @@ no_state_change_extended_events = [lowlevel.EV_EXT_FACILITY,
                                    lowlevel.EV_EXT_UUS_SERVICE_REQUEST,
                                    lowlevel.EV_EXT_TRANSFER_INFORMATION]
 
+
+# Unused
 def generic_dispatch(controller, method, *args, **kwargs):
     m = getattr(controller, method, None)
     if not m:
@@ -145,7 +209,7 @@ if os.name == 'nt':
         so multiple reactor threads are needed."""
 
         def __init__(self, mutex, handle = None, method = None):
-            """Create a Win32DisptacherThread."""
+            """Create a Win32DispatcherThread."""
             self.queue = []
             self.wakeup = win32event.CreateEvent(None, 0, 0, None)
             self.mutex = mutex
@@ -334,61 +398,49 @@ else: # os.name == 'nt'
             # listen to the read fd of our pipe
             self.poll.register(self.pipe[0], select.POLLIN )
 
-        def add(self, event, method):
+        def add(self, handle, mode, method):
             """Add an event to the reactor.
 
-            @param handle: A C{tSMEventId} structure or something that
-            has an fd and a mode member. The mode should be a bitmask
-            of select.POLLOUT, select.POLLIN, etc.
-            @param method: This will be called when the event is fired.
-
-            This method blocks until I{handle} is added by reactor thread"""
+            @param handle: A file descriptor
+            @param mode: A bitmask of select.POLLOUT, select.POLLIN, etc.
+            @param method: This will be called when the event is fired."""
 
             if not callable(method):
                 raise ValueError('method must be callable')
 
-            handle = event.fd
-
             if threading.currentThread() == self or not self.isAlive():
-                # log.debug('adding fd: %d %s', handle, method.__name__)
+                # log.debug('self adding fd: %d %s', handle, method.__name__)
                 self.handles[handle] = method
-                self.poll.register(handle, event.mode)
+                self.poll.register(handle, mode)
             else:
-                # log.debug('self adding: %d %s', handle, method.__name__)
-                levent = threading.Event()
+                # log.debug('adding fd: %d %s', handle, method.__name__)
                 self.mutex.acquire()
                 self.handles[handle] = method
                 # function 1 is add
-                self.queue.append((1, handle, levent, event.mode))
+                self.queue.append((1, handle, mode))
                 self.mutex.release()
                 self.pipe[1].write('1')
-                levent.wait()
 
-        def remove(self, event):
+        def remove(self, handle):
             """Remove a handle from the reactor.
 
-            @param event: Typically the C{tSMEventId} associated with the
-            event, but any object with an C{fd} attribute will work also.
+            @param handle: A file descriptor.
 
             This method blocks until handle is removed by the reactor thread.
             """
 
-            handle = event.fd
-            
             if threading.currentThread() == self or not self.isAlive():
-                # log.debug('removing fd: %d', handle)
+                # log.debug('self removing fd: %d', handle)
                 del self.handles[handle]
                 self.poll.unregister(handle)
             else:
                 # log.debug('removing fd: %d', handle)
-                levent = threading.Event()
                 self.mutex.acquire()
                 del self.handles[handle]
                 # function 0 is remove
-                self.queue.append((0, handle, levent, None))
+                self.queue.append((0, handle, None))
                 self.mutex.release()
                 self.pipe[1].write('0')
-                levent.wait()
 
         def run(self):
             'Run the reactor.'
@@ -400,7 +452,7 @@ else: # os.name == 'nt'
                             self.pipe[0].read(1)
                             self.mutex.acquire()
                             try:
-                                add, fd, event, mask = self.queue.pop(0)
+                                add, fd, mask = self.queue.pop(0)
                             finally:
                                 self.mutex.release()
                             if add:
@@ -408,8 +460,6 @@ else: # os.name == 'nt'
                             else:
                                 self.poll.unregister(fd)
 
-                            if event:
-                                event.set()
                         else:
                             self.mutex.acquire()
                             try:
@@ -417,8 +467,8 @@ else: # os.name == 'nt'
                             finally:
                                 self.mutex.release()
 
-                            #log.info('event on fd %d %s: %s', a, maskstr(mask),
-                            #         m.__name__)
+                            #log.info('event on fd %d %s: %s', a,
+                            #         maskstr(mask), m.__name__)
 
                             # ignore missing method, it must have been removed
                             if m:
