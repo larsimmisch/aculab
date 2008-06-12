@@ -37,11 +37,10 @@ class Statistics:
 
     def __repr__(self):
         if self.count:
-            return 'min: %.3f max: %.3f average: %.3f count: %d' % \
-                   (self.min, self.max, self.average / self.count, self.count)
+            return 'count: %d min: %.3f max: %.3f avg: %.3f' % \
+                   (self.count, self.min, self.max, self.average / self.count)
         else:
-            return 'min: %.3f max: %.3f average: n/a count: %d' % \
-                   (self.min, self.max, self.count)
+            return 'count: 0 min: n/a max: n/a avg: n/a'
 
 statistics = Statistics()
 
@@ -118,8 +117,6 @@ def read_called_numbers(option, opt, value, parser):
 
 if __name__ == '__main__':
 
-    log = aculab.defaultLogging(logging.DEBUG)
-
     parser = defaultOptions(
         usage='usage: %prog [options] <number>',
         description='Make outgoing PSTN call(s).',
@@ -157,6 +154,13 @@ if __name__ == '__main__':
     if not args and not called:
         parser.print_help()
         sys.exit(2)
+
+    # Only be verbose for two calls or less
+    if options.numcalls <= 2:
+        log = aculab.defaultLogging(logging.DEBUG)
+    else:
+        log = aculab.defaultLogging(logging.INFO)
+
 
     if options.t_ringing or options.t_hangup:
         tt = TimerThread()
