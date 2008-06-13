@@ -108,11 +108,63 @@ def generic_dispatch(controller, method, *args, **kwargs):
     except:
         log.error('error in %s', method, exc_info=1)
 
+def call_dispatch(call, event):
+            
+    if event.state == lowlevel.EV_EXTENDED:
+        ev = ext_event_names[event.extended_state].lower()
+    else:
+        ev = event_names[event.state].lower()
+
+    mutex = getattr(call.user_data, 'mutex', None)
+    if mutex:
+        mutex.acquire()
+
+    handlers = [] # tuple (handle, name, args)
+    handled = 'ignored'
+
+    try:
+        h = getattr(call, ev, None)
+        if h:
+            handlers.append((h, 'call', None))
+        h = getattr(call.controllers[-1], ev, None)
+        if h:
+            handlers.append((h, 'controller',
+                             (call, call.user_data)))
+        h = getattr(call, ev + '_post', None)
+        if h:
+            handlers.append((h, 'post', None))
+
+        # compute description of handlers
+        if handlers:
+            l = [h[1] for h in handlers]
+            handled = ','.join(l)
+
+        log_call.debug('%s %s (%s)', call.name, ev, handled)
+
+        for h, n, args in handlers:
+            if args:
+                h(*args)
+            else:
+                h()
+
+    finally:
+        # set call.last_event and call.last_extended_event
+        if event.state == lowlevel.EV_EXTENDED \
+           and event.extended_state \
+           not in no_state_change_extended_events:
+            call.last_event = lowlevel.EV_EXTENDED
+            call.last_extended_event = event.extended_state
+        elif event.state not in no_state_change_events:
+            call.last_event = event.state
+            call.last_extended_event = None
+
+        if mutex:
+            mutex.release()
+
 class _CallEventReactor:
 
-    def __init__(self, verbose = True):
+    def __init__(self):
         self.calls = {}
-        self.verbose = verbose
 
     # add must only be called from a dispatched event
     # - not from a separate thread
@@ -135,67 +187,15 @@ class _CallEventReactor:
             if rc:
                 raise AculabError(rc, 'call_event')
 
-            handled = ''
-            
             # call the event handlers
             if event.handle:
-                if event.state == lowlevel.EV_EXTENDED:
-                    ev = ext_event_names[event.extended_state].lower()
-                else:
-                    ev = event_names[event.state].lower()
-
                 call = self.calls.get(event.handle, None)
                 if not call:
                     log_call.error('got event %s for nonexisting call 0x%x',
                                    ev, event.handle)
                     continue
                 
-                mutex = getattr(call.user_data, 'mutex', None)
-                if mutex:
-                    mutex.acquire()
-
-                handlers = [] # tuple (handle, name, args)
-                handled = 'ignored'
-
-                try:
-                    h = getattr(call, ev, None)
-                    if h:
-                        handlers.append((h, 'call', None))
-                    h = getattr(call.controllers[-1], ev, None)
-                    if h:
-                        handlers.append((h, 'controller',
-                                         (call, call.user_data)))
-                    h = getattr(call, ev + '_post', None)
-                    if h:
-                        handlers.append((h, 'post', None))
-                    
-                    # compute description of handlers
-                    if handlers:
-                        l = [h[1] for h in handlers]
-                        handled = ','.join(l)
-
-                    log_call.debug('%s %s (%s)', call.name, ev, handled)
-
-                    for h, n, args in handlers:
-                        if args:
-                            h(*args)
-                        else:
-                            h()
-                        
-                finally:
-                    # set call.last_event and call.last_extended_event
-                    if event.state == lowlevel.EV_EXTENDED \
-                       and event.extended_state \
-                       not in no_state_change_extended_events:
-                        call.last_event = lowlevel.EV_EXTENDED
-                        call.last_extended_event = event.extended_state
-                    elif event.state not in no_state_change_events:
-                        call.last_event = event.state
-                        call.last_extended_event = None
-
-                    if mutex:
-                        mutex.release()
-
+                call_dispatch(call, event)
 
 CallReactor = _CallEventReactor()
 

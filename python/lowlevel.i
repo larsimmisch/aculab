@@ -396,6 +396,50 @@ GET_SET_DATA(UUI_XPARMS, MAXUUI_INFO)
 GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 #endif
 
+%extend STATE_XPARMS {
+	PyObject *read(PyObject *fo)
+	{
+		FILE *f;
+		int rc;
+
+		if (!PyFile_Check(fo)) {
+	    	PyErr_SetString(PyExc_TypeError, "Expected a file object");
+			return NULL;
+		}
+
+		f = PyFile_AsFile(fo);
+		rc = fread(self, 1, sizeof(STATE_XPARMS), f);
+		if (rc < 0)
+		{
+			PyErr_SetFromErrno(PyExc_OSError);
+			return NULL;
+		}
+
+		return PyInt_FromLong(rc);
+	}
+
+	PyObject *write(PyObject *fo)
+	{
+		FILE *f;
+		int rc;
+
+		if (!PyFile_Check(fo)) {
+	    	PyErr_SetString(PyExc_TypeError,"Expected a file object");
+			return NULL;
+		}
+		
+		f = PyFile_AsFile(fo);
+		rc = fwrite(self, 1, sizeof(STATE_XPARMS), f);
+		if (rc < 0)
+		{
+			PyErr_SetFromErrno(PyExc_OSError);
+			return NULL;
+		}
+
+		return PyInt_FromLong(rc);
+	}
+}
+
 %extend SM_TS_DATA_PARMS {
     SM_TS_DATA_PARMS(int size = kSMMaxReplayDataBufferSize) {
 		SM_TS_DATA_PARMS *d = 
@@ -470,7 +514,7 @@ GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 			return NULL;
 		}
 
-		return PyInt_FromLong(rc);;
+		return PyInt_FromLong(rc);
 	}
 
 	PyObject *getdata() {
@@ -713,26 +757,6 @@ GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 #endif
 #endif
 
-%define SIZED_STRUCT(name) 
-%extend name {
-    name() {
-		name *v = (name*)calloc(1, sizeof(name));
-		v->size = sizeof(name);
-		return v;
-    }
-	
-	void clear()
-	{
-		memset(self, 0, sizeof(name));
-		self->size = sizeof(name);
-	}
-
-    ~name() {
-		free(self);
-    }
-}
-%enddef
-
 #ifdef HAVE_T38GW
 %extend SM_T38GW_CREATE_JOB_PARMS
 {
@@ -771,6 +795,26 @@ GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
     }
 }
 #endif
+
+%define SIZED_STRUCT(name) 
+%extend name {
+    name() {
+		name *v = (name*)calloc(1, sizeof(name));
+		v->size = sizeof(name);
+		return v;
+    }
+	
+	void clear()
+	{
+		memset(self, 0, sizeof(name));
+		self->size = sizeof(name);
+	}
+
+    ~name() {
+		free(self);
+    }
+}
+%enddef
 
 #ifdef TiNG_USE_V6
 #ifndef SWIGXML
