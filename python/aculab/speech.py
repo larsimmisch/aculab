@@ -27,7 +27,7 @@ import names
 import select
 from util import Lockable, translate_card
 from fax import FaxRxJob, FaxTxJob
-from reactor import SpeechReactor, add_event, remove_event
+from reactor import Reactor, add_event, remove_event
 from switching import (Connection, CTBusEndpoint, SpeechEndpoint, TDMrx, TDMtx,
                        DefaultBus, connect)
 from util import TiNG_version
@@ -855,7 +855,7 @@ class SpeechChannel(Lockable):
         
     def __init__(self, controller, card = 0, module = 0, mutex = None,
                  user_data = None, ts_type = lowlevel.kSMTimeslotTypeALaw,
-                 reactor = SpeechReactor):
+                 reactor = Reactor):
         """Allocate a full duplex Prosody channel.
 
         @param controller: This object will receive notifications about
@@ -886,7 +886,7 @@ class SpeechChannel(Lockable):
         <http://www.aculab.com/support/TiNG/gen/apifn-sm_config_module_switching.html>}.
 
         @param reactor: The reactor used to dispatch controller methods.
-        By default, a single L{SpeechReactor} is used for all channels.
+        By default, a single L{Reactor} is used for all channels.
         """
 
         Lockable.__init__(self, mutex)

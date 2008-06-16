@@ -11,7 +11,7 @@ import lowlevel
 from names import sm_error_names, fax_error_names
 from error import AculabError, AculabFAXError
 from util import translate_card, TiNG_version
-from reactor import SpeechReactor
+from reactor import Reactor
 # The following are only needed for type comparisons
 if TiNG_version[0] >= 2:
     from rtp import VMPtx, VMPrx, FMPtx, FMPrx
@@ -491,7 +491,7 @@ if TiNG_version[0] >= 2:
 
         def __init__(self, controller, local, remote, card = 0, module = 0,
                      modems = None, asn1 = 3, user_data = None,
-                     reactor = SpeechReactor):
+                     reactor = Reactor):
             """Create a T.38 gateway job.
 
             @param controller: a controller that implements ...

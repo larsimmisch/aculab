@@ -32,10 +32,32 @@ by the L{SpeechChannel} that is required to manage its own events explicitly.
 import threading
 import select
 import os
-import lowlevel
 import logging
-from util import EventQueue
-from names import event_names
+# local imports
+import lowlevel
+from util import curry, create_pipe
+from names import event_name
+from error import AculabError
+
+
+log = logging.getLogger('reactor')
+log_call = logging.getLogger('call')
+log_speech = logging.getLogger('speech')
+
+# These events are not set in call.last_event because they don't
+# change the state of the call as far as we are concerned
+# They are delivered to the controller, of course
+no_state_change_events = [lowlevel.EV_CALL_CHARGE,
+                          lowlevel.EV_CHARGE_INT,
+                          lowlevel.EV_DETAILS]
+
+no_state_change_extended_events = [lowlevel.EV_EXT_FACILITY,
+                                   lowlevel.EV_EXT_UUI_PENDING,
+                                   lowlevel.EV_EXT_UUI_CONGESTED,
+                                   lowlevel.EV_EXT_UUI_UNCONGESTED,
+                                   lowlevel.EV_EXT_UUS_SERVICE_REQUEST,
+                                   lowlevel.EV_EXT_TRANSFER_INFORMATION]
+
 
 if os.name == 'nt':
     import pywintypes
@@ -77,27 +99,102 @@ else:
         """
         reactor.remove(event.fd)
 
-log = logging.getLogger('reactor')
-log_call = logging.getLogger('call')
-log_speech = logging.getLogger('speech')
+class CallEventThread(threading.Thread):
+    """This is a helper thread for call events on v5 drivers.
 
-# These events are not set in call.last_event because they don't
-# change the state of the call as far as we are concerned
-# They are delivered to the controller, of course
-no_state_change_events = [lowlevel.EV_CALL_CHARGE,
-                          lowlevel.EV_CHARGE_INT,
-                          lowlevel.EV_DETAILS]
+    On v5, we cannot use the standard reactor for call events, but we'd
+    like to have all callbacks coming from the same thread, because this
+    requires no locking.
+    
+    We use this thread to get events for all call handles and send
+    them to the dispatcher through a pipe.
+    """
 
-no_state_change_extended_events = [lowlevel.EV_EXT_FACILITY,
-                                   lowlevel.EV_EXT_UUI_PENDING,
-                                   lowlevel.EV_EXT_UUI_CONGESTED,
-                                   lowlevel.EV_EXT_UUI_UNCONGESTED,
-                                   lowlevel.EV_EXT_UUS_SERVICE_REQUEST,
-                                   lowlevel.EV_EXT_TRANSFER_INFORMATION]
+    def __init__(self):
+        self.calls = {}
+        self.pipes = {}
+        self.mutex = threading.Lock()
+        threading.Thread.__init__(self)
 
+    def add(self, reactor, call):
+        self.mutex.acquire()
+        try:
+            self.calls[call.handle] = (call, reactor)
+            # If the pipe doesn't exist, create and install it
+            pipe = self.pipes.get(call, None)
+            if pipe is None:
+                pipe = create_pipe()
+                self.pipes[reactor] = pipe
+                reactor.add(pipe[0].fileno(), select.POLLIN, 
+                            curry(self.on_event, pipe[0]))
+
+        finally:
+            self.mutex.release()
+
+    def remove(self, reactor, call):
+        # Todo: clean up pipes to the reactor
+        self.mutex.acquire()
+        try:
+            del self.calls[call.handle]
+        finally:
+            self.mutex.release()
+
+    def on_event(self, pipe):
+        event = lowlevel.STATE_XPARMS()
+
+        event.read(pipe)
+        
+        # log_call.debug('got event %s for 0x%x on %s',
+        #                event_name(event), event.handle, pipe)
+        
+        self.mutex.acquire()
+        call, reactor = self.calls.get(event.handle, (None, None))
+        if not call:
+            self.mutex.release()
+            log_call.error('got event %s for nonexisting call 0x%x',
+                           event_name(event), event.handle)    
+            return
+        
+        self.mutex.release()
+        call_dispatch(call, event)
+
+    def process(self, event):
+        self.mutex.acquire()
+        call, reactor = self.calls.get(event.handle, (None, None))
+        if not call:
+            self.mutex.release()
+            log_call.error('got event %s for nonexisting call 0x%x',
+                           event_name(event), event.handle)
+            
+            return
+        
+        # Get the pipe to the reactor
+        pipe = self.pipes.get(reactor, None)
+        self.mutex.release()
+
+        # log_call.debug('sending %s', event_name(event))
+        # Write the event to the pipe
+        event.write(pipe[1])
+
+    def run(self):
+        event = lowlevel.STATE_XPARMS()
+        
+        while True:
+            event.handle = 0
+            event.timeout = 200
+
+            rc = lowlevel.call_event(event)
+            if rc:
+                raise AculabError(rc, 'call_event')
+
+            # process the event
+            if event.handle:
+                self.process(event)
+
+_call_event_thread = None
 
 # Unused
-def generic_dispatch(controller, method, *args, **kwargs):
+def dispatch(controller, method, *args, **kwargs):
     m = getattr(controller, method, None)
     if not m:
         log.warn('%s not implemented on %s', method, controller)
@@ -109,17 +206,14 @@ def generic_dispatch(controller, method, *args, **kwargs):
         log.error('error in %s', method, exc_info=1)
 
 def call_dispatch(call, event):
-            
-    if event.state == lowlevel.EV_EXTENDED:
-        ev = ext_event_names[event.extended_state].lower()
-    else:
-        ev = event_names[event.state].lower()
+
+    ev = event_name(event).lower()
 
     mutex = getattr(call.user_data, 'mutex', None)
     if mutex:
         mutex.acquire()
 
-    handlers = [] # tuple (handle, name, args)
+    handlers = [] # list of tuples (handle, name, args)
     handled = 'ignored'
 
     try:
@@ -161,49 +255,61 @@ def call_dispatch(call, event):
         if mutex:
             mutex.release()
 
-class _CallEventReactor:
+def call_on_event(call):
+    event = lowlevel.STATE_XPARMS()
+    
+    event.handle = call.handle
+    rc = lowlevel.call_event(event)
+    if rc:
+        raise AculabError(rc, 'call_event')
 
-    def __init__(self):
-        self.calls = {}
+    call_dispatch(call, event)
+    
+def add_call_event(reactor, call):
+    """Add a call event to the reactor."""
+    
+    if lowlevel.cc_version < 6:
+        global _call_event_thread
+        if not _call_event_thread:
+            log_call.debug("starting V5 call event helper thread")
+            _call_event_thread = CallEventThread()
+            _call_event_thread.setDaemon(1)
+            _call_event_thread.start()
 
-    # add must only be called from a dispatched event
-    # - not from a separate thread
-    def add(self, call):
-        self.calls[call.handle] = call
+            _call_event_thread.add(reactor, call)
 
-    # remove must only be called from a dispatched event
-    # - not from a separate thread
-    def remove(self, call):
-        del self.calls[call.handle]
+            return call.handle
+    else:
+        chwo = lowlevel.CALL_HANDLE_WAIT_OBJECT_PARMS()
+        chwo.handle = call.handle
 
-    def run(self):
-        event = lowlevel.STATE_XPARMS()
-        
-        while True:
-            event.handle = 0
-            event.timeout = 200
+        rc = lowlevel.call_get_handle_event_wait_object(chwo)
+        if rc:
+            raise AculabError(rc, 'call_get_handle_event_wait_object')
 
-            rc = lowlevel.call_event(event)
-            if rc:
-                raise AculabError(rc, 'call_event')
+        # This is a bit nasty - we set an attribute on call
+        call.event = chwo.wait_object.fileno()
 
-            # call the event handlers
-            if event.handle:
-                call = self.calls.get(event.handle, None)
-                if not call:
-                    log_call.error('got event %s for nonexisting call 0x%x',
-                                   ev, event.handle)
-                    continue
-                
-                call_dispatch(call, event)
+        # Note the curry
+        reactor.add(call.event, chwo.wait_object.mode(),
+                    curry(call_on_event, call))
 
-CallReactor = _CallEventReactor()
+        return call.event
+
+def remove_call_event(reactor, call):
+    if lowlevel.cc_version < 6:
+        global _call_event_thread
+        if _call_event_thread:
+            _call_event_thread.remove(call)
+    else:
+        reactor.remove(call.event)
+        call.event = None
 
 if os.name == 'nt':
 
     # this class is only needed on Windows
     class Win32ReactorThread(threading.Thread):
-        """Helper thread for Win32SpeechEventReactor.
+        """Helper thread for Win32Reactor.
 
         WaitForMultipleObjects is limited to 64 objects,
         so multiple reactor threads are needed."""
@@ -279,7 +385,7 @@ if os.name == 'nt':
                         log.error('error in Win32ReactorThread main loop',
                               exc_info=1)
 
-    class Win32SpeechEventReactor(object):
+    class Win32Reactor(object):
         """Prosody Event reactor for Windows.
 
         Manages multiple reactor threads if more than 64 event handles are used.
@@ -354,7 +460,7 @@ if os.name == 'nt':
                 d.start()
             self.reactors[0].run()
 
-    SpeechReactor = Win32SpeechEventReactor()
+    Reactor = Win32Reactor()
 
 else: # os.name == 'nt'
     
@@ -375,7 +481,7 @@ else: # os.name == 'nt'
 
         return '|'.join(l)
 
-    class PollSpeechEventReactor(threading.Thread):
+    class PollReactor(threading.Thread):
         """Prosody Event reactor for Unix systems with poll(), most notably
         Linux.
 
@@ -389,19 +495,17 @@ else: # os.name == 'nt'
             self.queue = []
             
             # create a pipe to add/remove fds
-            pfds = os.pipe()
-            self.pipe = (os.fdopen(pfds[0], 'rb', 0),
-                         os.fdopen(pfds[1], 'wb', 0))
+            self.pipe = create_pipe()
             self.setDaemon(1)
             self.poll = select.poll()
 
             # listen to the read fd of our pipe
-            self.poll.register(self.pipe[0], select.POLLIN )
+            self.poll.register(self.pipe[0], select.POLLIN)
 
         def add(self, handle, mode, method):
             """Add an event to the reactor.
 
-            @param handle: A file descriptor
+            @param handle: A file descriptor, B{not} a File object.
             @param mode: A bitmask of select.POLLOUT, select.POLLIN, etc.
             @param method: This will be called when the event is fired."""
 
@@ -467,7 +571,7 @@ else: # os.name == 'nt'
                             finally:
                                 self.mutex.release()
 
-                            #log.info('event on fd %d %s: %s', a,
+                            # log.info('event on fd %d %s: %s', a,
                             #         maskstr(mask), m.__name__)
 
                             # ignore missing method, it must have been removed
@@ -479,11 +583,11 @@ else: # os.name == 'nt'
                 except KeyboardInterrupt:
                     return
                 except:
-                    log.error('error in PollSpeechEventReactor main loop',
+                    log.error('error in PollReactor main loop',
                               exc_info=1)
                     raise
 
-    SpeechReactor = PollSpeechEventReactor()
+    Reactor = PollReactor()
 
 class PortEventDispatcher:
     def __init__(self, port, controller, user_data):

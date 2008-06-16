@@ -59,3 +59,10 @@ del _error_pattern
 del _fax_error_pattern
 del _vmptx_status_pattern
 del _vmprx_status_pattern
+
+def event_name(event):
+    if event.state == lowlevel.EV_EXTENDED:
+        return ext_event_names[event.extended_state]
+    else:
+        return event_names[event.state]
+

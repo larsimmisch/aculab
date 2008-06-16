@@ -11,7 +11,7 @@ import aculab
 from aculab.error import AculabError
 from aculab.callcontrol import Call
 from aculab.speech import SpeechChannel, PlayJob, RecordJob, Glue
-from aculab.reactor import CallReactor, SpeechReactor
+from aculab.reactor import Reactor
 from aculab.switching import DefaultBus, connect
 from aculab.timer import TimerThread
 import aculab.lowlevel as lowlevel
@@ -378,7 +378,6 @@ if __name__ == '__main__':
 
         timer = TimerThread()
         timer.start()
-        SpeechReactor.start()
-        CallReactor.run()
+        Reactor.run()
     except:
         log.error('answering machine exception', exc_info=1)

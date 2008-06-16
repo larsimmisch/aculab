@@ -7,7 +7,7 @@ import os
 import logging
 from aculab import defaultLogging, defaultOptions
 from aculab.speech import SpeechChannel
-from aculab.reactor import SpeechReactor, CallReactor
+from aculab.reactor import Reactor
 from aculab.switching import connect, Connection
 from aculab.sip import SIPHandle
 from aculab.rtp import VMPrx, VMPtx
@@ -137,7 +137,6 @@ if __name__ == '__main__':
         CallData(controller, args[0])
 
     try:
-        SpeechReactor.start()
-        CallReactor.run()
+        Reactor.run()
     except StopIteration:
         pass

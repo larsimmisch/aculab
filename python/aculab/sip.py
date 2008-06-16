@@ -10,7 +10,7 @@ from switching import Connection, CTBusEndpoint, NetEndpoint, DefaultBus
 from error import AculabError
 from names import event_names
 from callcontrol import CallHandleBase
-from reactor import CallReactor
+from reactor import Reactor, add_call_event, remove_call_event
 from snapshot import Snapshot
 
 log = logging.getLogger('sip')
@@ -24,7 +24,7 @@ class SIPHandle(CallHandleBase):
     Logging: output from a SIPHandle is prefixed with C{sip-}"""
 
     def __init__(self, controller, user_data = None,
-                 reactor = CallReactor):
+                 reactor = Reactor):
 
         sip_port = Snapshot().sip.port_id
         if sip_port is None:
@@ -58,7 +58,7 @@ class SIPHandle(CallHandleBase):
         self.handle = inparms.handle
         self.name = 'sip-%08x' % self.handle
 
-        self.reactor.add(self)
+        add_call_event(self.reactor, self)
 
         log.debug('%s openin()', self.name)
 
@@ -103,7 +103,7 @@ class SIPHandle(CallHandleBase):
         self.handle = outparms.handle
         self.name = 'sip-%08x' % self.handle
 
-        self.reactor.add(self)
+        add_call_event(self.reactor, self)
 
         log.debug('%s openout(%s, %s)', self.name, destination_address,
                   originating_address)
@@ -201,7 +201,7 @@ class SIPHandle(CallHandleBase):
             if rc:
                 raise AculabError(rc, 'call_release', self.name)
 
-            self.reactor.remove(self)
+            remove_call_event(self.reactor, self)
             self.handle = None
 
         log.debug('%s release()', self.name)
@@ -249,7 +249,7 @@ class SIPCall(SIPHandle):
     creation."""
 
     def __init__(self, controller, user_data = None,
-                 reactor = CallReactor):
+                 reactor = Reactor):
         
         SIPHandle.__init__(self, controller, user_data, reactor)
 

@@ -14,7 +14,7 @@ import names
 import sdp
 import socket
 from switching import VMPtxEndpoint, FMPtxEndpoint, TDMrx, TDMtx, Connection
-from reactor import SpeechReactor, add_event
+from reactor import Reactor, add_event
 from snapshot import Snapshot
 from error import *
 from util import Lockable, translate_card
@@ -125,7 +125,7 @@ class VMPrx(RTPBase):
 
     def __init__(self, controller, card = 0, module = 0, mutex = None,
                  user_data = None, ts_type = lowlevel.kSMTimeslotTypeALaw,
-                 reactor = SpeechReactor):
+                 reactor = Reactor):
         """Allocate an RTP receiver, configure alaw/mulaw and RFC 2833 codecs
         and add the event to the reactor.
 
@@ -377,7 +377,7 @@ class VMPtx(RTPBase):
         
     def __init__(self, controller, card = 0, module = 0, mutex = None,
                  user_data = None, ts_type = lowlevel.kSMTimeslotTypeALaw,
-                 reactor = SpeechReactor):
+                 reactor = Reactor):
 
         self.controller = controller
         self.reactor = reactor
@@ -616,7 +616,7 @@ class VMP(RTPBase):
 
     def __init__(self, controller, card = 0, module = 0, mutex = None,
                  user_data = None, ts_type = lowlevel.kSMTimeslotTypeALaw,
-                 reactor = SpeechReactor):
+                 reactor = Reactor):
 
         self.tx = self.rx = None
         self.tx = VMPtx(controller, card, module, mutex, user_data, ts_type,
@@ -647,7 +647,7 @@ class FMPrx(RTPBase):
 
     def __init__(self, controller, card = 0, module = 0, mutex = None,
                  user_data = None, ts_type = lowlevel.kSMTimeslotTypeData,
-                 reactor = SpeechReactor):
+                 reactor = Reactor):
         """Allocate an RTP FAX receiver, and add the event to the reactor.
 
         Note: the FMPrx is not ready to use until it has called 'fmprx_ready'
@@ -781,7 +781,7 @@ class FMPtx(RTPBase):
 
     def __init__(self, controller, card = 0, module = 0, mutex = None,
                  user_data = None, ts_type = lowlevel.kSMTimeslotTypeData,
-                 reactor = SpeechReactor):
+                 reactor = Reactor):
 
         self.controller = controller
         self.reactor = reactor

@@ -13,7 +13,7 @@ import aculab.lowlevel as lowlevel
 from aculab.error import AculabError
 from aculab.snapshot import Snapshot
 from aculab.speech import SpeechChannel, DCReadJob
-from aculab.reactor import SpeechReactor
+from aculab.reactor import Reactor
 from aculab.switching import connect
 
 
@@ -126,4 +126,4 @@ if __name__ == '__main__':
 
     m.start()
     
-    SpeechReactor.run()
+    Reactor.run()

@@ -7,7 +7,7 @@ import logging
 import aculab
 from aculab.error import AculabError
 from aculab.callcontrol import *
-from aculab.reactor import CallReactor
+from aculab.reactor import Reactor
 import aculab.lowlevel as ll
 
 def hex_string(s):
@@ -72,7 +72,7 @@ if __name__ == '__main__':
                  timeslot=options.timeslot)
 
     try:
-        CallReactor.run()
+        Reactor.run()
     except StopIteration:
         pass
     

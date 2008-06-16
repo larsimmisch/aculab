@@ -11,7 +11,7 @@ from aculab.error import AculabError
 from aculab.callcontrol import *
 from aculab.switching import MVIP
 from aculab.names import event_names
-from aculab.reactor import CallReactor
+from aculab.reactor import Reactor
 import aculab.lowlevel as lowlevel
 
 mvip = MVIP()
@@ -205,4 +205,4 @@ if __name__ == '__main__':
     calls += [Call(controller, None, port=8, timeslot=t) for t in e1_ts]
     calls += [Call(controller, None, port=9, timeslot=t) for t in e1_ts]
     
-    CallReactor.run()
+    Reactor.run()

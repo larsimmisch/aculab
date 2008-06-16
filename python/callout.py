@@ -8,7 +8,7 @@ import time
 import random
 from aculab import defaultLogging, defaultOptions
 from aculab.error import AculabError
-from aculab.reactor import CallReactor
+from aculab.reactor import Reactor
 from aculab.callcontrol import *
 from aculab.timer import *
 
@@ -196,7 +196,7 @@ if __name__ == '__main__':
 ##                        lowlevel.CONTROL_LAST_INFO_SETUP, fd)
 
     try:
-        CallReactor.run()
+        Reactor.run()
     except KeyboardInterrupt:
         log.info(statistics)
     except StopIteration:

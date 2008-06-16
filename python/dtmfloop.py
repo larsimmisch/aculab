@@ -8,7 +8,7 @@ import aculab.lowlevel as lowlevel
 from aculab import defaultLogging
 from aculab.error import AculabError
 from aculab.speech import SpeechChannel
-from aculab.reactor import SpeechReactor
+from aculab.reactor import Reactor
 from aculab.switching import connect
 
 class DTMFLoopController:
@@ -76,4 +76,4 @@ if __name__ == '__main__':
     else:
         channels[1].digits('0123456789*#')
 
-    SpeechReactor.run()
+    Reactor.run()

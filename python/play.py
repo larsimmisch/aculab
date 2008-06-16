@@ -12,7 +12,7 @@ from aculab.speech import SpeechChannel, PlayJob, Glue
 from aculab.switching import DefaultBus, connect
 from aculab.timer import TimerThread
 from aculab.snapshot import Snapshot
-from aculab.reactor import CallReactor, SpeechReactor
+from aculab.reactor import Reactor
 import aculab.lowlevel as lowlevel
 
 class PlayApp(Glue):
@@ -131,8 +131,7 @@ if __name__ == '__main__':
 
         timer = TimerThread()
         timer.start()
-        SpeechReactor.start()
-        CallReactor.run()
+        Reactor.run()
     except StopIteration:
         pass
     except:

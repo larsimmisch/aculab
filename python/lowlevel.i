@@ -396,6 +396,22 @@ GET_SET_DATA(UUI_XPARMS, MAXUUI_INFO)
 GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 #endif
 
+#ifdef TiNG_USE_V6
+#ifndef WIN32
+%extend ACU_WAIT_OBJECT {
+	PyObject *fileno()
+	{
+		return PyInt_FromLong(self->event_pfd.fd);
+	}
+
+	PyObject *mode()
+	{
+		return PyInt_FromLong(self->event_pfd.events);
+	}
+}
+#endif
+#endif
+
 %extend STATE_XPARMS {
 	PyObject *read(PyObject *fo)
 	{
@@ -412,6 +428,13 @@ GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 		if (rc < 0)
 		{
 			PyErr_SetFromErrno(PyExc_OSError);
+			return NULL;
+		}
+
+		if (rc != sizeof(STATE_XPARMS))
+		{
+	    	PyErr_Format(PyExc_RuntimeError, "short read on event (%d of %d)", 
+						 rc, sizeof(STATE_XPARMS));
 			return NULL;
 		}
 

@@ -12,7 +12,7 @@ import aculab
 from aculab.error import AculabError
 from aculab.snapshot import Snapshot
 from aculab.speech import SpeechChannel, Glue
-from aculab.reactor import SpeechReactor
+from aculab.reactor import Reactor
 from aculab.switching import DefaultBus
 
 class RecordController:
@@ -73,4 +73,4 @@ if __name__ == '__main__':
 
         channel.record(f)
     
-    SpeechReactor.run()
+    Reactor.run()

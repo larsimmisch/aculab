@@ -3,7 +3,7 @@
 import sys
 import getopt
 from aculab.error import AculabError
-from aculab.reactor import CallReactor
+from aculab.reactor import Reactor
 from aculab.callcontrol import *
 from aculab.lowlevel import *
 
@@ -48,7 +48,7 @@ if __name__ == '__main__':
     if not len(args):
         usage()
 
-    c = CallHandle(controller, CallReactor, port=port)
+    c = CallHandle(controller, port=port)
     openout(c, args[0])
     
-    CallReactor.run()
+    Reactor.run()

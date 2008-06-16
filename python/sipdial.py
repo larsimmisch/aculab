@@ -12,7 +12,7 @@ import sys
 import logging
 from aculab import defaultLogging, defaultOptions
 from aculab.speech import SpeechChannel
-from aculab.reactor import SpeechReactor, CallReactor
+from aculab.reactor import Reactor
 from aculab.callcontrol import CallHandle
 from aculab.switching import connect
 from aculab.sip import SIPCall
@@ -120,6 +120,5 @@ if __name__ == '__main__':
     for i in range(options.numcalls):
         c = SIPCall(controller)
 
-    SpeechReactor.start()
-    CallReactor.run()
+    Reactor.run()
 

@@ -11,7 +11,7 @@ import aculab
 from aculab.error import AculabError
 from aculab.speech import SpeechChannel
 from aculab.rtp import VMPtx, VMPrx
-from aculab.reactor import SpeechReactor
+from aculab.reactor import Reactor
 from aculab.switching import connect
 
 class RTPLoop:
@@ -96,4 +96,4 @@ if __name__ == '__main__':
     controller = RTPLoopController()
     loop = RTPLoop(controller, options.card, options.module)
 
-    SpeechReactor.run()
+    Reactor.run()

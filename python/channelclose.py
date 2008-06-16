@@ -6,12 +6,12 @@ import time
 from aculab.error import AculabError
 from aculab.callcontrol import Call
 from aculab.speech import SpeechChannel
-from aculab.reactor import CallReactor, SpeechReactor
+from aculab.reactor import Reactor
 
-SpeechReactor.start()
+Reactor.start()
 
 for i in range(20):
-    speech = SpeechChannel(controller, 0)
+    speech = SpeechChannel(None, 0)
     time.sleep(0.1)
     speech.close()
     speech = None

@@ -7,7 +7,7 @@ import logging
 from aculab import defaultLogging, defaultOptions
 from aculab.callcontrol import Call
 from aculab.speech import SpeechChannel
-from aculab.reactor import SpeechReactor, CallReactor
+from aculab.reactor import Reactor
 from aculab.switching import connect
 from aculab.sip import SIPCall, SIPHandle
 from aculab.rtp import VMPrx, VMPtx, FMPrx, FMPtx
@@ -223,6 +223,5 @@ if __name__ == '__main__':
     # We need a T38GWSession. It should be good for about 6 concurrent calls.
     T38Session = T38GWSession()
     T38Session.start()
-    # Start the usual reactors
-    SpeechReactor.start()
-    CallReactor.run()
+    # Start the usual reactor
+    Reactor.run()

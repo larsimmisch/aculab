@@ -13,7 +13,7 @@ from aculab.error import AculabError
 from aculab.snapshot import Snapshot
 from aculab.callcontrol import Call
 from aculab.speech import SpeechChannel, Glue
-from aculab.reactor import CallReactor, SpeechReactor
+from aculab.reactor import Reactor
 from aculab.switching import DefaultBus
 
 class IncomingCallController:
@@ -65,5 +65,4 @@ if __name__ == '__main__':
 
     call = Call(controller, card=options.card, port=options.port)
 
-    SpeechReactor.start()
-    CallReactor.run()
+    Reactor.run()

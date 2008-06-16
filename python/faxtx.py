@@ -13,7 +13,7 @@ from aculab.error import AculabError
 from aculab.snapshot import Snapshot
 from aculab.callcontrol import Call
 from aculab.speech import SpeechChannel, Glue
-from aculab.reactor import CallReactor, SpeechReactor
+from aculab.reactor import Reactor
 from aculab.switching import DefaultBus
 
 class OutgoingCallController:
@@ -62,7 +62,6 @@ if __name__ == '__main__':
     call.openout(number, True)
 
     try:
-        SpeechReactor.start()
-        CallReactor.run()
+        Reactor.run()
     except StopIteration:
         pass

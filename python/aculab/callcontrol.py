@@ -15,7 +15,7 @@ import getopt
 import lowlevel
 import aculab
 import logging
-from reactor import CallReactor
+from reactor import Reactor, add_call_event, remove_call_event
 from switching import Connection, CTBusEndpoint, NetEndpoint, DefaultBus
 from error import AculabError
 
@@ -39,7 +39,7 @@ class CallHandleBase:
     """
 
     def __init__(self, controller, user_data = None, port = 0,
-                 reactor = CallReactor):
+                 reactor = Reactor):
         """Initialise the controller stack and common attributes."""
 
         self.user_data = user_data
@@ -80,7 +80,7 @@ class CallHandle(CallHandleBase):
     Logging: output from a CallHandle is prefixed with C{cc-}"""
 
     def __init__(self, controller, user_data = None, card = 0, port = 0,
-                 timeslot = None, ts_type = None, reactor = CallReactor):
+                 timeslot = None, ts_type = None, reactor = Reactor):
         """Initialise the CallHandle, guess the timeslot type and determine
         the switch card to use with this handle."""
 
@@ -165,7 +165,7 @@ class CallHandle(CallHandleBase):
         self.handle = inparms.handle
         self.name = 'cc-%04x' % self.handle
 
-        self.reactor.add(self)
+        add_call_event(self.reactor, self)
 
         log.debug('%s openin()', self.name)
 
@@ -245,7 +245,7 @@ class CallHandle(CallHandleBase):
         self.handle = outparms.handle
         self.name = 'cc-%04x' % self.handle
 
-        self.reactor.add(self)
+        add_call_event(self.reactor, self)
 
         log.debug('%s openout(%s, %d, %s)', self.name, destination_address,
                   sending_complete, originating_address)
@@ -326,7 +326,7 @@ class CallHandle(CallHandleBase):
         self.handle = outparms.handle
         self.name = 'cc-%04x' % self.handle
 
-        self.reactor.add(self)
+        add_call_event(self.reactor, self)
 
         log.debug('%s enquiry(%s, %d, %s)', self.name, destination_address,
                   sending_complete, originating_address)
@@ -606,7 +606,7 @@ class CallHandle(CallHandleBase):
             if rc:
                 raise AculabError(rc, 'call_release', self.name)
 
-            self.reactor.remove(self)
+            remove_call_event(self.reactor, self)
 
         log.debug('%s release(%d)', self.name, xcause.cause)
 
@@ -693,7 +693,7 @@ class Call(CallHandle):
     creation."""
 
     def __init__(self, controller, user_data = None, card = 0, port = 0,
-                 timeslot = -1, ts_type = None, reactor = CallReactor):
+                 timeslot = -1, ts_type = None, reactor = Reactor):
         """Create a L{CallHandle} and open it for incoming calls.
         """
         

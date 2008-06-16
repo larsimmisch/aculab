@@ -4,7 +4,7 @@
 
 import sys
 from aculab.error import AculabError
-from aculab.reactor import CallReactor
+from aculab.reactor import Reactor
 from aculab.lowlevel import *
 from aculab.callcontrol import *
 
@@ -38,4 +38,4 @@ if __name__ == '__main__':
                            port=options.port, timeslot=-1)
             c.openin(cnf=lowlevel.CNF_TSVIRTUAL)
 
-    CallReactor.run()
+    Reactor.run()

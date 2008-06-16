@@ -20,6 +20,12 @@ def swig_value(s):
 
     return s            
 
+def create_pipe():
+    """Create a pipe and return a tuple of two file objects."""
+    pfds = os.pipe()
+    return (os.fdopen(pfds[0], 'rb', 0),
+            os.fdopen(pfds[1], 'wb', 0))
+
 def translate_card(card, module):
     if TiNG_version[0] < 2:
         return card, module
@@ -37,6 +43,24 @@ def translate_card(card, module):
         m = module
 
     return c, m
+
+class curry:
+    """Bind arguments to a function."""
+    
+    def __init__(self, fun, *args, **kwargs):
+        self.fun = fun
+        self.pending = args[:]
+        self.kwargs = kwargs.copy()
+        self.__name__ = 'curry(%s, %s, %s)' % (fun.__name__, args, kwargs)
+
+    def __call__(self, *args, **kwargs):
+        if kwargs and self.kwargs:
+            kw = self.kwargs.copy()
+            kw.update(kwargs)
+        else:
+            kw = kwargs or self.kwargs
+
+        return self.fun(*(self.pending + args), **kw)
 
 class OrderedDict(dict):
     """A UserDict that preserves insert order whenever possible."""
