@@ -42,7 +42,6 @@ from error import AculabError
 
 log = logging.getLogger('reactor')
 log_call = logging.getLogger('call')
-log_speech = logging.getLogger('speech')
 
 # These events are not set in call.last_event because they don't
 # change the state of the call as far as we are concerned
@@ -102,17 +101,26 @@ else:
 class CallEventThread(threading.Thread):
     """This is a helper thread for call events on v5 drivers.
 
-    On v5, we cannot use the standard reactor for call events, but we'd
-    like to have all callbacks coming from the same thread, because this
-    requires no locking.
+    On v5, we cannot use the standard reactor for call events, but we want
+    to have all callbacks coming from the same thread, because this
+    requires no locking in the application and greatly simplifies the design.
     
     We use this thread to get events for all call handles and send
-    them to the dispatcher through a pipe.
+    them to the dispatcher through a pipe and a queue.
     """
+
+    # We have a chicken and egg problem when we create call handles
+    # - we get the call handle after the openin/openout, but this thread
+    # may receive events before the call knows its handle.
+
+    # To avoid an unnoticed memory leak, limit the queue size
+    max_chicken_events = 4
 
     def __init__(self):
         self.calls = {}
         self.pipes = {}
+        # map call handle to event queue
+        self.events = {}
         self.mutex = threading.Lock()
         threading.Thread.__init__(self)
 
@@ -121,66 +129,95 @@ class CallEventThread(threading.Thread):
         try:
             self.calls[call.handle] = (call, reactor)
             # If the pipe doesn't exist, create and install it
-            pipe = self.pipes.get(call, None)
+            pipe = self.pipes.get(reactor, None)
             if pipe is None:
-                pipe = create_pipe()
+                # Create a nonblocking pipe (if drained completely on reading,
+                # this will behave like a Windows Event Semaphore)
+                pipe = create_pipe(True)
                 self.pipes[reactor] = pipe
                 reactor.add(pipe[0].fileno(), select.POLLIN, 
                             curry(self.on_event, pipe[0]))
 
+            # Pop the event queue
+            events = self.events.get(call.handle, [])
+            if events:
+                del self.events[call.handle]
         finally:
             self.mutex.release()
 
+        # log.debug('add: queue %s', events)
+
+        # Dispatch events from the queue
+        for e in events:
+            call_dispatch(call, e)
+            
     def remove(self, reactor, call):
         # Todo: clean up pipes to the reactor
         self.mutex.acquire()
         try:
             del self.calls[call.handle]
+            del self.events[call.handle]
         finally:
             self.mutex.release()
 
     def on_event(self, pipe):
-        event = lowlevel.STATE_XPARMS()
+        # Drain the pipe
+        while True:
+            s = pipe.read(256)
+            # log.debug('on_event pipe %s read: %d', pipe, len(s))
+            if len(s) < 256:
+                break
 
-        event.read(pipe)
-        
-        # log_call.debug('got event %s for 0x%x on %s',
-        #                event_name(event), event.handle, pipe)
+        # Collect all events and translate call handle to call
+        self.mutex.acquire()
+        try:
+            todo = [ (self.calls[handle][0], events)
+                     for handle, events in self.events.iteritems() ]
+
+            self.events = {}
+        finally:
+            self.mutex.release()
+
+        # Dispatch all events
+        for call, events in todo:
+            for e in events:
+                # log_call.debug('got event %s for 0x%x on %s',
+                #                event_name(event), event.handle, pipe)
+                call_dispatch(call, e)
+
+    def enqueue(self, event):
+        """Queue the event."""
+
+        handle = event.handle
         
         self.mutex.acquire()
-        call, reactor = self.calls.get(event.handle, (None, None))
-        if not call:
-            self.mutex.release()
-            log_call.error('got event %s for nonexisting call 0x%x',
-                           event_name(event), event.handle)    
-            return
-        
-        self.mutex.release()
-        call_dispatch(call, event)
+        try:
+            # Queue the event
+            if self.events.has_key(handle):
+                events = self.events[handle]
+                if len(events) > self.max_chicken_events:
+                    raise RuntimeError("chicken queue overflow: 0x%x"
+                                       % handle)
+                events.append(event)
+            else:
+                self.events[handle] = [event]
 
-    def process(self, event):
-        self.mutex.acquire()
-        call, reactor = self.calls.get(event.handle, (None, None))
-        if not call:
+            call, reactor = self.calls.get(handle, (None, None))
+            # Get the pipe to the reactor
+            pipe = self.pipes.get(reactor, None)
+        finally:
             self.mutex.release()
-            log_call.error('got event %s for nonexisting call 0x%x',
-                           event_name(event), event.handle)
-            
-            return
-        
-        # Get the pipe to the reactor
-        pipe = self.pipes.get(reactor, None)
-        self.mutex.release()
 
-        # log_call.debug('sending %s', event_name(event))
-        # Write the event to the pipe
-        event.write(pipe[1])
+        if pipe:
+            # log_call.debug('%x sending %s', handle, event_name(event))
+            # Write a notification to the pipe
+            pipe[1].write('1')
 
     def run(self):
-        event = lowlevel.STATE_XPARMS()
-        
+        """Thread main - Process call events."""
+
         while True:
-            event.handle = 0
+            event = lowlevel.STATE_XPARMS()
             event.timeout = 200
 
             rc = lowlevel.call_event(event)
@@ -189,7 +226,7 @@ class CallEventThread(threading.Thread):
 
             # process the event
             if event.handle:
-                self.process(event)
+                self.enqueue(event)
 
 _call_event_thread = None
 
@@ -206,6 +243,14 @@ def dispatch(controller, method, *args, **kwargs):
         log.error('error in %s', method, exc_info=1)
 
 def call_dispatch(call, event):
+    """Map a call event to the methods on the Call and Controller and call it.
+
+    Methods on the Call object (if available) are called first, then methods
+    on the controller.
+
+    The Call object can have a special _post method for each event that is
+    called last.
+    """
 
     ev = event_name(event).lower()
 
@@ -271,14 +316,12 @@ def add_call_event(reactor, call):
     if lowlevel.cc_version < 6:
         global _call_event_thread
         if not _call_event_thread:
-            log_call.debug("starting V5 call event helper thread")
+            log.debug("starting V5 call event helper thread")
             _call_event_thread = CallEventThread()
             _call_event_thread.setDaemon(1)
             _call_event_thread.start()
 
-            _call_event_thread.add(reactor, call)
-
-            return call.handle
+        _call_event_thread.add(reactor, call)
     else:
         chwo = lowlevel.CALL_HANDLE_WAIT_OBJECT_PARMS()
         chwo.handle = call.handle
@@ -293,8 +336,6 @@ def add_call_event(reactor, call):
         # Note the curry
         reactor.add(call.event, chwo.wait_object.mode(),
                     curry(call_on_event, call))
-
-        return call.event
 
 def remove_call_event(reactor, call):
     if lowlevel.cc_version < 6:

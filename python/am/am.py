@@ -352,6 +352,14 @@ if __name__ == '__main__':
 
     log = aculab.defaultLogging(loglevel, logfile)
 
+    if daemon:
+        aculab.daemonize(pidfile='/var/run/am.pid')
+
+    bus =  DefaultBus()
+
+    log.info('answering machine starting (bus: %s)',
+             bus.__class__.__name__)
+
     if forwarding:
         bri_ts = (1, 2)
 
@@ -367,15 +375,7 @@ if __name__ == '__main__':
     else:
         calls = [Call(controller, card=card, port=port)]
 
-    if daemon:
-        aculab.daemonize(pidfile='/var/run/am.pid')
-
     try:
-        bus =  DefaultBus()
-
-        log.info('answering machine starting (bus: %s)',
-                bus.__class__.__name__)
-
         timer = TimerThread()
         timer.start()
         Reactor.run()

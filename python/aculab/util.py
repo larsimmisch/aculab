@@ -4,6 +4,7 @@
 """Utility classes: L{OrderedDict}, L{Lockable} and L{EventQueue}."""
 
 import os
+import fcntl
 import lowlevel
 
 # check driver info and create prosody streams if TiNG detected
@@ -20,9 +21,12 @@ def swig_value(s):
 
     return s            
 
-def create_pipe():
+def create_pipe(nonblocking = False):
     """Create a pipe and return a tuple of two file objects."""
     pfds = os.pipe()
+    if nonblocking:
+        flags = fcntl.fcntl(pfds[0], fcntl.F_GETFL)
+        fcntl.fcntl(pfds[0], fcntl.F_SETFL, flags | os.O_NONBLOCK)
     return (os.fdopen(pfds[0], 'rb', 0),
             os.fdopen(pfds[1], 'wb', 0))
 

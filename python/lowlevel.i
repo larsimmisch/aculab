@@ -412,57 +412,6 @@ GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 #endif
 #endif
 
-%extend STATE_XPARMS {
-	PyObject *read(PyObject *fo)
-	{
-		FILE *f;
-		int rc;
-
-		if (!PyFile_Check(fo)) {
-	    	PyErr_SetString(PyExc_TypeError, "Expected a file object");
-			return NULL;
-		}
-
-		f = PyFile_AsFile(fo);
-		rc = fread(self, 1, sizeof(STATE_XPARMS), f);
-		if (rc < 0)
-		{
-			PyErr_SetFromErrno(PyExc_OSError);
-			return NULL;
-		}
-
-		if (rc != sizeof(STATE_XPARMS))
-		{
-	    	PyErr_Format(PyExc_RuntimeError, "short read on event (%d of %d)", 
-						 rc, sizeof(STATE_XPARMS));
-			return NULL;
-		}
-
-		return PyInt_FromLong(rc);
-	}
-
-	PyObject *write(PyObject *fo)
-	{
-		FILE *f;
-		int rc;
-
-		if (!PyFile_Check(fo)) {
-	    	PyErr_SetString(PyExc_TypeError,"Expected a file object");
-			return NULL;
-		}
-		
-		f = PyFile_AsFile(fo);
-		rc = fwrite(self, 1, sizeof(STATE_XPARMS), f);
-		if (rc < 0)
-		{
-			PyErr_SetFromErrno(PyExc_OSError);
-			return NULL;
-		}
-
-		return PyInt_FromLong(rc);
-	}
-}
-
 %extend SM_TS_DATA_PARMS {
     SM_TS_DATA_PARMS(int size = kSMMaxReplayDataBufferSize) {
 		SM_TS_DATA_PARMS *d = 

@@ -165,9 +165,9 @@ class CallHandle(CallHandleBase):
         self.handle = inparms.handle
         self.name = 'cc-%04x' % self.handle
 
-        add_call_event(self.reactor, self)
-
         log.debug('%s openin()', self.name)
+
+        add_call_event(self.reactor, self)
 
     def _outparms(self, destination_address, sending_complete = True,
                   originating_address = '', unique = None,
@@ -245,10 +245,10 @@ class CallHandle(CallHandleBase):
         self.handle = outparms.handle
         self.name = 'cc-%04x' % self.handle
 
-        add_call_event(self.reactor, self)
-
         log.debug('%s openout(%s, %d, %s)', self.name, destination_address,
                   sending_complete, originating_address)
+
+        add_call_event(self.reactor, self)
 
     def feature_send(self, feature_type, feature,
                      message_control=lowlevel.CONTROL_NEXT_CC_MESSAGE):
