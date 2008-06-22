@@ -156,7 +156,8 @@ class CallEventThread(threading.Thread):
         self.mutex.acquire()
         try:
             del self.calls[call.handle]
-            del self.events[call.handle]
+            if self.events.has_key(call.handle):
+                del self.events[call.handle]
         finally:
             self.mutex.release()
 
@@ -341,7 +342,7 @@ def remove_call_event(reactor, call):
     if lowlevel.cc_version < 6:
         global _call_event_thread
         if _call_event_thread:
-            _call_event_thread.remove(call)
+            _call_event_thread.remove(reactor, call)
     else:
         reactor.remove(call.event)
         call.event = None
