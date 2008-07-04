@@ -11,7 +11,6 @@ import win32api
 import win32event
 
 log = logging.getLogger('reactor')
-log_call = logging.getLogger('call')
 
 def add_event(reactor, event, method):
     """Add an event to a reactor.

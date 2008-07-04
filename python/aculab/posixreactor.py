@@ -9,6 +9,8 @@ import logging
 # local imports
 from util import create_pipe
 
+log = logging.getLogger('reactor')
+
 def add_event(reactor, event, method):
     """Add an event to a reactor.
 	
