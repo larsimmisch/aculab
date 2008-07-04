@@ -721,7 +721,7 @@ class ToneJob(object):
         if rc:
             raise AculabSpeechError(rc, 'sm_play_tone', self.channel.name)
 
-        log.debug('%s tone(%d, duration=%.3f)',
+        log.debug('%s tone(%d, duration=%.3fs)',
                   self.channel.name, self.tone, self.duration)
 
         # add the write event to the reactor
@@ -730,7 +730,7 @@ class ToneJob(object):
 
     def on_write(self):
         """I{Reactor callback}."""
-        
+
         if self.channel is None:
             return
         
@@ -1456,9 +1456,9 @@ class SpeechChannel(Lockable):
 
         # log.debug('%s on_recog', self.name)
         recog = lowlevel.SM_RECOGNISED_PARMS()
-        tone = None
         
         while True:
+            tone = None
             recog.channel = self.channel
 
             rc = lowlevel.sm_get_recognised(recog)

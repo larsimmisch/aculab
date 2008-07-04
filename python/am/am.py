@@ -165,9 +165,7 @@ def routing_table(port, details):
 def find_available_call(port, ts = None, exclude = None):
     global calls
     for c in calls:
-        if c.port == port and c != exclude \
-           and (c.last_event == lowlevel.EV_WAIT_FOR_INCOMING 
-                or c.last_event == lowlevel.EV_IDLE):
+        if c.port == port and c != exclude and c.user_data is None:
             if ts is None or ts == c.timeslot:
                 return c
 

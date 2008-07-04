@@ -2,10 +2,6 @@
 find_init := $(strip $(wildcard /sbin/init) \
 	                 $(wildcard /usr/sbin/init))
 
-ifeq ($(ACULAB_ROOT),)
-  $(error "ACULAB_ROOT not set")
-endif
-
 # check for signs of Aculab v6
 find_v6 := $(strip $(wildcard $(ACULAB_ROOT)/include/cl_lib.h))
 
@@ -13,6 +9,10 @@ find_v6 := $(strip $(wildcard $(ACULAB_ROOT)/include/cl_lib.h))
 ifeq ($(find_init),)
   include win32.mk
 else
+  ifeq ($(ACULAB_ROOT),)
+    $(error "ACULAB_ROOT not set")
+  endif
+
   ifneq ($(find_v6),)
     include unix.mk
   else

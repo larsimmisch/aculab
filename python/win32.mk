@@ -12,7 +12,7 @@ DTK_W := $(dir $(strip $(wildcard c:/Aculab/API/Call) \
 DTK := $(shell cygpath -u $(DTK_W))
 
 # CC := cl /MD
-CC := gcc -mno-cygwin
+CC := gcc -mno-cygwin # -g
 
 # check for our standard locations of SWIG and Python
 

@@ -23,8 +23,11 @@ class DTMFLoopController:
         raise StopIteration
                 
     def digits_done(self, channel, reason, user_data):
-        # Play a CNG
-        channel.tone(23, 1.0)
+        if lowlevel.cc_version > 6:
+            # Play a CNG
+            channel.tone(23, 1.0)
+        else:
+            raise StopIteration
 
     def tone_done(self, channel, reason, user_data):
         # Give the CNG detector some time
@@ -68,8 +71,11 @@ if __name__ == '__main__':
                          force_timeslot=options.timeslot,
                          force_bus=options.bus)
 
-    channels[0].listen_for('dtmf/fax', options.mode)
-    
+    if lowlevel.cc_version > 6:
+        channels[0].listen_for('dtmf/fax', options.mode)
+    else:
+        channels[0].listen_for(0, options.mode)
+
     channels[0].record('dtmf.al', max_silence = 1.0)
     if options.file_name:
         channels[1].play(options.file_name)

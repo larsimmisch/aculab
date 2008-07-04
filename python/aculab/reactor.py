@@ -1,32 +1,31 @@
-# Copyright (C) 2002-2007 Lars Immisch
+# Copyright (C) 2002-2008 Lars Immisch
 
-"""Various reactors for Windows and Unix and utilities for portable event
-handling.
+"""Utilities for portable event handling.
 
-The portable event handling is a bit more convoluted than I'd like, but the
+The portable event handling is uglier than I'd like it, but the
 situation is complicated:
 
 On Windows, C{tSMEventId} is a typedef to C{HANDLE}. On Unix, it is a
 structure with an C{fd} and a C{mode} member.
 
-On Unix, we need the mode when adding the event, so it would be logical to
+On Unix, we need the mode when adding the event, so it would seem ideal to
 always pass C{tSMEventId} instances around and deal with the differences
 in the reactor implementations.
 
 But that doesn't work, because the VMPrx etc. manage their own events, and
 (presumably) delete them as soon as they are stopped, so for this part of
-the code - on Unix - it is only safe to keep a reference to the file
-descriptor.
+the code - on Unix - we can't keep references to C[tSMEventId}s around -
+it is only safe to keep a reference to the file descriptor.
 
 The following strategy is currently used:
 
-We have L{add_event} and L{remove_event} methods in this module.
+We have L{add_event} and L{remove_event} functions in this module.
 
 L{add_event} returns a handle that can be passed directly to reactor.remove.
 The VMPrx etc. store this value and call reactor.remove() directly.
 
 L{remove_event} takes a C{tSMEventId} as event parameter. This is used
-by the L{SpeechChannel} that is required to manage its own events explicitly.
+by the L{SpeechChannel} that manages its events explicitly.
 """
 
 import threading
@@ -39,81 +38,44 @@ from util import curry, create_pipe
 from names import event_name
 from error import AculabError
 
-
 log = logging.getLogger('reactor')
 log_call = logging.getLogger('call')
 
-# These events are not set in call.last_event because they don't
-# change the state of the call as far as we are concerned
-# They are delivered to the controller, of course
-no_state_change_events = [lowlevel.EV_CALL_CHARGE,
-                          lowlevel.EV_CHARGE_INT,
-                          lowlevel.EV_DETAILS]
-
-no_state_change_extended_events = [lowlevel.EV_EXT_FACILITY,
-                                   lowlevel.EV_EXT_UUI_PENDING,
-                                   lowlevel.EV_EXT_UUI_CONGESTED,
-                                   lowlevel.EV_EXT_UUI_UNCONGESTED,
-                                   lowlevel.EV_EXT_UUS_SERVICE_REQUEST,
-                                   lowlevel.EV_EXT_TRANSFER_INFORMATION]
-
-
 if os.name == 'nt':
-    import pywintypes
-    import win32api
+    import win32reactor
     import win32event
 
-    def add_event(reactor, event, method):
-        """Add an event to a reactor.
+    add_event = win32reactor.add_event
+    remove_event = win32reactor.remove_event
 
-        @param reactor: The reactor to add the event to
-        @param event: A C{tSMEventId} structure.
-        @return: a OS dependent value that can be used for reactor.remove()
-        """
-        reactor.add(event, method)
-        return event
-
-    def remove_event(reactor, event):
-        """Remove an event for a reactor.
-
-        @param event: A C{tSMEventId} structure.
-        """
-        reactor.remove(event)
+    Reactor = win32reactor.Win32Reactor()
 
 else:
-    def add_event(reactor, event, method):
-        """Add an event to a reactor.
+    import posixreactor
 
-        @param reactor: The reactor to add the event to
-        @param event: A C{tSMEventId} structure
-        @return: a OS dependent value that can ve used for reactor.remove()
-        """        
-        reactor.add(event.fd, event.mode, method)
-        return event.fd
+    add_event = posixreactor.add_event
+    remove_event = posixreactor.remove_event
 
-    def remove_event(reactor, event):
-        """Remove an event for a reactor.
-
-        @param event: A C{tSMEventId} structure.
-        """
-        reactor.remove(event.fd)
+    Reactor = posixreactor.PollReactor()
 
 class CallEventThread(threading.Thread):
-    """This is a helper thread for call events on v5 drivers.
+    """This is a helper thread class for call events on v5 drivers.
 
-    On v5, we cannot use the standard reactor for call events, but we want
-    to have all callbacks coming from the same thread, because this
-    requires no locking in the application and greatly simplifies the design.
+    On v5, which is ancient, we cannot use the standard reactor for call
+    events, but we want to have all callbacks coming from the same thread,
+    because this requires no locking in the application and greatly simplifies
+    the application design.
     
     We use this thread to get events for all call handles and send
-    them to the dispatcher through a pipe and a queue.
+    them to the actual reactor through a pipe and a queue.
     """
 
     # We have a chicken and egg problem when we create call handles
     # - we get the call handle after the openin/openout, but this thread
     # may receive events before the call knows its handle.
-
-    # To avoid an unnoticed memory leak, limit the queue size
+    # As a consequence, this thread has to queue events for any handle.
+    
+    # To avoid a silent memory leak, limit the queue size
     max_chicken_events = 4
 
     def __init__(self):
@@ -124,6 +86,19 @@ class CallEventThread(threading.Thread):
         self.mutex = threading.Lock()
         threading.Thread.__init__(self)
 
+    def create_pipe(self, reactor):
+        if os.name == 'nt':
+            pipe = win32event.CreateEvent(None, 0, 0, None)
+            self.pipes[reactor] = pipe
+            reactor.add(pipe, curry(self.on_event, pipe))
+        else:
+            # Create a nonblocking pipe (if drained completely on reading,
+            # this will behave like a Windows Event Semaphore)
+            pipe = create_pipe(True)
+            self.pipes[reactor] = pipe
+            reactor.add(pipe[0].fileno(), select.POLLIN,
+                        curry(self.on_event, pipe[0]))
+
     def add(self, reactor, call):
         self.mutex.acquire()
         try:
@@ -131,13 +106,8 @@ class CallEventThread(threading.Thread):
             # If the pipe doesn't exist, create and install it
             pipe = self.pipes.get(reactor, None)
             if pipe is None:
-                # Create a nonblocking pipe (if drained completely on reading,
-                # this will behave like a Windows Event Semaphore)
-                pipe = create_pipe(True)
-                self.pipes[reactor] = pipe
-                reactor.add(pipe[0].fileno(), select.POLLIN, 
-                            curry(self.on_event, pipe[0]))
-
+                self.create_pipe(reactor)
+                
             # Pop the event queue
             events = self.events.get(call.handle, [])
             if events:
@@ -162,12 +132,13 @@ class CallEventThread(threading.Thread):
             self.mutex.release()
 
     def on_event(self, pipe):
-        # Drain the pipe
-        while True:
-            s = pipe.read(256)
-            # log.debug('on_event pipe %s read: %d', pipe, len(s))
-            if len(s) < 256:
-                break
+        if os.name != 'nt':
+            # Drain the pipe
+            while True:
+                s = pipe.read(256)
+                # log.debug('on_event pipe %s read: %d', pipe, len(s))
+                if len(s) < 256:
+                    break
 
         # Collect all events and translate call handle to call
         self.mutex.acquire()
@@ -212,7 +183,10 @@ class CallEventThread(threading.Thread):
         if pipe:
             # log_call.debug('%x sending %s', handle, event_name(event))
             # Write a notification to the pipe
-            pipe[1].write('1')
+            if os.name == 'nt':
+                win32event.SetEvent(pipe)
+            else:
+                pipe[1].write('1')
 
     def run(self):
         """Thread main - Process call events."""
@@ -288,16 +262,6 @@ def call_dispatch(call, event):
                 h()
 
     finally:
-        # set call.last_event and call.last_extended_event
-        if event.state == lowlevel.EV_EXTENDED \
-           and event.extended_state \
-           not in no_state_change_extended_events:
-            call.last_event = lowlevel.EV_EXTENDED
-            call.last_extended_event = event.extended_state
-        elif event.state not in no_state_change_events:
-            call.last_event = event.state
-            call.last_extended_event = None
-
         if mutex:
             mutex.release()
 
@@ -347,291 +311,9 @@ def remove_call_event(reactor, call):
         reactor.remove(call.event)
         call.event = None
 
-if os.name == 'nt':
-
-    # this class is only needed on Windows
-    class Win32ReactorThread(threading.Thread):
-        """Helper thread for Win32Reactor.
-
-        WaitForMultipleObjects is limited to 64 objects,
-        so multiple reactor threads are needed."""
-
-        def __init__(self, mutex, handle = None, method = None):
-            """Create a Win32DispatcherThread."""
-            self.queue = []
-            self.wakeup = win32event.CreateEvent(None, 0, 0, None)
-            self.mutex = mutex
-            # handles is a map from handles to method
-            if handle:
-                self.handles = { self.wakeup: None, handle: method }
-            else:
-                self.handles = { self.wakeup: None }
-
-            threading.Thread.__init__(self)
-
-        def update(self):
-            """Used internally.
-
-            Update the internal list of objects to wait for."""
-            self.mutex.acquire()
-            try:
-                while self.queue:
-                    add, handle, method = self.queue.pop(0)
-                    if add:
-                        # print 'added 0x%04x' % handle
-                        self.handles[handle] = method
-                    else:
-                        # print 'removed 0x%04x' % handle
-                        del self.handles[handle]
-
-            finally:
-                self.mutex.release()
-
-            return self.handles.keys()
-
-        def run(self):
-            """The Win32ReactorThread run loop. Should not be called
-            directly."""
-
-            handles = self.handles.keys()
-
-            while handles:
-                try:
-                    rc = win32event.WaitForMultipleObjects(handles, 0, -1)
-                except win32event.error, e:
-                    # 'invalid handle' may occur if an event is deleted
-                    # before the update arrives
-                    if e[0] == 6:
-                        handles = self.update()
-                        continue
-                    else:
-                        raise
-
-                if rc == win32event.WAIT_OBJECT_0:
-                    handles = self.update()
-                else:
-                    self.mutex.acquire()
-                    try:
-                        m = self.handles[handles[rc - win32event.WAIT_OBJECT_0]]
-                    finally:
-                        self.mutex.release()
-
-                    try:
-                        if m:
-                            m()
-                    except StopIteration:
-                        return
-                    except KeyboardInterrupt:
-                        raise
-                    except:
-                        log.error('error in Win32ReactorThread main loop',
-                              exc_info=1)
-
-    class Win32Reactor(object):
-        """Prosody Event reactor for Windows.
-
-        Manages multiple reactor threads if more than 64 event handles are used.
-        Each SpeechChannel uses 3 event handles, so this happens quickly."""
-
-        def __init__(self):
-            self.mutex = threading.Lock()
-            self.reactors = []
-            self.running = False
-
-        def add(self, event, method):
-            """Add a new handle to the reactor.
-
-            @param event: The event to watch.
-            @param method: This will be called when the event is fired."""
-            handle = pywintypes.HANDLE(event)
-            self.mutex.acquire()
-            try:
-                for d in self.reactors:
-                    if len(d.handles) < win32event.MAXIMUM_WAIT_OBJECTS:
-                        d.queue.append((1, handle, method))
-                        win32event.SetEvent(d.wakeup)
-
-                        return
-
-                # if no reactor has a spare slot, create a new one
-                d = Win32ReactorThread(self.mutex, handle, method)
-                if self.running:
-                    d.setDaemon(1)
-                    d.start()
-                self.reactors.append(d)
-            finally:
-                self.mutex.release()
-
-        def remove(self, event):
-            """Remove an event from the reactor.
-
-            @param handle: The handle of the Event to watch."""
-
-            handle = pywintypes.HANDLE(event)
-            self.mutex.acquire()
-            try:
-                for d in self.reactors:
-                    if d.handles.has_key(handle):
-                        d.queue.append((0, handle, None))
-                        win32event.SetEvent(d.wakeup)
-            finally:
-                self.mutex.release()
-
-        def start(self):
-            """Start the reactor in a separate thread."""
-
-            if not self.reactors:
-                self.reactors.append(Win32ReactorThread(self.mutex))
-
-            self.running = True
-
-            for d in self.reactors:
-                d.setDaemon(1)
-                d.start()
-
-        def run(self):
-            """Run the reactor in the current thread."""
-
-            if not self.reactors:
-                self.reactors.append(Win32ReactorThread(self.mutex))
-
-            self.running = True
-
-            for d in self.reactors[1:]:
-                d.setDaemon(1)
-                d.start()
-            self.reactors[0].run()
-
-    Reactor = Win32Reactor()
-
-else: # os.name == 'nt'
-    
-    maskmap = { select.POLLIN: 'POLLIN',
-                select.POLLPRI: 'POLLPRI',
-                select.POLLOUT: 'POLLOUT',
-                select.POLLERR: 'POLLERR',
-                select.POLLHUP: 'POLLHUP',
-                select.POLLNVAL: 'POLLNVAL' }
-           
-    def maskstr(mask):
-        "Print a eventmask for poll"
-
-        l = []
-        for v, s in maskmap.iteritems():
-            if mask & v:
-                l.append(s)
-
-        return '|'.join(l)
-
-    class PollReactor(threading.Thread):
-        """Prosody Event reactor for Unix systems with poll(), most notably
-        Linux.
-
-        Experimental support for notifications."""
-
-        def __init__(self):
-            """Create a reactor."""
-            threading.Thread.__init__(self)
-            self.handles = {}
-            self.mutex = threading.Lock()
-            self.queue = []
-            
-            # create a pipe to add/remove fds
-            self.pipe = create_pipe()
-            self.setDaemon(1)
-            self.poll = select.poll()
-
-            # listen to the read fd of our pipe
-            self.poll.register(self.pipe[0], select.POLLIN)
-
-        def add(self, handle, mode, method):
-            """Add an event to the reactor.
-
-            @param handle: A file descriptor, B{not} a File object.
-            @param mode: A bitmask of select.POLLOUT, select.POLLIN, etc.
-            @param method: This will be called when the event is fired."""
-
-            if not callable(method):
-                raise ValueError('method must be callable')
-
-            if threading.currentThread() == self or not self.isAlive():
-                # log.debug('self adding fd: %d %s', handle, method.__name__)
-                self.handles[handle] = method
-                self.poll.register(handle, mode)
-            else:
-                # log.debug('adding fd: %d %s', handle, method.__name__)
-                self.mutex.acquire()
-                self.handles[handle] = method
-                # function 1 is add
-                self.queue.append((1, handle, mode))
-                self.mutex.release()
-                self.pipe[1].write('1')
-
-        def remove(self, handle):
-            """Remove a handle from the reactor.
-
-            @param handle: A file descriptor.
-
-            This method blocks until handle is removed by the reactor thread.
-            """
-
-            if threading.currentThread() == self or not self.isAlive():
-                # log.debug('self removing fd: %d', handle)
-                del self.handles[handle]
-                self.poll.unregister(handle)
-            else:
-                # log.debug('removing fd: %d', handle)
-                self.mutex.acquire()
-                del self.handles[handle]
-                # function 0 is remove
-                self.queue.append((0, handle, None))
-                self.mutex.release()
-                self.pipe[1].write('0')
-
-        def run(self):
-            'Run the reactor.'
-            while True:
-                try:
-                    active = self.poll.poll()
-                    for a, mask in active:
-                        if a == self.pipe[0].fileno():
-                            self.pipe[0].read(1)
-                            self.mutex.acquire()
-                            try:
-                                add, fd, mask = self.queue.pop(0)
-                            finally:
-                                self.mutex.release()
-                            if add:
-                                self.poll.register(fd, mask)
-                            else:
-                                self.poll.unregister(fd)
-
-                        else:
-                            self.mutex.acquire()
-                            try:
-                                m = self.handles.get(a, None)
-                            finally:
-                                self.mutex.release()
-
-                            # log.info('event on fd %d %s: %s', a,
-                            #         maskstr(mask), m.__name__)
-
-                            # ignore missing method, it must have been removed
-                            if m:
-                                m()
-
-                except StopIteration:
-                    return
-                except KeyboardInterrupt:
-                    return
-                except:
-                    log.error('error in PollReactor main loop',
-                              exc_info=1)
-                    raise
-
-    Reactor = PollReactor()
-
 class PortEventDispatcher:
+    """Placeholder - not currently used."""
+
     def __init__(self, port, controller, user_data):
         self.port = port
         self.controller = controller

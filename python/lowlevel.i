@@ -225,9 +225,7 @@ BLOCKING(sm_t38gw_worker_fn)
 %apply char[ANY] { ACU_UCHAR[ANY] };
 
 #ifdef WIN32
-%typemap(in) tSMEventId {
-	$1 = (tSMEventId)PyInt_AsLong($input);
-}
+%apply int { tSMEventId }; 
 
 %typemap(in,numinputs=0) tSMEventId * ($basetype temp) {
 	$1 = ($basetype*)&temp;
@@ -328,12 +326,12 @@ BLOCKING(sm_t38gw_worker_fn)
 #ifdef HAVE_T38GW
 %include "smt38gwlib.h"
 #endif
-%include "smdc.h"
-%include "smdc_raw.h"
-%include "smdc_sync.h"
-%include "smdc_hdlc.h"
-%include "bfile.h"
-%include "bfopen.h"
+// %include "smdc.h"
+// %include "smdc_raw.h"
+// %include "smdc_sync.h"
+// %include "smdc_hdlc.h"
+// %include "bfile.h"
+// %include "bfopen.h"
 #else
 %include "mvswdrvr.h"
 %include "mvcldrvr.h"
@@ -418,6 +416,7 @@ GET_SET_DATA(NON_STANDARD_DATA_XPARMS, MAXRAWDATA)
 			(SM_TS_DATA_PARMS*)calloc(1, sizeof(SM_TS_DATA_PARMS));
 
 		d->data = malloc(size);
+		d->length = size;
 
 		return d;
     }

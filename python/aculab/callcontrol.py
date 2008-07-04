@@ -52,12 +52,6 @@ class CallHandleBase:
         self.name = 'cc-0000'
         self.domain = 'pstn'
         
-        # The reactor sets the last state changing event after dispatching
-        # the event. Which events are deemed state changing is controlled via
-        # no_state_change_events
-        self.last_event = lowlevel.EV_IDLE
-        self.last_extended_event = None
-
     def push_controller(self, controller):
         """Push a new controller onto the controller stack.
 
@@ -660,7 +654,8 @@ class CallHandle(CallHandleBase):
         self.get_details()
 
     def ev_idle(self):
-        """Internal event handler for C{EV_IDLE}.
+        """Internal event handler for C{EV_IDLE}, called before the
+        controller's ev_idle.
 
         This method calls:
          - L{get_details}() to update the details.
@@ -672,7 +667,8 @@ class CallHandle(CallHandleBase):
         self.release()
 
     def ev_idle_post(self):
-        """Internal event handler for C{EV_IDLE}.
+        """Internal event handler for C{EV_IDLE}, called after the
+        controller's ev_idle.
 
         This method:
          - sets the call's user_data to C{None}
