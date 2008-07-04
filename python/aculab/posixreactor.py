@@ -9,6 +9,23 @@ import logging
 # local imports
 from util import create_pipe
 
+def add_event(reactor, event, method):
+    """Add an event to a reactor.
+	
+    @param reactor: The reactor to add the event to
+    @param event: A C{tSMEventId} structure
+    @return: a OS dependent value that can ve used for reactor.remove()
+    """       
+    reactor.add(event.fd, event.mode, method)
+    return event.fd
+
+def remove_event(reactor, event):
+    """Remove an event for a reactor.
+	
+    @param event: A C{tSMEventId} structure.
+    """
+    reactor.remove(event.fd)
+
 maskmap = { select.POLLIN: 'POLLIN',
             select.POLLPRI: 'POLLPRI',
             select.POLLOUT: 'POLLOUT',
