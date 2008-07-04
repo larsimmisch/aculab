@@ -12,10 +12,13 @@ On Unix, we need the mode when adding the event, so it would seem ideal to
 always pass C{tSMEventId} instances around and deal with the differences
 in the reactor implementations.
 
-But that doesn't work, because the VMPrx etc. manage their own events, and
-(presumably) delete them as soon as they are stopped, so for this part of
-the code - on Unix - we can't keep references to C[tSMEventId}s around -
+But that doesn't work, because the RTP related VMPrx etc. manage their own
+events, and delete them as soon as they are stopped, so for RTP on Unix we
+can't keep references to C{tSMEventId}s around -
 it is only safe to keep a reference to the file descriptor.
+
+This I{++ungood}, but after more than a decade I have given up hope Aculab
+would pay attention to details.
 
 The following strategy is currently used:
 
