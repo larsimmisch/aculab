@@ -602,7 +602,7 @@ class CallHandle(CallHandleBase):
 
             remove_call_event(self.reactor, self)
 
-        log.debug('%s release(%d)', self.name, xcause.cause)
+            log.debug('%s release(%d)', self.name, xcause.cause)
 
         # restore the handle for the inbound call if there is one
         if hasattr(self, 'in_handle'):

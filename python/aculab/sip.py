@@ -58,9 +58,9 @@ class SIPHandle(CallHandleBase):
         self.handle = inparms.handle
         self.name = 'sip-%08x' % self.handle
 
-        add_call_event(self.reactor, self)
-
         log.debug('%s openin()', self.name)
+        
+        add_call_event(self.reactor, self)
 
     def openout(self, destination_address, sdp, originating_address = '',
                 contact_address = None, request_notification_mask = 0,
@@ -103,10 +103,10 @@ class SIPHandle(CallHandleBase):
         self.handle = outparms.handle
         self.name = 'sip-%08x' % self.handle
 
-        add_call_event(self.reactor, self)
-
         log.debug('%s openout(%s, %s)', self.name, destination_address,
                   originating_address)
+
+        add_call_event(self.reactor, self)
 
     def get_details(self):
         if self.details:
@@ -204,7 +204,7 @@ class SIPHandle(CallHandleBase):
             remove_call_event(self.reactor, self)
             self.handle = None
 
-        log.debug('%s release()', self.name)
+            log.debug('%s release()', self.name)
 
         # restore the handle for the inbound call if there is one
         if hasattr(self, 'in_handle'):
