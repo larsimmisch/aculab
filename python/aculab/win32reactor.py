@@ -5,10 +5,11 @@
 import threading
 import os
 import logging
-# local imports
 import pywintypes
 import win32api
 import win32event
+# local imports
+from timer import TimerBase
 
 log = logging.getLogger('reactor')
 
@@ -35,11 +36,12 @@ class Win32ReactorThread(threading.Thread):
     WaitForMultipleObjects is limited to 64 objects,
     so multiple reactor threads are needed."""
 
-    def __init__(self, mutex, handle = None, method = None):
+    def __init__(self, master, handle = None, method = None):
         """Create a Win32DispatcherThread."""
         self.queue = []
         self.wakeup = win32event.CreateEvent(None, 0, 0, None)
-        self.mutex = mutex
+        self.master = master
+        self.shutdown = False
         # handles is a map from handles to method
         if handle:
             self.handles = { self.wakeup: None, handle: method }
@@ -52,7 +54,7 @@ class Win32ReactorThread(threading.Thread):
         """Used internally.
 
         Update the internal list of objects to wait for."""
-        self.mutex.acquire()
+        self.master.mutex.acquire()
         try:
             while self.queue:
                 add, handle, method = self.queue.pop(0)
@@ -64,9 +66,14 @@ class Win32ReactorThread(threading.Thread):
                     del self.handles[handle]
 
         finally:
-            self.mutex.release()
+            self.master.mutex.release()
 
         return self.handles.keys()
+
+    def stop(self):
+        """Stop the thread."""
+        self.shutdown = True
+        win32event.SetEvent(self.wakeup)        
 
     def run(self):
         """The Win32ReactorThread run loop. Should not be called
@@ -87,35 +94,78 @@ class Win32ReactorThread(threading.Thread):
                     raise
 
             if rc == win32event.WAIT_OBJECT_0:
+                if self.shutdown:
+                    return
+                
                 handles = self.update()
             else:
-                self.mutex.acquire()
+                self.master.mutex.acquire()
                 try:
                     m = self.handles[handles[rc - win32event.WAIT_OBJECT_0]]
+                    self.master.enqueue(m)
                 finally:
-                    self.mutex.release()
+                    self.master.mutex.release()
 
-                try:
-                    if m:
-                        m()
-                except StopIteration:
-                    return
-                except KeyboardInterrupt:
-                    raise
-                except:
-                    log.error('error in Win32ReactorThread main loop',
-                          exc_info=1)
 
-class Win32Reactor(object):
-    """Prosody Event reactor for Windows.
+class Win32Reactor(threading.Thread):
+    """Event reactor for Windows.
 
-    Manages multiple reactor threads if more than 64 event handles are used.
-    Each SpeechChannel uses 3 event handles, so this happens quickly."""
+    Manages multiple reactor threads to work around the 64 handles limitation.
+    Each SpeechChannel uses 3 event handles, so this happens quickly.
+
+    (This sucks, BTW, we need two context switches instead of one for each
+    event. But we can't use IO Completion Ports here.
+
+    An alternative would be to drop the guarantuee that all callbacks will
+    be called from reactor.run, but that is not a friendly default)
+    """
 
     def __init__(self):
         self.mutex = threading.Lock()
         self.reactors = []
-        self.running = False
+        self.queue = []
+        self.wakeup = win32event.CreateEvent(None, 0, 0, None)        
+        self.timer = TimerBase()
+
+        threading.Thread.__init__(self)
+
+    def add_timer(self, interval, function, args = [], kwargs={}):
+        '''Add a timer after interval in seconds.'''
+
+        self.mutex.acquire()
+        try:
+            t, adjust = self.timer.add(interval, function, args, kwargs)
+        finally:
+            self.mutex.release()
+
+        # if the new timer is the next, wake up the timer thread to readjust
+        # the wait period
+        if adjust:
+            win32event.SetEvent(self.wakeup)
+
+        return t
+
+    def cancel_timer(self, timer):
+        '''Cancel a timer.
+        Cancelling an expired timer raises a ValueError'''
+        self.mutex.acquire()
+        try:
+            adjust = self.timer.cancel(timer)
+        finally:
+            self.mutex.release()
+        
+        if adjust:
+            win32event.SetEvent(self.wakeup)
+
+    def enqueue(self, m):
+        """Internal for Win32ReactorThread:
+        Queue a callback and signal the internal event.
+
+        Only to be called with mutex locked.
+        """
+
+        self.queue.append(m)
+        win32event.SetEvent(self.wakeup)
 
     def add(self, event, method):
         """Add a new handle to the reactor.
@@ -133,8 +183,8 @@ class Win32Reactor(object):
                     return
 
             # if no reactor has a spare slot, create a new one
-            d = Win32ReactorThread(self.mutex, handle, method)
-            if self.running:
+            d = Win32ReactorThread(self, handle, method)
+            if self.isAlive():
                 d.setDaemon(1)
                 d.start()
             self.reactors.append(d)
@@ -156,27 +206,75 @@ class Win32Reactor(object):
         finally:
             self.mutex.release()
 
-    def start(self):
-        """Start the reactor in a separate thread."""
+    def start_workers(self):
+        """Start the thread workers."""
 
+        # Start at least one worker
         if not self.reactors:
-            self.reactors.append(Win32ReactorThread(self.mutex))
-
-        self.running = True
+            self.reactors.append(Win32ReactorThread(self))
 
         for d in self.reactors:
             d.setDaemon(1)
             d.start()
 
+    def stop_workers(self):
+        """Stop all worker threads."""
+
+        self.mutex.acquire()
+        try:
+            for d in self.reactors:
+                d.stop()
+        finally:
+            self.mutex.release()
+
+        for d in self.reactors:
+            d.join()
+
+    def start(self):
+        """Start the reactor in a new thread."""
+
+        self.start_workers()
+        threading.Thread.start(self)
+
     def run(self):
         """Run the reactor in the current thread."""
+        
+        self.mutex.acquire()
+        try:
+            self.start_workers()
+            next = self.timers.time_to_wait()
+        finally:
+            self.mutex.release()
 
-        if not self.reactors:
-            self.reactors.append(Win32ReactorThread(self.mutex))
+        while True:
+            if next is not None:
+                win32event.WaitForSingleObject(self.wakeup, int(next * 1000))
+            else:
+                win32event.WaitForSingleObject(self.wakeup, -1)
+                
+            self.mutex.acquire()
+            try:
+                todo = self.queue
+                self.queue = []
+                timers = self.timers.get_pending()
+                next = self.timers.time_to_wait()
+            finally:
+                self.mutex.release()
 
-        self.running = True
+            try:
+                for m in todo:
+                    m()
+                for t in timers:
+                    t()
 
-        for d in self.reactors[1:]:
-            d.setDaemon(1)
-            d.start()
-        self.reactors[0].run()
+            except StopIteration:
+                self.stop_workers()
+                return
+            except KeyboardInterrupt:
+                self.stop_workers()
+                raise
+            except:
+                log.error('error in Win32Reactor main loop', exc_info=1)
+            
+
+        

@@ -1,4 +1,4 @@
-# Copyright (C) 2003-2007 Lars Immisch
+# Copyright (C) 2003-2008 Lars Immisch
 
 """A thread-based timer"""
 
@@ -6,6 +6,7 @@ import threading
 import time
 
 class Timer:
+    """A timed function and its arguments."""
     
     def __init__(self, interval, function, args=[], kwargs={}):
         self.absolute = time.time() + interval
@@ -16,30 +17,96 @@ class Timer:
     def __cmp__(self, other):
         return cmp(self.absolute, other.absolute)
 
-class TimerThread(threading.Thread):
-   
+    def __call__(self):
+        self.function(*self.args, **self.kwargs)
+
+class TimerBase:
+    """Timer base class - does the housekeeping."""
+
     def __init__(self):
-        threading.Thread.__init__(self)
-        self.setDaemon(1)
-        self.event = threading.Event()
-        self.mutex = threading.Lock()
         self.timers = []
 
     def add(self, interval, function, args = [], kwargs={}):
-        '''Add a timer after interval in seconds.'''
+        '''Add a timer after interval in seconds.
+
+        @return: the tuple (timer, flag). flag is True if the timer added
+        is the next timer due.'''
+        
         t = Timer(interval, function, args, kwargs)
+
+        self.timers.append(t)
+        self.timers.sort()
+
+        return (t, self.timers.index(t) == 0)
+
+    def cancel(self, timer):
+        '''Cancel a timer.
+        Cancelling an expired timer raises a ValueError.
+
+        @return: True if the cancelled timer is the next timer due.'''
+
+        i = self.timers.index(timer)
+        del self.timers[i]
+
+        return i == 0
+
+    def time_to_wait(self):
+        """Return the time to wait for the next timer in seconds or None
+        if no timer is present."""
+        if not self.timers:
+            return None
+        
+        now = time.time()
+        t = self.timers[0]
+        
+        return max(0.0, t.absolute - now)
+
+    def get_pending(self):
+        """Return a list of pending timers."""
+        exp = []
+        now = time.time()
+
+        if self.timers:
+            t = self.timers[0]
+            while t.absolute <= now:
+                exp.append(t)
+                del self.timers[0]
+
+                if not self.timers:
+                    return exp
+                
+                t = self.timers[0]
+
+        return exp
+            
+        
+class TimerThread(threading.Thread, TimerBase):
+    """An active, standalone Timer thread that will execute the
+    timers in the context of its thread.
+
+    In the context of pyAculab, this is mostly a test case for L{TimerBase}.
+
+    In most cases, if you need timers, use the reactor instead."""
+    
+    def __init__(self):
+        threading.Thread.__init__(self)
+        TimerBase.__init__(self)
+        self.setDaemon(1)
+        self.event = threading.Event()
+        self.mutex = threading.Lock()
+
+    def add(self, interval, function, args = [], kwargs={}):
+        '''Add a timer after interval in seconds.'''
 
         self.mutex.acquire()
         try:
-            self.timers.append(t)
-            self.timers.sort()
-            i = self.timers.index(t)
+            t, adjust = TimerBase.add(self, interval, function, args, kwargs)
         finally:
             self.mutex.release()
 
         # if the new timer is the next, wake up the timer thread to readjust
         # the wait period
-        if i == 0:
+        if adjust:
             self.event.set()
 
         return t
@@ -48,16 +115,12 @@ class TimerThread(threading.Thread):
         '''Cancel a timer.
         Cancelling an expired timer raises a ValueError'''
         self.mutex.acquire()
-
-        # if the deleted timer was the next, wake up the timer thread to
-        # readjust the wait period
         try:
-            i = self.timers.index(timer)
-            del self.timers[i]
+            adjust = TimerBase.cancel(self, timer)
         finally:
             self.mutex.release()
         
-        if i == 0:
+        if adjust:
             self.event.set()
             
     def run(self):
@@ -65,19 +128,18 @@ class TimerThread(threading.Thread):
         If you want to run the Timer in its own thread, call start()'''
         while True:
             self.mutex.acquire()
-            if self.timers:
-                now = time.time()
-                t = self.timers[0]
-                if t.absolute <= now:
-                    del self.timers[0]
-                    self.mutex.release()
-                    t.function(*t.args, **t.kwargs)
-                        
-                else:
-                    self.mutex.release()
-                    self.event.wait(t.absolute - now)
-            else:
+            try:
+                todo = self.get_pending()
+                next = self.time_to_wait()
+            finally:
                 self.mutex.release()
+
+            for t in todo:
+                t()
+
+            if next is not None:
+                self.event.wait(next)
+            else:
                 self.event.wait()
 
             self.event.clear()
