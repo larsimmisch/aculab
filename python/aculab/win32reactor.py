@@ -242,7 +242,7 @@ class Win32Reactor(threading.Thread):
         self.mutex.acquire()
         try:
             self.start_workers()
-            next = self.timers.time_to_wait()
+            next = self.timer.time_to_wait()
         finally:
             self.mutex.release()
 
@@ -256,8 +256,8 @@ class Win32Reactor(threading.Thread):
             try:
                 todo = self.queue
                 self.queue = []
-                timers = self.timers.get_pending()
-                next = self.timers.time_to_wait()
+                timers = self.timer.get_pending()
+                next = self.timer.time_to_wait()
             finally:
                 self.mutex.release()
 
