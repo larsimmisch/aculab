@@ -10,7 +10,6 @@ from aculab.error import AculabError
 from aculab.callcontrol import Call
 from aculab.speech import SpeechChannel, PlayJob, Glue
 from aculab.switching import DefaultBus, connect
-from aculab.timer import TimerThread
 from aculab.snapshot import Snapshot
 from aculab.reactor import Reactor
 import aculab.lowlevel as lowlevel
@@ -30,12 +29,12 @@ class PlayApp(Glue):
 
     def start(self):
         # start a timer to play the prompt in 2 seconds
-        self.timer = timer.add(2.0, self.timed_switch)
+        self.timer = Reactor.add_timer(2.0, self.timed_switch)
 
     def close(self):
         Glue.close(self)
         if self.timer:
-            timer.cancel(self.timer)
+            Reactor.cancel_timer(self.timer)
 
     def timed_switch(self):
         self.connection = connect(self.call, self.speech)
@@ -43,12 +42,12 @@ class PlayApp(Glue):
         if j:
             self.speech.start(j)
 
-        # self.timer = timer.add(2.0, self.timed_unswitch)
+        # self.timer = Reactor.add_timer(2.0, self.timed_unswitch)
 
     def timed_unswitch(self):
         self.connection.close()
         self.connection = None
-        self.timer = timer.add(2.0, self.timed_disconnect)
+        self.timer = Reactor.add_timer(2.0, self.timed_disconnect)
 
     def timed_disconnect(self):
         self.call.disconnect()
@@ -64,7 +63,7 @@ class PlayApp(Glue):
         except StopIteration:
             self.connection.close()
             self.connection = None
-            self.timer = timer.add(2.0, self.timed_disconnect)
+            self.timer = Reactor.add_timer(2.0, self.timed_disconnect)
         
 class PlayController(object):
 
@@ -129,8 +128,6 @@ if __name__ == '__main__':
         for i in range(options.numcalls):
             c = Call(controller, card=options.card, port=options.port)
 
-        timer = TimerThread()
-        timer.start()
         Reactor.run()
     except StopIteration:
         pass

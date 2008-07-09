@@ -51,22 +51,23 @@ class TimerBase:
         return i == 0
 
     def time_to_wait(self):
-        """Return the time to wait for the next timer in seconds or None
+        """Return the time to wait for the next timer in ms or -1
         if no timer is present."""
         if not self.timers:
-            return None
+            return -1
         
         now = time.time()
-        t = self.timers[0]
         
-        return max(0.0, t.absolute - now)
+        t = max(0, self.timers[0].absolute - now)
+
+        return int(t * 1000)
 
     def get_pending(self):
         """Return a list of pending timers."""
         exp = []
-        now = time.time()
 
         if self.timers:
+            now = time.time()
             t = self.timers[0]
             while t.absolute <= now:
                 exp.append(t)

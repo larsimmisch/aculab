@@ -8,6 +8,7 @@ import os
 import logging
 # local imports
 from util import create_pipe
+from timer import TimerBase
 
 log = logging.getLogger('reactor')
 
@@ -57,6 +58,7 @@ class PollReactor(threading.Thread):
         self.handles = {}
         self.mutex = threading.Lock()
         self.queue = []
+        self.timer = TimerBase()
 
         # create a pipe to add/remove fds
         self.pipe = create_pipe()
@@ -65,6 +67,37 @@ class PollReactor(threading.Thread):
 
         # listen to the read fd of our pipe
         self.poll.register(self.pipe[0], select.POLLIN)
+
+    def add_timer(self, interval, function, args = [], kwargs={}):
+        '''Add a timer after interval in seconds.'''
+
+        self.mutex.acquire()
+        try:
+            t, adjust = self.timer.add(interval, function, args, kwargs)
+        finally:
+            self.mutex.release()
+
+        # if the new timer is the next, wake up the timer thread to readjust
+        # the wait period
+
+        if adjust and threading.currentThread() != self and self.isAlive():
+            # function 2 is timer adjust
+            self.pipe[1].write('2')
+
+        return t
+
+    def cancel_timer(self, timer):
+        '''Cancel a timer.
+        Cancelling an expired timer raises a ValueError'''
+        self.mutex.acquire()
+        try:
+            adjust = self.timer.cancel(timer)
+        finally:
+            self.mutex.release()
+        
+        if adjust and threading.currentThread() != self and self.isAlive():
+            # function 2 is timer adjust
+            self.pipe[1].write('2')
 
     def add(self, handle, mode, method):
         """Add an event to the reactor.
@@ -110,24 +143,51 @@ class PollReactor(threading.Thread):
             self.mutex.release()
             self.pipe[1].write('0')
 
+    def update(self):
+        """Update our list of fds."""
+        
+        self.mutex.acquire()
+        try:
+            add, fd, mask = self.queue.pop(0)
+        finally:
+            self.mutex.release()
+
+        if add:
+            self.poll.register(fd, mask)
+        else:
+            self.poll.unregister(fd)
+
+
+    def run_timers(self):
+        """Run the pending timers.
+
+        @return: time to wait for the next timer.
+        """
+        self.mutex.acquire()
+        try:
+            timers = self.timer.get_pending()
+            wait = self.timer.time_to_wait()
+        finally:
+            self.mutex.release()
+
+        for t in timers:
+            t()
+
+        return wait
+
     def run(self):
         'Run the reactor.'
+
+        wait = self.timer.time_to_wait()
+        
         while True:
             try:
-                active = self.poll.poll()
+                # log.debug('poll(%s)', wait)
+                active = self.poll.poll(wait)
                 for a, mask in active:
                     if a == self.pipe[0].fileno():
                         self.pipe[0].read(1)
-                        self.mutex.acquire()
-                        try:
-                            add, fd, mask = self.queue.pop(0)
-                        finally:
-                            self.mutex.release()
-                        if add:
-                            self.poll.register(fd, mask)
-                        else:
-                            self.poll.unregister(fd)
-
+                        wait = self.update()
                     else:
                         self.mutex.acquire()
                         try:
@@ -141,12 +201,13 @@ class PollReactor(threading.Thread):
                         # ignore missing method, it must have been removed
                         if m:
                             m()
+                            
+                wait = self.run_timers()
 
             except StopIteration:
                 return
             except KeyboardInterrupt:
                 return
             except:
-                log.error('error in PollReactor main loop',
-                          exc_info=1)
+                log.error('error in PollReactor main loop', exc_info=1)
                 raise

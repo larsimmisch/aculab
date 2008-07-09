@@ -17,7 +17,7 @@ events, and delete them as soon as they are stopped, so for RTP on Unix we
 can't keep references to C{tSMEventId}s around -
 it is only safe to keep a reference to the file descriptor.
 
-This I{++ungood}, but after more than a decade I have given up hope Aculab
+This is I{++ungood}, but after more than a decade I have given up hope Aculab
 would pay attention to details.
 
 The following strategy is currently used:
@@ -232,41 +232,33 @@ def call_dispatch(call, event):
 
     ev = event_name(event).lower()
 
-    mutex = getattr(call.user_data, 'mutex', None)
-    if mutex:
-        mutex.acquire()
-
     handlers = [] # list of tuples (handle, name, args)
     handled = 'ignored'
 
-    try:
-        h = getattr(call, ev, None)
-        if h:
-            handlers.append((h, 'call', None))
-        h = getattr(call.controllers[-1], ev, None)
-        if h:
-            handlers.append((h, 'controller',
-                             (call, call.user_data)))
-        h = getattr(call, ev + '_post', None)
-        if h:
-            handlers.append((h, 'post', None))
+    h = getattr(call, ev, None)
+    if h:
+        handlers.append((h, 'call', None))
+    h = getattr(call.controllers[-1], ev, None)
+    if h:
+        handlers.append((h, 'controller',
+                         (call, call.user_data)))
+    h = getattr(call, ev + '_post', None)
+    if h:
+        handlers.append((h, 'post', None))
 
-        # compute description of handlers
-        if handlers:
-            l = [h[1] for h in handlers]
-            handled = ','.join(l)
+    # compute description of handlers
+    if handlers:
+        l = [h[1] for h in handlers]
+        handled = ','.join(l)
 
-        log_call.debug('%s %s (%s)', call.name, ev, handled)
+    log_call.debug('%s %s (%s)', call.name, ev, handled)
 
-        for h, n, args in handlers:
-            if args:
-                h(*args)
-            else:
-                h()
+    for h, n, args in handlers:
+        if args:
+            h(*args)
+        else:
+            h()
 
-    finally:
-        if mutex:
-            mutex.release()
 
 def call_on_event(call):
     event = lowlevel.STATE_XPARMS()

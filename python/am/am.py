@@ -13,7 +13,6 @@ from aculab.callcontrol import Call
 from aculab.speech import SpeechChannel, PlayJob, RecordJob, Glue
 from aculab.reactor import Reactor
 from aculab.switching import DefaultBus, connect
-from aculab.timer import TimerThread
 import aculab.lowlevel as lowlevel
 from mail import AsyncEmail
 from slim import async_cli_display
@@ -31,12 +30,12 @@ class AnsweringMachine(Glue):
         Glue.__init__(self, controller, module, call)
 
         # start a timer to accept the call later
-        self.timer = timer.add(wait_accept, self.on_timer)
+        self.timer = Reactor.add_timer(wait_accept, self.on_timer)
 
     def close(self):
         Glue.close(self)
         if self.timer:
-            timer.cancel(self.timer)
+            Reactor.cancel_timer(self.timer)
             self.timer = None
 
     def on_timer(self):
@@ -374,8 +373,6 @@ if __name__ == '__main__':
         calls = [Call(controller, card=card, port=port)]
 
     try:
-        timer = TimerThread()
-        timer.start()
         Reactor.run()
     except:
         log.error('answering machine exception', exc_info=1)

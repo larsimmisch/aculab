@@ -140,7 +140,7 @@ class Win32Reactor(threading.Thread):
 
         # if the new timer is the next, wake up the timer thread to readjust
         # the wait period
-        if adjust:
+        if adjust and threading.currentThread() != self and self.isAlive():
             win32event.SetEvent(self.wakeup)
 
         return t
@@ -154,7 +154,7 @@ class Win32Reactor(threading.Thread):
         finally:
             self.mutex.release()
         
-        if adjust:
+        if adjust and threading.currentThread() != self and self.isAlive():
             win32event.SetEvent(self.wakeup)
 
     def enqueue(self, m):
@@ -242,22 +242,19 @@ class Win32Reactor(threading.Thread):
         self.mutex.acquire()
         try:
             self.start_workers()
-            next = self.timer.time_to_wait()
+            wait = self.timer.time_to_wait()
         finally:
             self.mutex.release()
 
         while True:
-            if next is not None:
-                win32event.WaitForSingleObject(self.wakeup, int(next * 1000))
-            else:
-                win32event.WaitForSingleObject(self.wakeup, -1)
+            win32event.WaitForSingleObject(self.wakeup, wait)
                 
             self.mutex.acquire()
             try:
                 todo = self.queue
                 self.queue = []
                 timers = self.timer.get_pending()
-                next = self.timer.time_to_wait()
+                wait = self.timer.time_to_wait()
             finally:
                 self.mutex.release()
 

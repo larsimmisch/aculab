@@ -61,13 +61,13 @@ class OutgoingCallController:
 
     def ev_outgoing_ringing(self, call, user_data):
         if options.t_ringing is not None:
-            tt.add(t_ringing, call.disconnect)
+            Reactor.add_timer(t_ringing, call.disconnect)
         log.debug('%s stream: %d timeslot: %d', call.name,
                   call.details.stream, call.details.ts)
 
     def ev_call_connected(self, call, user_data):
         if options.t_hangup is not None:
-            tt.add(options.t_hangup, call.disconnect)
+            Reactor.add_timer(options.t_hangup, call.disconnect)
         user_data.stop()
         log.info(statistics)
 
@@ -162,18 +162,14 @@ if __name__ == '__main__':
         log = aculab.defaultLogging(logging.INFO)
 
 
-    if options.t_ringing or options.t_hangup:
-        tt = TimerThread()
-        tt.start()    
-
     if not called:
         called.append(args[0])
 
     controller = OutgoingCallController()
 
     for i in range(options.numcalls):
-        c = Call(controller, card=options.card, port=options.port,
-                 timeslot=options.timeslot)
+        c = CallHandle(controller, card=options.card, port=options.port,
+                       timeslot=options.timeslot)
         
         c.user_data = CallData()
         if options.uui:
