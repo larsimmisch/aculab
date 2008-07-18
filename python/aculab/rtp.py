@@ -75,11 +75,12 @@ class RTPBase(Lockable):
         ts = self.module.timeslots.allocate(self.ts_type)
 
         tx = TDMtx(ts, self.card, self.module)
-        tx.listen_to(self)
+        ep = tx.listen_to(self)
 
         self.tdm.add(tx, ts)
+        self.tdm.add(ep)
 
-    def tx_tdm_connect(self):
+    def tx_tdm_connect(self, source):
         """For Transmitter subclasses: connect to a timeslot on its DSP's
         timeslot range.
         
@@ -89,16 +90,19 @@ class RTPBase(Lockable):
         See L{ProsodyTimeslots}.
 
         I{Used internally}."""
-        self.tdm = Connection(self.module.timeslots)
 
-        ts = self.module.timeslots.allocate(self.ts_type)
+        if not self.tdm:
+            self.tdm = Connection(self.module.timeslots)
 
-        rx = TDMrx(ts, self.card, self.module)
-        self.listen_to(rx)
+            ts = self.module.timeslots.allocate(self.ts_type)
 
-        self.tdm.add(rx, ts)
+            rx = TDMrx(ts, self.card, self.module)
 
+            self.tdm.add(rx, ts)
 
+        self.tdm.endpoints[0].listen_to(source)
+        return self.listen_to(rx)
+        
     def get_module(self):
         """Return a unique identifier for module comparisons.
         Used by switching."""
@@ -127,7 +131,7 @@ class VMPrx(RTPBase):
                  user_data = None, ts_type = lowlevel.kSMTimeslotTypeALaw,
                  reactor = Reactor):
         """Allocate an RTP receiver, configure alaw/mulaw and RFC 2833 codecs
-        and add the event to the reactor.
+        and add its event to the reactor.
 
         Note: the VMPrx is not ready to use until it has called 'vmprx_ready'
         on its controller.
@@ -379,6 +383,9 @@ class VMPtx(RTPBase):
                  user_data = None, ts_type = lowlevel.kSMTimeslotTypeALaw,
                  reactor = Reactor):
 
+        """Allocate an RTP transmitter, get the datafeed and add its event
+        to the reactor."""
+
         self.controller = controller
         self.reactor = reactor
 
@@ -426,6 +433,8 @@ class VMPtx(RTPBase):
         self.close()
 
     def on_vmptx(self):
+        """Internal event handler."""
+        
         status = lowlevel.SM_VMPTX_STATUS_PARMS()
         status.vmptx = self.vmptx
 
@@ -444,10 +453,6 @@ class VMPtx(RTPBase):
         else:
             log.debug('%s vmptx status: %s', self.name,
                       names.vmptx_status_names[status.status])
-
-    def get_datafeed(self):
-        """Used internally by the switching protocol."""
-        return self.datafeed
 
     def listen_to(self, source):
         """Listen to a timeslot or a tx instance.
@@ -470,17 +475,10 @@ class VMPtx(RTPBase):
 
             log_switch.debug('%s := %s (datafeed)', self.name, source.name)
 
-            return VMPtxEndpoint(self)
+            return VMPtxEndpoint(self, self.tdm)
         else:
-            if not self.tdm:
-                self.tx_tdm_connect()
+            return self.tx_tdm_connect(source)
             
-            self.tdm.endpoints[0].listen_to(source)
-            
-            # log_switch.debug('%s := %d:%d', self.name, source[0], source[1])
-
-            return VMPtxEndpoint(self)
-
     def config_codec(self, pt, fmt,
                      vad_mode = lowlevel.kSMVMPTxVADModeDisabled,
                      ptime = 20):
@@ -554,7 +552,7 @@ class VMPtx(RTPBase):
             config.set_source_rtp(source_rtp)
 
         if source_rtcp:
-            config.set_source_rtp(rtcp)
+            config.set_source_rtcp(source_rtcp)
 
         rc = lowlevel.sm_vmptx_config(config)
         if rc:
@@ -648,7 +646,7 @@ class FMPrx(RTPBase):
     def __init__(self, controller, card = 0, module = 0, mutex = None,
                  user_data = None, ts_type = lowlevel.kSMTimeslotTypeData,
                  reactor = Reactor):
-        """Allocate an RTP FAX receiver, and add the event to the reactor.
+        """Allocate an RTP FAX receiver, and add its event to the reactor.
 
         Note: the FMPrx is not ready to use until it has called 'fmprx_ready'
         on its controller.
@@ -782,6 +780,15 @@ class FMPtx(RTPBase):
     def __init__(self, controller, card = 0, module = 0, mutex = None,
                  user_data = None, ts_type = lowlevel.kSMTimeslotTypeData,
                  reactor = Reactor):
+        """Allocate an RTP FAX sender, and add its event to the reactor.
+
+        Note: the FMPrx is not ready to use until it has called 'fmprx_ready'
+        on its controller.
+        
+        Controllers must implement:
+         - fmprx_ready(vmprx, sdp, user_data)
+         - fmprx_running(vmprx, user_data)
+        """
 
         self.controller = controller
         self.reactor = reactor
@@ -830,6 +837,7 @@ class FMPtx(RTPBase):
         self.close()
 
     def on_fmptx(self):
+        """Internal event handler."""
         status = lowlevel.SM_FMPTX_STATUS_PARMS()
         status.fmptx = self.fmptx
 
@@ -843,10 +851,6 @@ class FMPtx(RTPBase):
             
             rc = lowlevel.sm_fmptx_destroy(self.fmptx)
             self.fmptx = None
-
-    def get_datafeed(self):
-        """Used internally by the switching protocol."""
-        return self.datafeed
 
     def configure(self, sdp):
         """Configure the Transmitter according to the SDP.
@@ -887,18 +891,7 @@ class FMPtx(RTPBase):
 
             log_switch.debug('%s := %s', self.name, other.name)
 
-            return FMPtxEndpoint(self)
+            return FMPtxEndpoint(self, self.tdm)
         else:
-            tdm = TDMrx(other, self.card, self.module)
-            
-            connect = lowlevel.SM_FMPTX_DATAFEED_CONNECT_PARMS()
-            connect.fmptx = self.fmptx
-            connect.data_source = tdm.get_datafeed()
+            return self.tx_tdm_connect(source)
 
-            rc = lowlevel.sm_fmptx_datafeed_connect(connect)
-            if rc:
-                raise AculabSpeechError(rc, 'sm_fmptx_datafeed_connect')
-
-            log_switch.debug('%s := %s', self.name, other.name)
-
-            return FMPtxEndpoint(self, tdm)
