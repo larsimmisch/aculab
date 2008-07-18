@@ -314,6 +314,8 @@ class TDMtx(object):
                     self.name)
 
             log.debug('%s := %s (datafeed)', self.name, other.name)
+
+            return self
         else:
             raise ValueError('%s := %s: cannot connect to instance without '\
                              'datafeed' % (self.name, other))
@@ -396,7 +398,7 @@ class TDMrx(object):
 
         log.debug("%s := %d:%d", self.name, other[0], other[1])
 
-        # return self
+        return self
 
     def __repr__(self):
         return self.name
