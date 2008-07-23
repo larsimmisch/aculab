@@ -10,6 +10,7 @@
 #include "sw_lib.h"
 #include "smdrvr.h"
 #include "smbesp.h"
+#include "smpath.h"
 #ifdef HAVE_FAX
 #include "smfaxapi.h"
 #include "actiff.h"
@@ -120,7 +121,7 @@ typedef struct {
    There might be a better way, but I am not aware of it.
 */
 %apply int { tSMVMPrxId, tSMVMPtxId, tSMFMPrxId, tSMFMPtxId, 
-			 tSMTDMtxId, tSMTDMrxId, tSMVMPTxToneSetId };
+			 tSMTDMtxId, tSMTDMrxId, tSMVMPTxToneSetId, tSMPathId };
 
 
 %apply char[ANY] { ACU_CHAR[ANY] };
@@ -318,6 +319,7 @@ BLOCKING(sm_t38gw_worker_fn)
 %include "prospapi.h"
 %include "prosrtpapi.h"
 %include "prosfmpapi.h"
+%include "prospath.h"
 %include "error.h"
 #ifdef HAVE_FAX
 %include "actiff.h"

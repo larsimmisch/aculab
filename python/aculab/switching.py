@@ -2,7 +2,8 @@
 
 """CT Busses, endpoints and L{connect}.
 
-This module contains Connection endpoints, Connection objects and CT busses."""
+This module contains Connection endpoints, Connection objects, Paths and
+CT busses."""
 
 import sys
 import lowlevel
@@ -11,6 +12,12 @@ from error import AculabError, AculabSpeechError
 from util import translate_card
 
 log = logging.getLogger('switch')
+
+def get_datafeed(item):
+    """Safely get the datafeed from item."""
+    if hasattr(item, 'get_datafeed'):
+        return item.get_datafeed()
+    return None
 
 class CTBusEndpoint:
     """An endpoint on a bus.
@@ -254,6 +261,50 @@ class FMPtxEndpoint(object):
         
         return 'FMPtxEndpoint(%s)'% self.fmptx.name    
 
+class PathEndpoint(object):
+    """An endpoint to a Path.
+
+    Endpoints are used to close a L{Connection}. They do all their work in
+    C{close} or upon destruction (which calls C{close}).
+    """
+    
+    def __init__(self, path, tdmrx = None):
+        """Initialize a datafeed endpoint to a L{Path}.
+
+        @param path: a L{Path}.
+        @param tdmrx: an optional L{TDMrx}.
+        """
+        self.path = path
+        self.tdmrx = tdmrx
+
+    def close(self):
+        """Disconnect the endpoint."""
+
+        if self.tdmrx:
+            self.tdmrx.close()
+            self.tdmrx = None
+        
+        if self.path:
+            connect = lowlevel.SM_PATH_DATAFEED_CONNECT_PARMS()
+            connect.path = self.path.path
+            # connect.data_source = lowlevel.kSMNullDatafeedId
+
+            rc = lowlevel.sm_path_datafeed_connect(connect)
+            if rc:
+                raise AculabSpeechError(rc, 'sm_path_datafeed_connect')
+
+            self.path = None
+
+    def __del__(self):
+        """Close the endpoint if it is still open"""
+        
+        self.close()
+
+    def __repr__(self):
+        """Print a representation of the endpoint."""
+        
+        return 'PathEndpoint(%s)'% self.path.name
+
 type_abbr = {lowlevel.kSMTimeslotTypeALaw: 'a',
              lowlevel.kSMTimeslotTypeMuLaw: 'm',
              lowlevel.kSMTimeslotTypeData: 'd' }
@@ -300,12 +351,13 @@ class TDMtx(object):
             rc = lowlevel.sm_tdmtx_destroy(self.tdmtx)
             self.tdmtx = None
 
-    def listen_to(self, other):
+    def listen_to(self, source):
         """Listen to another (datafeed) endpoint."""
-        if hasattr(other, 'get_datafeed') and other.get_datafeed():
+        ds = get_datafeed(source)
+        if ds:
             connect = lowlevel.SM_TDMTX_DATAFEED_CONNECT_PARMS()
             connect.tdmtx = self.tdmtx
-            connect.data_source = other.get_datafeed()
+            connect.data_source = ds
 
             rc = lowlevel.sm_tdmtx_datafeed_connect(connect)
             if rc:
@@ -313,12 +365,12 @@ class TDMtx(object):
                     rc, 'sm_tdmtx_datafeed_connect(%s)' % other.name,
                     self.name)
 
-            log.debug('%s := %s (datafeed)', self.name, other.name)
+            log.debug('%s := %s (datafeed)', self.name, source.name)
 
             return self
         else:
-            raise ValueError('%s := %s: cannot connect to instance without '\
-                             'datafeed' % (self.name, other))
+            raise TypeError('%s := %s: cannot connect to instance without '\
+                            'datafeed' % (self.name, source))
 
     def __repr__(self):
         return self.name
@@ -384,19 +436,19 @@ class TDMrx(object):
         """Used internally by the switching protocol."""
         return self.datafeed
 
-    def listen_to(self, other):
+    def listen_to(self, source):
         """Listen to another timeslot."""
         
         output = lowlevel.OUTPUT_PARMS()
         output.ost, output.ots = self.ts[:2]
         output.mode = lowlevel.CONNECT_MODE
-        output.ist, output.its = other[:2]
+        output.ist, output.its = source[:2]
 
         rc = lowlevel.sw_set_output(self.card.card_id, output)
         if rc:
             raise AculabError(rc, 'sw_set_output(%s)' % switch)
 
-        log.debug("%s := %d:%d", self.name, other[0], other[1])
+        log.debug("%s := %d:%d", self.name, source[0], source[1])
 
         return self
 
@@ -644,9 +696,9 @@ def connect(a, b, bus=DefaultBus(), force_timeslot=False, force_bus=False):
     #
     # - get_switch: a SwitchCard instance on V6, and a switch card offset on V5
     #
-    # - get_datafeed: None or the datafeed
+    # - get_timeslot: the transmit timeslot
     #
-    # - get_timeslot: None or the transmit timeslot
+    # - get_datafeed: the datafeed or None
     #
     # - listen_to
     #
@@ -671,7 +723,7 @@ def connect(a, b, bus=DefaultBus(), force_timeslot=False, force_bus=False):
         # Doesn't apply to calls because they have no datafeeds
         if arx.get_module() == brx.get_module() \
                and atx.get_module() == btx.get_module() \
-               and arx.get_datafeed() and brx.get_datafeed():
+               and get_datafeed(arx) and get_datafeed(brx):
             c.connections = [atx.listen_to(brx), btx.listen_to(arx)]
 
             return c
@@ -722,5 +774,251 @@ def connect(a, b, bus=DefaultBus(), force_timeslot=False, force_bus=False):
 
     return c
 
+class Path(object):
+    """Path objects can be used for mixing, echo cancellation, automatic gain
+    control and pitch shifting.
+    
+    I{Logging}: Path names are prefixed with C{pt-} and the I{log name} is
+    C{switch}."""
+
+    def __init__(self, card, module, ts_type = lowlevel.kSMTimeslotTypeALaw):
+        """Allocate a Path for signal transformation.
+
+        @param card: a L{snapshot.Card} instance.
+        @param module: a L{snapshot.Module} instance.
+        @param ts_type: default is C{kSMTimeslotTypeALaw}
+        
+        I{Related Aculab documentation}: U{sm_config_module_switching
+        <http://www.aculab.com/support/TiNG/gen/apifn-sm_path_create.html>}.
+        """
+
+        self.card, self.module = translate_card(card, module)
+        self.path = None
+        self.ts_type = ts_type
+        self.datafeed = None
+        self.name = 'pt-0000'
+        
+        path = lowlevel.SM_PATH_CREATE_PARMS()
+        path.module = self.module.open.module_id
+        
+        rc = lowlevel.sm_path_create(path)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_path_create')
+
+        self.path = path.path
+        self.name = 'pt-%04x' % self.path
+
+        feed = lowlevel.SM_PATH_DATAFEED_PARMS()
+        feed.path = self.path
+
+        rc = lowlevel.sm_path_get_datafeed(feed)
+        if rc:
+            lowlevel.sm_path_destroy(path)
+            raise AculabSpeechError(rc, 'sm_path_get_datafeed')
+
+        self.datafeed = feed.datafeed
+        
+    def close(self):
+        """Close the path.
+
+        I{Related Aculab documentation}: U{sm_path_destroy
+        <http://www.aculab.com/support/TiNG/gen/apifn-sm_path_destroy.html>}.
+        """
+        if self.path:
+            rc = lowlevel.sm_path_destroy(self.path)
+            self.path = None
+            self.datafeed = None
+            if rc:
+                raise AculabSpeechError(rc, 'sm_path_destroy')
+
+    def __del__(self):
+        self.close()
+
+    def listen_to(self, source, tdm = None):
+        """Listen to a timeslot or a tx instance.
+        
+        @param source: a tuple (stream, timeslot, [timeslot_type]) or a
+        transmitter instance (VMPtx, FMPtx or TDMtx), which must be on
+        the same module.
+        @param tdm: Used internally.
+
+        Applications should normally use L{switching.connect}.
+
+        I{Related Aculab documentation}: U{sm_path_datafeed_connect
+        <http://www.aculab.com/support/TiNG/gen/\
+        apifn-sm_path_datafeed_connect.html>}.
+        """
+        ds = get_datafeed(source)
+        if ds:
+            connect = lowlevel.SM_PATH_DATAFEED_CONNECT_PARMS()
+            connect.path = self.path
+            connect.data_source = ds
+
+            log.debug('%s := %s (datafeed)', self.name, source.name)
+            
+            rc = lowlevel.sm_path_datafeed_connect(connect)
+            if rc:
+                raise AculabSpeechError(rc, 'sm_path_datafeed_connect')
+
+            return PathEndpoint(self, tdm)
+        else:
+            tdm = Connection(self.module.timeslots)
+            ts = self.module.timeslots.allocate(self.ts_type)
+            rx = TDMrx(ts, self.card, self.module)
+            tdm.add(rx, ts)
+
+            tdm.endpoints[0].listen_to(source.get_timeslot())
+            return self.listen_to(rx, tdm)
+
+    def get_datafeed(self):
+        """Get the datafeed. Part of the switching protocol."""
+        return self.datafeed
+
+    def echocancel(self, reference, nonlinear = False,
+                   use_agc = False, fix_agc = False, span = 0):
+        """Cancel the echo from the input.
+
+        @param reference: The reference signal. Can be anything with a
+        C{get_datafeed} method, like a L{SpeechChannel}, a L{VMPrx} or a
+        L{TDMrx}.
+
+        @param nonlinear: enable/disable non-linear processing.
+        @param use_agc: enable/disable automatic gain control on the
+        input signal.
+        @param: fix_agc: enable/disable fixed gain.
+
+        I{Related Aculab documentation}: U{sm_path_echocancel
+        <http://www.aculab.com/support/TiNG/gen/\
+        apifn-sm_path_echocancel.html>}.
+        """
+        ec = lowlevel.SM_PATH_ECHOCANCEL_PARMS()
+        ec.path = self.path
+        ec.enable = True
+        ec.reference = reference.get_datafeed()
+        ec.non_linear = nonlinear
+        ec.use_agc = use_agc
+        ec.fix_agc = fix_agc
+        ec.span = span
+
+        log.debug('%s echocancel(%s, nonlinear: %d, use_agc: %d, fix_agc: %d)',
+                  self.name, reference.name, nonlinear, use_agc, fix_agc)
+
+        rc = lowlevel.sm_path_echocancel(ec)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_path_echocancel') 
+
+    def stop_echocancel(self):
+        """Stop echo cancellation.
+
+        I{Related Aculab documentation}: U{sm_path_echocancel
+        <http://www.aculab.com/support/TiNG/gen/\
+        apifn-sm_path_echocancel.html>}.
+        """
+
+        ec = lowlevel.SM_PATH_ECHOCANCEL_PARMS()
+        ec.path = self.path
+
+        log.debug('%s stop_echocancel()', self.name)
+
+        rc = lowlevel.sm_path_echocancel(ec)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_path_echocancel') 
+
+    def agc(self, agc = True, volume = 0):
+        """Configure automatic gain control and fixed volume adjustments.
+
+        @param agc: enable automatic gain control.
+        @param volume: The volume in dB, in the range from -24 to 8.
+
+        The fixed volume adjustment is done after automatic gain control.
+        
+        I{Related Aculab documentation}: U{sm_path_agc
+        <http://www.aculab.com/support/TiNG/gen/apifn-sm_path_agc.html>}.
+        """
+        agcp = lowlevel.SM_PATH_AGC_PARMS()
+        agcp.path = self.path
+        agcp.agc = agc
+        agcp.volume = volume
+
+        log.debug('%s agc(enable: %d, volume: %d)', self.name, agc, volume)
+
+        rc = lowlevel.sm_path_agc(agcp)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_path_agc')
+
+    def pitchshift(self, shift = 0.0):
+        """Configure pitch shifting on a signal.
+
+        param shift: Pitch shift in octaves. Values higher than 1 cause an
+        upward shift, values lower than 0.0 cause a downward shift.
+
+        Example: to pitch down a semitone, use -0.08333 (-1/12).
+
+        I{Related Aculab documentation}: U{sm_path_pitchshift
+        <http://www.aculab.com/support/TiNG/gen/\
+        apifn-sm_path_pitchshift.html>}.
+        """
+        ps = lowlevel.SM_PATH_PITCHSHIFT_PARMS()
+        ps.path = self.path
+        ps.shift = shift
+
+        log.debug('%s pitchshift(shift: %f)', self.name, shift)
+
+        rc = lowlevel.sm_path_pitchshift(ps)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_path_pitchshift')
+        
+    def mix(self, mixin, volume = -6):
+        """Mix with another signal. The signal from mixin is added to the
+        signal processed by this path, and the result is adjusted accorded
+        to the volume.
+
+        @param mixin: the signal to mix in. Anything with a C{get_datafeed}
+        method, like a L{SpeechChannel}, a L{VMPrx} or a L{TDMrx}. These
+        must be on the same module.
+        @param volume: Volume adjustment in dB. The default is -6, which
+        prevents the resulting signal from being louder than the original.
+
+        I{Related Aculab documentation}: U{sm_path_mix
+        <http://www.aculab.com/support/TiNG/gen/apifn-sm_path_mix.html>}.
+        """
+        mp = lowlevel.SM_PATH_MIX_PARMS()
+        mp.path = self.path
+        mp.enable = True
+        mp.mixin = mixin.get_datafeed()
+        mp.volume = volume
+
+        log.debug('%s mix(%s, volume: %d)', self.name, mixin.name, volume)
+
+        rc = lowlevel.sm_path_mix(mp)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_path_mix')
+
+    def stop_mix(self):
+        """Stop mixing.
+
+        I{Related Aculab documentation}: U{sm_path_mix
+        <http://www.aculab.com/support/TiNG/gen/apifn-sm_path_mix.html>}.
+        """
+        mp = lowlevel.SM_PATH_MIX_PARMS()
+        mp.path = self.path
+        
+        log.debug('%s stop_mix()', self.name)
+
+        rc = lowlevel.sm_path_mix(mp)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_path_mix')
+
+    def get_status(self):
+        """Get the status of the path."""
+        status = lowlevel.SM_PATH_STATUS_PARMS()
+        status.path = self.path
+
+        rc = lowlevel.sm_path_status(status)
+        if rc:
+            raise AculabSpeechError(rc, 'sm_path_status')
+
+        return status.status
+        
 if __name__ == '__main__':
     print DefaultBus()

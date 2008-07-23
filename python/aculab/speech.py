@@ -17,7 +17,6 @@ block for IVR-type applications. For an example, look at U{am/am.py
 an answering machine that implements its user interaction as a queue of jobs.
 """
 
-
 import sys
 import os
 import time
@@ -25,11 +24,11 @@ import logging
 import lowlevel
 import names
 import select
-from util import Lockable, translate_card
+from util import translate_card
 from fax import FaxRxJob, FaxTxJob
 from reactor import Reactor, add_event, remove_event
 from switching import (Connection, CTBusEndpoint, SpeechEndpoint, TDMrx, TDMtx,
-                       DefaultBus, connect)
+                       DefaultBus, connect, get_datafeed)
 from util import TiNG_version
 from error import *
 
@@ -675,7 +674,6 @@ class DigitsJob(object):
         # Compute reason.
         reason = None
 
-        # no locks held
         log.debug('%s digits_done(reason=\'%s\')',
                   channel.name, reason)
 
@@ -841,19 +839,18 @@ class DCReadJob(object):
         # Position is only nonzero when play was stopped.
         channel = self.channel
         
-        # no locks held
         log.debug('%s dc_read stopped',
                   channel.name)
 
         channel.job_done(self, 'dc_read_done', f, reason, pos)
 
-class SpeechChannel(Lockable):
+class SpeechChannel(object):
     """A full duplex Prosody channel.
 
     I{Logging}: SpeechChannels are prefixed with C{sc-} and the I{log name} is
     C{speech}."""
         
-    def __init__(self, controller, card = 0, module = 0, mutex = None,
+    def __init__(self, controller, card = 0, module = 0,
                  user_data = None, ts_type = lowlevel.kSMTimeslotTypeALaw,
                  reactor = Reactor):
         """Allocate a full duplex Prosody channel.
@@ -872,9 +869,6 @@ class SpeechChannel(Lockable):
         @param module: either the Prosody Sharc DSP offset or
         a L{snapshot.Module} instance.
 
-        @param mutex: if not C{None}, this mutex will be acquired before any
-        controller method is invoked and released as soon as it returns.
-
         @param user_data: The data associated with this channel. In MVC terms,
         this would be the I{model}. In most of the examples, this is L{Glue}
         or a subclass.
@@ -888,8 +882,6 @@ class SpeechChannel(Lockable):
         @param reactor: The reactor used to dispatch controller methods.
         By default, a single L{Reactor} is used for all channels.
         """
-
-        Lockable.__init__(self, mutex)
 
         self.controller = controller
         self.reactor = reactor
@@ -952,7 +944,6 @@ class SpeechChannel(Lockable):
         I{Do not use directly, use L{SpeechChannel.close}}."""
 
         self.user_data = None
-        self.lock()
         try:
             if self.tdm:
                 self.tdm.close()
@@ -976,7 +967,6 @@ class SpeechChannel(Lockable):
                                             self.name)
                 self.channel = None
         finally:
-            self.unlock()
             if hasattr(self, 'name'):
                 log.debug('%s closed', self.name)
 
@@ -1006,9 +996,7 @@ class SpeechChannel(Lockable):
         self.close_queue = args
         
         if self.job:
-            self.lock()
             self.close_pending = True
-            self.unlock()
             self.job.stop()
             return
 
@@ -1158,10 +1146,11 @@ class SpeechChannel(Lockable):
         Applications should normally use L{switching.connect}.
         """
 
-        if hasattr(source, 'get_datafeed') and source.get_datafeed():
+        ds = get_datafeed(source)
+        if ds:
             connect = lowlevel.SM_CHANNEL_DATAFEED_CONNECT_PARMS()
             connect.channel = self.channel
-            connect.data_source = source.get_datafeed()
+            connect.data_source = ds
 
             rc = lowlevel.sm_channel_datafeed_connect(connect)
             if rc:
@@ -1484,11 +1473,7 @@ class SpeechChannel(Lockable):
                           tonetype[recog.type], recog.param0, recog.param1)
 
             if tone:
-                self.lock()
-                try:
-                    self.controller.dtmf(self, tone, self.user_data)        
-                finally:
-                    self.unlock()
+                self.controller.dtmf(self, tone, self.user_data)        
 
     def stop(self):
         """Stop the current job."""
@@ -1499,13 +1484,9 @@ class SpeechChannel(Lockable):
         """I{Internal job support}."""
         args = args + (self.user_data,)
 
-        self.lock()
         self.job = None
         if self.close_pending:
-            self.unlock()
             self._close()
-        else:
-            self.unlock()
 
         f = getattr(self.controller, fn, None)
         if f:
@@ -1514,30 +1495,20 @@ class SpeechChannel(Lockable):
         if m:
             m(job, reason, self.user_data)
 
-class Conference(Lockable):
+class Conference(object):
     """A Conference: seriously incomplete."""
 
-    def __init__(self, module = None, mutex = None):
-        Lockable.__init__(self, mutex)
+    def __init__(self, module = None):
         
         self.module = module
         self.listeners = 0
         self.speakers = 0
-        self.mutex = mutex
 
     def add(self, channel, mode):
-        self.lock()
-        try:
-            pass
-        finally:
-            self.unlock()
+        pass
 
     def remove(self, channel):
-        self.lock()
-        try:
-            pass
-        finally:
-            self.unlock()
+        pass
 
 class Glue(object):
     """Glue logic to tie a SpeechChannel to a Call.

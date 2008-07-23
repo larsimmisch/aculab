@@ -13,11 +13,12 @@ import lowlevel
 import names
 import sdp
 import socket
-from switching import VMPtxEndpoint, FMPtxEndpoint, TDMrx, TDMtx, Connection
+from switching import (VMPtxEndpoint, FMPtxEndpoint, TDMrx, TDMtx, Connection, 
+                       get_datafeed)
 from reactor import Reactor, add_event
 from snapshot import Snapshot
 from error import *
-from util import Lockable, translate_card
+from util import translate_card
 
 import select
 
@@ -42,12 +43,11 @@ rfc2833_name2id = {
     'CRdi': 41, 'CRdr': 42, 'CRe': 43, 'ESi': 44, 'ESr': 45, 'MRdi': 46,
     'MRdr': 47, 'MRe': 48, 'CT': 49 }
 
-class RTPBase(Lockable):
-    """Internal baseclass for RTP tx/rx classes that manages connections
+class RxBase(object):
+    """Internal baseclass for RTP rx classes that manages connections
     to the TDM bus"""
     
-    def __init__(self, card, module, mutex, user_data, ts_type):
-        Lockable.__init__(self, mutex)
+    def __init__(self, card, module, user_data, ts_type):
         self.user_data = user_data
         self.ts_type = ts_type
         self.tdm = None
@@ -55,7 +55,6 @@ class RTPBase(Lockable):
 
     def close(self):
         """Close the TDM connection."""
-        self.user_data = None
             
         if self.tdm:
             self.tdm.close()
@@ -80,29 +79,6 @@ class RTPBase(Lockable):
         self.tdm.add(tx, ts)
         self.tdm.add(ep)
 
-    def tx_tdm_connect(self, source):
-        """For Transmitter subclasses: connect to a timeslot on its DSP's
-        timeslot range.
-        
-        This method internally allocates a L{TDMrx} on the module's
-        timeslot range.
-
-        See L{ProsodyTimeslots}.
-
-        I{Used internally}."""
-
-        if not self.tdm:
-            self.tdm = Connection(self.module.timeslots)
-
-            ts = self.module.timeslots.allocate(self.ts_type)
-
-            rx = TDMrx(ts, self.card, self.module)
-
-            self.tdm.add(rx, ts)
-
-        self.tdm.endpoints[0].listen_to(source)
-        return self.listen_to(rx)
-        
     def get_module(self):
         """Return a unique identifier for module comparisons.
         Used by switching."""
@@ -122,12 +98,54 @@ class RTPBase(Lockable):
 
         return self.tdm.timeslots[0]
 
-class VMPrx(RTPBase):
+class TxBase(object):
+    """Internal baseclass for RTP tx/rx classes that manages connections
+    to the TDM bus"""
+    
+    def __init__(self, card, module, user_data, ts_type):
+        self.user_data = user_data
+        self.ts_type = ts_type
+        self.card, self.module = translate_card(card, module)
+
+    def tx_tdm_connect(self, source):
+        """For Transmitter subclasses: connect to a timeslot on its DSP's
+        timeslot range.
+        
+        This method internally allocates a L{TDMrx} on the module's
+        timeslot range.
+
+        See L{ProsodyTimeslots}.
+
+        I{Used internally}."""
+
+        tdm = Connection(self.module.timeslots)
+
+        ts = self.module.timeslots.allocate(self.ts_type)
+        rx = TDMrx(ts, self.card, self.module)
+
+        tdm.add(rx, ts)
+        rx.listen_to(source)
+        
+        return self.listen_to(rx, tdm)
+        
+    def get_module(self):
+        """Return a unique identifier for module comparisons.
+        Used by switching."""
+
+        return self.module
+
+    def get_switch(self):
+        """Return a unique identifier for switch card comparisons.
+        Used by switching."""
+
+        return self.card
+
+class VMPrx(RxBase):
     """An RTP speech receiver.
 
     Logging: output from a VMPrx is prefixed with C{vrx-}"""
 
-    def __init__(self, controller, card = 0, module = 0, mutex = None,
+    def __init__(self, controller, card = 0, module = 0,
                  user_data = None, ts_type = lowlevel.kSMTimeslotTypeALaw,
                  reactor = Reactor):
         """Allocate an RTP receiver, configure alaw/mulaw and RFC 2833 codecs
@@ -152,7 +170,7 @@ class VMPrx(RTPBase):
         self.rtcp_port = None
         self.address = socket.INADDR_ANY
 
-        RTPBase.__init__(self, card, module, mutex, user_data, ts_type)
+        RxBase.__init__(self, card, module, user_data, ts_type)
         
         # create vmprx
         vmprx = lowlevel.SM_VMPRX_CREATE_PARMS()
@@ -191,7 +209,7 @@ class VMPrx(RTPBase):
     def close(self):
         """Stop the receiver."""
 
-        RTPBase.close(self)
+        RxBase.close(self)
 
         if self.vmprx:
             stopp = lowlevel.SM_VMPRX_STOP_PARMS()
@@ -202,6 +220,11 @@ class VMPrx(RTPBase):
                 raise AculabSpeechError(rc, 'sm_vmprx_stop')
 
             log.debug("%s stopping", self.name)
+
+        self.user_data = None
+
+    def __del__(self):
+        self.close()
 
     def get_rtp_address(self):
         "Return the RTP address and port as a Python-friendly tuple."
@@ -374,12 +397,12 @@ class VMPrx(RTPBase):
         if rc:
             raise AculabSpeechError(rc, 'sm_vmprx_config_tones')
 
-class VMPtx(RTPBase):
+class VMPtx(TxBase):
     """An RTP speech data transmitter.
 
     Logging: output from a VMPtx is prefixed with C{vtx-}"""
         
-    def __init__(self, controller, card = 0, module = 0, mutex = None,
+    def __init__(self, controller, card = 0, module = 0,
                  user_data = None, ts_type = lowlevel.kSMTimeslotTypeALaw,
                  reactor = Reactor):
 
@@ -393,7 +416,7 @@ class VMPtx(RTPBase):
         self.vmptx = None
         self.event_vmptx = None
 
-        RTPBase.__init__(self, card, module, mutex, user_data, ts_type)
+        TxBase.__init__(self, card, module, user_data, ts_type)
 
         # create vmptx
         vmptx = lowlevel.SM_VMPTX_CREATE_PARMS()
@@ -417,8 +440,6 @@ class VMPtx(RTPBase):
     def close(self):
         """Stop the transmitter."""
 
-        RTPBase.close(self)
-
         if self.vmptx:
             stopp = lowlevel.SM_VMPTX_STOP_PARMS()
             stopp.vmptx = self.vmptx
@@ -428,6 +449,8 @@ class VMPtx(RTPBase):
                 raise AculabSpeechError(rc, 'sm_vmptx_stop')
 
             log.debug("%s stopping", self.name)
+
+        self.user_data = None
 
     def __del__(self):
         self.close()
@@ -454,7 +477,7 @@ class VMPtx(RTPBase):
             log.debug('%s vmptx status: %s', self.name,
                       names.vmptx_status_names[status.status])
 
-    def listen_to(self, source):
+    def listen_to(self, source, tdm = None):
         """Listen to a timeslot or a tx instance.
 
         I{Switching protocol}. Applications should
@@ -462,12 +485,16 @@ class VMPtx(RTPBase):
         
         @param source: a tuple (stream, timeslot, [timeslot_type]) or a
         transmitter instance (L{VMPtx}, L{FMPtx} or L{TDMtx}), which must be on
-        the same module."""
-        
-        if hasattr(source, 'get_datafeed') and source.get_datafeed():
+        the same module.
+        @param tdm: Used internally - TxBase.tx_tdm_connect will call
+        listen_to recursively and supply a tdm.
+        """
+
+        ds = get_datafeed(source)
+        if ds:
             connect = lowlevel.SM_VMPTX_DATAFEED_CONNECT_PARMS()
             connect.vmptx = self.vmptx
-            connect.data_source = source.get_datafeed()
+            connect.data_source = ds
 
             rc = lowlevel.sm_vmptx_datafeed_connect(connect)
             if rc:
@@ -475,7 +502,7 @@ class VMPtx(RTPBase):
 
             log_switch.debug('%s := %s (datafeed)', self.name, source.name)
 
-            return VMPtxEndpoint(self, self.tdm)
+            return VMPtxEndpoint(self, tdm)
         else:
             return self.tx_tdm_connect(source)
             
@@ -607,43 +634,46 @@ class VMPtx(RTPBase):
         if rc:
             raise AculabSpeechError(rc, 'sm_vmptx_generate_tones')
 
-class VMP(RTPBase):
+class VMP(object):
     """An RTP speech data transmitter/receiver.
 
     Combines a VMPtx and a VMPrx"""
 
-    def __init__(self, controller, card = 0, module = 0, mutex = None,
+    def __init__(self, controller, card = 0, module = 0, 
                  user_data = None, ts_type = lowlevel.kSMTimeslotTypeALaw,
                  reactor = Reactor):
 
         self.tx = self.rx = None
-        self.tx = VMPtx(controller, card, module, mutex, user_data, ts_type,
+        self.tx = VMPtx(controller, card, module, user_data, ts_type,
                         reactor)
 
-        self.rx = VMPrx(controller, card, module, mutex, user_data, ts_type,
+        self.rx = VMPrx(controller, card, module, user_data, ts_type,
                         reactor)
 
     def get_switch(self):
         """Return a unique identifier for switch card comparisons.
         Used by switching."""
 
-        return self.tx.get_switch()
+        return self.rx.get_switch()
 
     def get_module(self):
-        return self.tx.get_module()
+        return self.rx.get_module()
 
-    def listen_to(self, other):
-        return self.tx.listen_to(other)
+    def listen_to(self, source):
+        return self.tx.listen_to(source)
+
+    def get_timeslot(self):
+        return self.rx.get_timeslot()
 
     def get_datafeed(self):
-        return self.rx.get_datafeed()
+        return self.tx.get_datafeed()
 
-class FMPrx(RTPBase):
+class FMPrx(RxBase):
     """An RTP T.38 receiver (untested/incomplete).
 
     Logging: output from a FMPrx is prefixed with C{frx-}"""
 
-    def __init__(self, controller, card = 0, module = 0, mutex = None,
+    def __init__(self, controller, card = 0, module = 0, 
                  user_data = None, ts_type = lowlevel.kSMTimeslotTypeData,
                  reactor = Reactor):
         """Allocate an RTP FAX receiver, and add its event to the reactor.
@@ -667,7 +697,7 @@ class FMPrx(RTPBase):
         self.rtcp_port = None
         self.sdp = None
 
-        RTPBase.__init__(self, card, module, mutex, user_data, ts_type)
+        RxBase.__init__(self, card, module, user_data, ts_type)
         
         # create vmprx
         fmprx = lowlevel.SM_FMPRX_CREATE_PARMS()
@@ -704,7 +734,7 @@ class FMPrx(RTPBase):
     def close(self):
         """Stop the receiver."""
 
-        RTPBase.close(self)
+        RxBase.close(self)
 
         if self.fmprx:
             stopp = lowlevel.SM_FMPRX_STOP_PARMS()
@@ -715,6 +745,11 @@ class FMPrx(RTPBase):
                 raise AculabSpeechError(rc, 'sm_fmprx_stop')
 
             log.debug("%s stopping", self.name)
+
+        self.user_data = None
+
+    def __del__(self):
+        self.close()
 
     def on_fmprx(self):
         """Internal event handler."""
@@ -772,14 +807,13 @@ class FMPrx(RTPBase):
 
         return sd
             
-class FMPtx(RTPBase):
+class FMPtx(TxBase):
     """An RTP T.38 transmitter (untested/incomplete).
 
     Logging: output from a FMPrx is prefixed with C{frx-}"""
 
-    def __init__(self, controller, card = 0, module = 0, mutex = None,
-                 user_data = None, ts_type = lowlevel.kSMTimeslotTypeData,
-                 reactor = Reactor):
+    def __init__(self, controller, card = 0, module = 0, user_data = None,
+                 ts_type = lowlevel.kSMTimeslotTypeData, reactor = Reactor):
         """Allocate an RTP FAX sender, and add its event to the reactor.
 
         Note: the FMPrx is not ready to use until it has called 'fmprx_ready'
@@ -797,7 +831,7 @@ class FMPtx(RTPBase):
         self.event_fmptx = None
         self.event_fmprx = None
 
-        RTPBase.__init__(self, card, module, mutex, user_data, ts_type)
+        TxBase.__init__(self, card, module, user_data, ts_type)
 
         # create fmptx
         fmptx = lowlevel.SM_FMPTX_CREATE_PARMS()
@@ -821,8 +855,6 @@ class FMPtx(RTPBase):
     def close(self):
         """Stop the transmitter."""
 
-        RTPBase.close(self)
-
         if self.fmptx:
             stopp = lowlevel.SM_FMPTX_STOP_PARMS()
             stopp.fmptx = self.fmptx
@@ -832,6 +864,8 @@ class FMPtx(RTPBase):
                 raise AculabSpeechError(rc, 'sm_fmptx_stop')
 
             log.debug("%s stopping", self.name)
+
+        self.user_data = None
 
     def __del__(self):
         self.close()
@@ -870,7 +904,7 @@ class FMPtx(RTPBase):
         if rc:
             raise AculabSpeechError(rc, 'sm_fmptx_config')
 
-    def listen_to(self, other):
+    def listen_to(self, source, tdm = None):
         """Listen to a timeslot or a tx instance.
 
         I{Switching protocol}. Applications should
@@ -878,12 +912,16 @@ class FMPtx(RTPBase):
         
         @param source: a tuple (stream, timeslot, [timeslot_type]) or a
         transmitter instance (L{VMPtx}, L{FMPtx} or L{TDMtx}), which must be on
-        the same module."""
+        the same module.
+        @param tdm: Used internally - TxBase.tx_tdm_connect will call
+        listen_to recursively and supply a tdm.
+        """
 
-        if hasattr(other, 'get_datafeed'):
+        ds = get_datafeed(source)
+        if ds:
             connect = lowlevel.SM_FMPTX_DATAFEED_CONNECT_PARMS()
             connect.fmptx = self.fmptx
-            connect.data_source = other.get_datafeed()
+            connect.data_source = ds
 
             rc = lowlevel.sm_fmptx_datafeed_connect(connect)
             if rc:
@@ -891,7 +929,7 @@ class FMPtx(RTPBase):
 
             log_switch.debug('%s := %s', self.name, other.name)
 
-            return FMPtxEndpoint(self, self.tdm)
+            return FMPtxEndpoint(self, tdm)
         else:
             return self.tx_tdm_connect(source)
 
