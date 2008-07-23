@@ -13,8 +13,9 @@ class OutgoingCallController:
         call.disconnect()
 
     def ev_idle(self, call, model):
-        print call.feature_details.feature.facility.length
-        openout(call, args[0])
+        # print call.feature_details.feature.facility.length
+        # openout(call, args[0])
+        raise StopIteration
         
 def usage():
     print 'mwi.py [-p <port>] <number>'
@@ -29,8 +30,8 @@ def openout(call, dest):
                                   '\x02\x12\x0A\x38\x30\x30\x33\x33\x30\x32'
                                   '\x34\x32\x34\x0A\x01\x02')
 
-    call.openout(dest, feature = FEATURE_REGISTER + FEATURE_FACILITY,
-                 feature_data = feature_data, originating_address='41',
+    call.openout(dest, feature_type = FEATURE_REGISTER + FEATURE_FACILITY,
+                 feature = feature_data, originating_address='41',
                  cnf = lowlevel.CNF_TSVIRTUAL)
 
 if __name__ == '__main__':
