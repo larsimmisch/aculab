@@ -111,7 +111,7 @@ class CallEventThread(threading.Thread):
             if pipe is None:
                 self.create_pipe(reactor)
                 
-            # Pop the event queue
+            # Pop the internal event queue
             events = self.events.get(call.handle, [])
             if events:
                 del self.events[call.handle]
@@ -120,9 +120,9 @@ class CallEventThread(threading.Thread):
 
         # log.debug('add: queue %s', events)
 
-        # Dispatch events from the queue
+        # Queue events to the proper reactor
         for e in events:
-            call_dispatch(call, e)
+            self.enqueue(e)
             
     def remove(self, reactor, call):
         # Todo: clean up pipes to the reactor
