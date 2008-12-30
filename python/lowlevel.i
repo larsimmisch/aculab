@@ -3,7 +3,12 @@
 %module(docstring="The Aculab API as seen by SWIG.") lowlevel
 %{
 #ifdef TiNG_USE_V6
-#include "netdb.h"
+#ifndef WIN32
+#include <netdb.h>
+#else
+#define WINVER 0x0501
+#include <ws2tcpip.h>
+#endif
 #include "acu_type.h"
 #include "cl_lib.h"
 #include "res_lib.h"
@@ -226,7 +231,7 @@ BLOCKING(sm_t38gw_worker_fn)
 %apply char[ANY] { ACU_UCHAR[ANY] };
 
 #ifdef WIN32
-%apply int { tSMEventId }; 
+%apply int { tSMEventId, HANDLE }; 
 
 %typemap(in,numinputs=0) tSMEventId * ($basetype temp) {
 	$1 = ($basetype*)&temp;
@@ -306,6 +311,11 @@ BLOCKING(sm_t38gw_worker_fn)
 
 %mutable *::size;
 // end immutable size attributes
+
+#ifdef WIN32
+#define ACUAPI
+#define ACUTiNG_WINAPI
+#endif
 
 %include "smtypes.h"
 %include "visdecl.h"
@@ -854,7 +864,6 @@ PyObject *set_inaddr(PyObject *args, struct sockaddr_in *addr)
 	int rc, port, af = AF_INET;
 	char *name;
 	struct addrinfo hints, *res;
-	int error;
 	int d1, d2, d3, d4;
 	char ch;
 
@@ -882,10 +891,10 @@ PyObject *set_inaddr(PyObject *args, struct sockaddr_in *addr)
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = af;
 	Py_BEGIN_ALLOW_THREADS
-	error = getaddrinfo(name, NULL, &hints, &res);
+	rc = getaddrinfo(name, NULL, &hints, &res);
 	Py_END_ALLOW_THREADS
-	if (error) {
-		PyObject *v = Py_BuildValue("(is)", error, gai_strerror(error));
+	if (rc) {
+		PyObject *v = Py_BuildValue("(is)", rc, gai_strerror(rc));
 		PyErr_SetObject(PyExc_RuntimeError, v);
 		Py_DECREF(v);
 		
@@ -893,6 +902,7 @@ PyObject *set_inaddr(PyObject *args, struct sockaddr_in *addr)
 	}
 
 	memcpy((char *) addr, res->ai_addr, sizeof(struct sockaddr_in));
+
 	freeaddrinfo(res);
 
 	addr->sin_family = af;
@@ -904,4 +914,9 @@ PyObject *set_inaddr(PyObject *args, struct sockaddr_in *addr)
 %}
 
 %init %{
+#ifdef WIN32
+	WSADATA wsaData;
+
+	WSAStartup(MAKEWORD(2, 2), &wsaData);
+#endif
 %}

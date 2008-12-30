@@ -76,13 +76,14 @@ class build_ext_swig_in_package(build_ext):
         """Extra hook to build cl_lib.h2 and sized_struct.i"""
 
         # crude detection of V5 vs v6
-        if os.path.exists(dtk + '/include/cl_lib.h'):
-            self.spawn(['patch', '-o', 'cl_lib.h2',
-                        os.path.join(dtk, 'include', 'cl_lib.h'),
-                        'cl_lib.patch'])
 
-            self.spawn(['patch', '-o', 'acu_type.h2',
-                        os.path.join(dtk, 'include', 'acu_type.h'),
+        cl_lib = os.path.join(dtk, 'include', 'cl_lib.h')
+        acu_type = os.path.join(dtk, 'include', 'acu_type.h')
+                     
+        if os.path.exists(cl_lib):
+            self.spawn(['patch', '-o', 'cl_lib.h2', cl_lib, 'cl_lib.patch'])
+
+            self.spawn(['patch', '-o', 'acu_type.h2', acu_type,
                         'acu_type.patch'])
 
             swig = self.swig or self.find_swig()
@@ -138,35 +139,66 @@ class build_ext_swig_in_package(build_ext):
 extra_objects = []
 
 if os.name == 'nt':
-    # This is for versions Call 5.x/Prosody 1.y
     import _winreg
-    h = _winreg.OpenKey(_winreg.HKEY_LOCAL_MACHINE,
-                        'SOFTWARE\\Aculab\\acusetup')
-    dtk = str(_winreg.QueryValueEx(h, 'BaseDirectory')[0])
-    h.Close()
-    dtk = os.path.split(dtk.rstrip('\\'))[0]
-    dtk = os.path.join(dtk, 'API')
+    try:
+        # This is for versions Call 5.x/Prosody 1.y
+        
+        h = _winreg.OpenKey(_winreg.HKEY_LOCAL_MACHINE,
+                            'SOFTWARE\\Aculab\\acusetup')
+        dtk = str(_winreg.QueryValueEx(h, 'BaseDirectory')[0])
+        h.Close()
+        dtk = os.path.split(dtk.rstrip('\\'))[0]
+        dtk = os.path.join(dtk, 'API')
 
-    define_macros = []
-    lib_dirs = []
-    libs = []
+        define_macros = []
+        lib_dirs = []
+        libs = []
 
-    include_dirs = [os.path.join(dtk, 'Call', 'include'),
-                    os.path.join(dtk, 'Switch', 'include'),
-                    os.path.join(dtk, 'Speech', 'include')]
+        include_dirs = [os.path.join(dtk, 'Call', 'include'),
+                        os.path.join(dtk, 'Switch', 'include'),
+                        os.path.join(dtk, 'Speech', 'include')]
 
-    sources = [os.path.join(dtk, 'Call', 'lib', 'cllib.c'),
-               os.path.join(dtk, 'Call', 'lib', 'clnt.c'),
-               os.path.join(dtk, 'Call', 'lib', 'common.c'),
-               os.path.join(dtk, 'Switch', 'lib', 'swlib.c'),
-               os.path.join(dtk, 'Switch', 'lib', 'swnt.c'),
-               os.path.join(dtk, 'Speech', 'lib', 'smbesp.c'),
-               os.path.join(dtk, 'Speech', 'lib', 'smclib.c'),
-               os.path.join(dtk, 'Speech', 'lib', 'smdc.c'),
-               os.path.join(dtk, 'Speech', 'lib', 'smfwcaps.c'),
-               os.path.join(dtk, 'Speech', 'lib', 'smlib.c'),
-               os.path.join(dtk, 'Speech', 'lib', 'smnt.c'),
-               "lowlevel.i"]
+        sources = [os.path.join(dtk, 'Call', 'lib', 'cllib.c'),
+                   os.path.join(dtk, 'Call', 'lib', 'clnt.c'),
+                   os.path.join(dtk, 'Call', 'lib', 'common.c'),
+                   os.path.join(dtk, 'Switch', 'lib', 'swlib.c'),
+                   os.path.join(dtk, 'Switch', 'lib', 'swnt.c'),
+                   os.path.join(dtk, 'Speech', 'lib', 'smbesp.c'),
+                   os.path.join(dtk, 'Speech', 'lib', 'smclib.c'),
+                   os.path.join(dtk, 'Speech', 'lib', 'smdc.c'),
+                   os.path.join(dtk, 'Speech', 'lib', 'smfwcaps.c'),
+                   os.path.join(dtk, 'Speech', 'lib', 'smlib.c'),
+                   os.path.join(dtk, 'Speech', 'lib', 'smnt.c'),
+                   "lowlevel.i"]
+    except WindowsError:
+        
+        # This is for Call 6.x/Prosody 2.y
+        dtk = os.getenv('ACULAB_ROOT')
+        if not dtk:
+            raise ValueError('ACULAB_ROOT is not defined')
+
+        fax = '/ProsodyLibraries/Group3Fax/API'
+        if not os.path.exists(dtk + fax):
+            fax = None
+
+        t38gw = '/ProsodyLibraries/T38_Gateway'
+        if not os.path.exists(dtk + t38gw):
+            t38gw = None
+
+        define_macros = [('_WIN32', None),
+                         ('WIN32', None),
+                         ('TiNGTYPE_WINNT', None),
+                         ('TiNG_USE_V6', None)]
+
+        include_dirs = [dtk + '/include',
+                        dtk + '/TiNG/pubdoc/gen',
+                        dtk + '/TiNG/apilib',
+                        dtk + '/TiNG/apilib/WINNT',
+                        dtk + '/TiNG/include' ]
+
+        lib_dirs = [dtk + '/lib']
+        libs = ['cl_lib', 'res_lib', 'sw_lib', 'rmsm', 'TiNG', 'ws2_32']
+        sources = ['lowlevel.i']
 
 elif os.name == 'posix':
     dtk = os.getenv('ACULAB_ROOT')

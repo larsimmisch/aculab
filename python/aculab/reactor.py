@@ -18,7 +18,7 @@ can't keep references to C{tSMEventId}s around -
 it is only safe to keep a reference to the file descriptor.
 
 This is I{++ungood}, but after more than a decade I have given up hope Aculab
-would pay attention to details.
+would pay attention to details or be at least consistent.
 
 The following strategy is currently used:
 
@@ -268,7 +268,10 @@ def call_on_event(call):
     if rc:
         raise AculabError(rc, 'call_event')
 
-    call_dispatch(call, event)
+    # On Windows, we sometimes get empty events
+    # Discard them
+    if event.handle == call.handle:
+        call_dispatch(call, event)
     
 def add_call_event(reactor, call):
     """Add a call event to the reactor."""
@@ -290,12 +293,19 @@ def add_call_event(reactor, call):
         if rc:
             raise AculabError(rc, 'call_get_handle_event_wait_object')
 
-        # This is a bit nasty - we set an attribute on call
-        call.event = chwo.wait_object.fileno()
+        if os.name == 'nt':
+            # This is a bit nasty - we set an attribute on call
+            call.event = chwo.wait_object
 
-        # Note the curry
-        reactor.add(call.event, chwo.wait_object.mode(),
-                    curry(call_on_event, call))
+            # Note the curry
+            reactor.add(call.event, curry(call_on_event, call))            
+        else:
+            # This is a bit nasty - we set an attribute on call
+            call.event = chwo.wait_object.fileno()
+
+            # Note the curry
+            reactor.add(call.event, chwo.wait_object.mode(),
+                        curry(call_on_event, call))
 
 def remove_call_event(reactor, call):
     if lowlevel.cc_version < 6:

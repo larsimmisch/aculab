@@ -247,8 +247,18 @@ class Win32Reactor(threading.Thread):
             self.mutex.release()
 
         while True:
-            win32event.WaitForSingleObject(self.wakeup, wait)
-                
+
+            # KeyboardInterrupt will not wake WaitForSingleObject, so we can't
+            # sleep forever
+            if wait < 0 or wait > 500:
+                wait = 500
+
+            try:
+                win32event.WaitForSingleObject(self.wakeup, wait)
+            except KeyboardInterrupt:
+                self.stop_workers()
+                raise
+
             self.mutex.acquire()
             try:
                 todo = self.queue

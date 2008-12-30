@@ -1,6 +1,15 @@
---- /usr/local/aculab/v6/include/acu_type.h	2007-11-08 16:12:52.000000000 +0100
-+++ acu_type.h2	2007-11-14 17:26:53.000000000 +0100
-@@ -165,7 +165,7 @@
+--- d:\Aculab\v6\include\acu_type.h	2008-12-30 17:09:33.118929600 +0100
++++ acu_type.h2	2008-12-30 17:03:02.597387200 +0100
+@@ -80,7 +80,7 @@
+         #define TiNGTYPE_WINNT
+     #endif
+ 
+-    #define ACU_EXPORT WINAPI
++    #define ACU_EXPORT
+ 
+     #ifndef DRIVER
+ 		/* Streamline what we get from windows.h */
+@@ -161,7 +161,7 @@
         #define ACU_PACK_DIRECTIVE
     #endif /* ACU_SOLARIS_SPARC */
  #else

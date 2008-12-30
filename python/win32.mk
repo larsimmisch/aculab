@@ -4,37 +4,34 @@ SO := .pyd
 EXP := .exp
 CRUFT := *.opt *.plg *.ncb
 
-DTK_W := $(dir $(strip $(wildcard c:/Aculab/API/Call) \
-		                $(wildcard c:/Programs/Aculab/API/Call) \
-						$(wildcard c:/Programme/Aculab/API/Call)))
-
 # Need to convert to a cygwin path, otherwise the ':' in DTK will upset make
-DTK := $(shell cygpath -u $(DTK_W))
+DTK := $(shell cygpath -u "$(ACULAB_ROOT)")
+
+# And swig wants slashes and no backslashes
+DTK_S := $(shell cygpath -m "$(ACULAB_ROOT)")
 
 # CC := cl /MD
 CC := gcc -mno-cygwin # -g
 
 # check for our standard locations of SWIG and Python
 
-SWIG := $(dir $(strip $(wildcard c:/swig-1.3.21/swig.exe) \
-                      $(wildcard d:/swig-1.3.21/swig.exe) \
-                      $(wildcard e:/swig-1.3.21/swig.exe) \
-                      $(wildcard c:/swigwin-1.3.31/swig.exe) \
-                      $(wildcard d:/swigwin-1.3.31/swig.exe) \
-                      $(wildcard e:/swigwin-1.3.31/swig.exe)))swig
+SWIG := $(dir $(strip $(wildcard c:/swig-1.3.36/swig.exe) \
+                      $(wildcard d:/swig-1.3.36/swig.exe) \
+                      $(wildcard e:/swig-1.3.36/swig.exe) \
+                      $(wildcard c:/swigwin-1.3.36/swig.exe) \
+                      $(wildcard d:/swigwin-1.3.36/swig.exe) \
+                      $(wildcard e:/swigwin-1.3.36/swig.exe)))swig
 
-PYTHON := $(strip $(wildcard c:/python25/python.exe) \
-			      $(wildcard d:/python25/python.exe) \
-                  $(wildcard e:/python25/python.exe))
+PYTHON := $(strip $(wildcard c:/python26/python.exe) \
+			      $(wildcard d:/python26/python.exe) \
+                  $(wildcard e:/python26/python.exe))
 
-DEFINES := -DWIN32 
+DEFINES := -D_WIN32 -DWIN32 -DTiNG_USE_V6 -DTiNGTYPE_WINNT
 C_DEFINES := $(DEFINES)
 
-SWIG_INCLUDE = -I$(DTK_W)Call/include -I$(DTK_W)Switch/include \
-	-I$(DTK_W)Speech/include
-
-ACULAB_INCLUDE = -I$(DTK)Call/include -I$(DTK)Switch/include \
-	-I$(DTK)Speech/include
+ACULAB_INCLUDE =  -I$(DTK_S)/include -I$(DTK_S)/TiNG/pubdoc/gen \
+                  -I$(DTK_S)/TiNG/apilib -I$(DTK_S)/TiNG/apilib/WINNT \
+                  -I$(DTK_S)/TiNG/include
 
 # Determine Python paths and version from installed python executable via 
 # distutils. 
@@ -49,23 +46,13 @@ PYTHON_LIBS := $(PL)/libpython$(PYTHON_VERSION).a
 PYTHON_SITEDIR := $(shell $(PYTHON) disthelper.py -l)
 endif
 
+ACULAB_LIBDIR := -L$(DTK)/lib
+ACULAB_LIBS := -lcl_lib -lres_lib -lsw_lib -lrmsm -lTiNG -lws2_32
+
 LDFLAGS := -shared -s
 POST_LDFLAGS := 
 
-OBJS := lowlevel_wrap$(O) cllib$(O) clnt$(O) common$(O) \
-	swlib$(O) swnt$(O) smnt$(O) smbesp$(O) smlib$(O) smfwcaps$(O) \
-
-
-# VPATH=$(DTK)Call/lib:$(DTK)Switch/lib:$(DTK)Speech/lib:
-
-%$(O): $(DTK)Call/lib/%.c 
-	$(CC) -c $(C_DEFINES) $(ACULAB_INCLUDE) $(PYTHON_INCLUDE) $< -o $@ 
-
-%$(O): $(DTK)Speech/lib/%.c 
-	$(CC) -c $(C_DEFINES) $(ACULAB_INCLUDE) $(PYTHON_INCLUDE) $< -o $@ 
-
-%$(O): $(DTK)Switch/lib/%.c 
-	$(CC) -c $(C_DEFINES) $(ACULAB_INCLUDE) $(PYTHON_INCLUDE) $< -o $@ 
+OBJS := lowlevel_wrap$(O) 
 
 
 

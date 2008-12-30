@@ -7,7 +7,12 @@ find_v6 := $(strip $(wildcard $(ACULAB_ROOT)/include/cl_lib.h))
 
 # include the appropriate definitions
 ifeq ($(find_init),)
-  include win32.mk
+  ifeq ($(ACULAB_ROOT),)
+    # Later versions use ACULAB_ROOT - v5 uses the Registry
+    include win32_v5.mk
+  else
+    include win32.mk
+  endif
 else
   ifeq ($(ACULAB_ROOT),)
     $(error "ACULAB_ROOT not set")
