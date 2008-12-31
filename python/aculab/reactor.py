@@ -31,6 +31,8 @@ L{remove_event} takes a C{tSMEventId} as event parameter. This is used
 by the L{SpeechChannel} that manages its events explicitly.
 """
 
+from __future__ import with_statement
+
 import threading
 import select
 import os
@@ -47,6 +49,7 @@ log_call = logging.getLogger('call')
 if os.name == 'nt':
     import win32reactor
     import win32event
+    import pywintypes
 
     add_event = win32reactor.add_event
     remove_event = win32reactor.remove_event
@@ -103,8 +106,7 @@ class CallEventThread(threading.Thread):
                         curry(self.on_event, pipe[0]))
 
     def add(self, reactor, call):
-        self.mutex.acquire()
-        try:
+        with self.mutex:
             self.calls[call.handle] = (call, reactor)
             # If the pipe doesn't exist, create and install it
             pipe = self.pipes.get(reactor, None)
@@ -115,8 +117,6 @@ class CallEventThread(threading.Thread):
             events = self.events.get(call.handle, [])
             if events:
                 del self.events[call.handle]
-        finally:
-            self.mutex.release()
 
         # log.debug('add: queue %s', events)
 
@@ -126,13 +126,10 @@ class CallEventThread(threading.Thread):
             
     def remove(self, reactor, call):
         # Todo: clean up pipes to the reactor
-        self.mutex.acquire()
-        try:
+        with self.mutex:
             del self.calls[call.handle]
             if self.events.has_key(call.handle):
                 del self.events[call.handle]
-        finally:
-            self.mutex.release()
 
     def on_event(self, pipe):
         if os.name != 'nt':
@@ -144,14 +141,11 @@ class CallEventThread(threading.Thread):
                     break
 
         # Collect all events and translate call handle to call
-        self.mutex.acquire()
-        try:
+        with self.mutex:
             todo = [ (self.calls[handle][0], events)
                      for handle, events in self.events.iteritems() ]
 
             self.events = {}
-        finally:
-            self.mutex.release()
 
         # Dispatch all events
         for call, events in todo:
@@ -165,8 +159,7 @@ class CallEventThread(threading.Thread):
 
         handle = event.handle
         
-        self.mutex.acquire()
-        try:
+        with self.mutex:
             # Queue the event
             if self.events.has_key(handle):
                 events = self.events[handle]
@@ -180,8 +173,6 @@ class CallEventThread(threading.Thread):
             call, reactor = self.calls.get(handle, (None, None))
             # Get the pipe to the reactor
             pipe = self.pipes.get(reactor, None)
-        finally:
-            self.mutex.release()
 
         if pipe:
             # log_call.debug('%x sending %s', handle, event_name(event))
@@ -295,10 +286,10 @@ def add_call_event(reactor, call):
 
         if os.name == 'nt':
             # This is a bit nasty - we set an attribute on call
-            call.event = chwo.wait_object
+            call.event = pywintypes.HANDLE(chwo.wait_object)
 
             # Note the curry
-            reactor.add(call.event, curry(call_on_event, call))            
+            reactor.add(call.event, curry(call_on_event, call))
         else:
             # This is a bit nasty - we set an attribute on call
             call.event = chwo.wait_object.fileno()

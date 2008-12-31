@@ -586,6 +586,9 @@ class CallHandle(CallHandleBase):
         self.details = lowlevel.DETAIL_XPARMS()
 
         if self.handle:
+            
+            remove_call_event(self.reactor, self)
+            
             if cause is None:
                 xcause = lowlevel.CAUSE_XPARMS()
             elif type(cause) == type(0):
@@ -599,8 +602,6 @@ class CallHandle(CallHandleBase):
             rc = lowlevel.call_release(xcause)
             if rc:
                 raise AculabError(rc, 'call_release', self.name)
-
-            remove_call_event(self.reactor, self)
 
             log.debug('%s release(%d)', self.name, xcause.cause)
 

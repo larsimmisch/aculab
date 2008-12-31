@@ -2,6 +2,8 @@
 
 """Reactor implementation for Posix systems that have poll()."""
 
+from __future__ import with_statement
+
 import threading
 import select
 import os
@@ -71,11 +73,8 @@ class PollReactor(threading.Thread):
     def add_timer(self, interval, function, args = [], kwargs={}):
         '''Add a timer after interval in seconds.'''
 
-        self.mutex.acquire()
-        try:
+        with self.mutex:
             t, adjust = self.timer.add(interval, function, args, kwargs)
-        finally:
-            self.mutex.release()
 
         # if the new timer is the next, wake up the timer thread to readjust
         # the wait period
@@ -89,11 +88,8 @@ class PollReactor(threading.Thread):
     def cancel_timer(self, timer):
         '''Cancel a timer.
         Cancelling an expired timer raises a ValueError'''
-        self.mutex.acquire()
-        try:
+        with self.mutex:
             adjust = self.timer.cancel(timer)
-        finally:
-            self.mutex.release()
         
         if adjust and threading.currentThread() != self and self.isAlive():
             # function 2 is timer adjust
@@ -115,11 +111,11 @@ class PollReactor(threading.Thread):
             self.poll.register(handle, mode)
         else:
             # log.debug('adding fd: %d %s', handle, method.__name__)
-            self.mutex.acquire()
-            self.handles[handle] = method
-            # function 1 is add
-            self.queue.append((1, handle, mode))
-            self.mutex.release()
+            with self.mutex:
+                self.handles[handle] = method
+                # function 1 is add
+                self.queue.append((1, handle, mode))
+
             self.pipe[1].write('1')
 
     def remove(self, handle):
@@ -136,39 +132,32 @@ class PollReactor(threading.Thread):
             self.poll.unregister(handle)
         else:
             # log.debug('removing fd: %d', handle)
-            self.mutex.acquire()
-            del self.handles[handle]
-            # function 0 is remove
-            self.queue.append((0, handle, None))
-            self.mutex.release()
+            with self.mutex:
+                del self.handles[handle]
+                # function 0 is remove
+                self.queue.append((0, handle, None))
+
             self.pipe[1].write('0')
 
     def update(self):
         """Update our list of fds."""
         
-        self.mutex.acquire()
-        try:
+        with self.mutex:
             add, fd, mask = self.queue.pop(0)
-        finally:
-            self.mutex.release()
 
         if add:
             self.poll.register(fd, mask)
         else:
             self.poll.unregister(fd)
 
-
     def run_timers(self):
         """Run the pending timers.
 
         @return: time to wait for the next timer.
         """
-        self.mutex.acquire()
-        try:
+        with self.mutex:
             timers = self.timer.get_pending()
             wait = self.timer.time_to_wait()
-        finally:
-            self.mutex.release()
 
         for t in timers:
             t()
@@ -189,11 +178,8 @@ class PollReactor(threading.Thread):
                         self.pipe[0].read(1)
                         wait = self.update()
                     else:
-                        self.mutex.acquire()
-                        try:
+                        with self.mutex:
                             m = self.handles.get(a, None)
-                        finally:
-                            self.mutex.release()
 
                         # log.info('event on fd %d %s: %s', a,
                         #         maskstr(mask), m.__name__)

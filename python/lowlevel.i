@@ -919,4 +919,6 @@ PyObject *set_inaddr(PyObject *args, struct sockaddr_in *addr)
 
 	WSAStartup(MAKEWORD(2, 2), &wsaData);
 #endif
+
+	PyEval_InitThreads();
 %}

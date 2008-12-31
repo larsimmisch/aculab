@@ -1,0 +1,68 @@
+#O := .obj
+O := .o
+SO := .pyd
+EXP := .exp
+CRUFT := *.opt *.plg *.ncb
+
+DTK_W := $(dir $(strip $(wildcard c:/Aculab/API/Call) \
+		                $(wildcard c:/Programs/Aculab/API/Call) \
+						$(wildcard c:/Programme/Aculab/API/Call)))
+
+# Need to convert to a cygwin path, otherwise the ':' in DTK will upset make
+DTK := $(shell cygpath -u "$(DTK_W)")
+
+# CC := cl /MD
+CC := gcc -mno-cygwin # -g
+
+# check for our standard locations of SWIG and Python
+
+SWIG := $(dir $(strip $(wildcard c:/swigwin-1.3.36/swig.exe) \
+                      $(wildcard d:/swigwin-1.3.36/swig.exe) \
+                      $(wildcard e:/swigwin-1.3.36/swig.exe)))swig
+
+PYTHON := $(strip $(wildcard c:/python26/python.exe) \
+			      $(wildcard d:/python26/python.exe) \
+                  $(wildcard e:/python26/python.exe))
+
+DEFINES := -DWIN32 
+C_DEFINES := $(DEFINES)
+
+SWIG_INCLUDE = -I$(DTK_W)Call/include -I$(DTK_W)Switch/include \
+	-I$(DTK_W)Speech/include
+
+ACULAB_INCLUDE = -I$(DTK)Call/include -I$(DTK)Switch/include \
+	-I$(DTK)Speech/include
+
+# Determine Python paths and version from installed python executable via 
+# distutils. 
+
+PYTHON_INCLUDE := -I$(shell cygpath -u "$(shell $(PYTHON) disthelper.py -i)")
+# avoid multiple warnings if python is not found
+ifneq ($(PYTHON_INCLUDE),) 
+PYTHON_LIBDIR := 
+PL = $(shell cygpath -u "$(shell $(PYTHON) disthelper.py -L)")
+PYTHON_VERSION := $(subst .,,$(shell $(PYTHON) disthelper.py -v))
+PYTHON_LIBS := $(PL)/libpython$(PYTHON_VERSION).a
+PYTHON_SITEDIR := $(shell $(PYTHON) disthelper.py -l)
+endif
+
+LDFLAGS := -shared -s
+POST_LDFLAGS := 
+
+OBJS := lowlevel_wrap$(O) cllib$(O) clnt$(O) common$(O) \
+	swlib$(O) swnt$(O) smnt$(O) smbesp$(O) smlib$(O) smfwcaps$(O) \
+
+
+# VPATH=$(DTK)Call/lib:$(DTK)Switch/lib:$(DTK)Speech/lib:
+
+%$(O): $(DTK)Call/lib/%.c 
+	$(CC) -c $(C_DEFINES) $(ACULAB_INCLUDE) $(PYTHON_INCLUDE) $< -o $@ 
+
+%$(O): $(DTK)Speech/lib/%.c 
+	$(CC) -c $(C_DEFINES) $(ACULAB_INCLUDE) $(PYTHON_INCLUDE) $< -o $@ 
+
+%$(O): $(DTK)Switch/lib/%.c 
+	$(CC) -c $(C_DEFINES) $(ACULAB_INCLUDE) $(PYTHON_INCLUDE) $< -o $@ 
+
+
+

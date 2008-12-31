@@ -1,7 +1,7 @@
 # Copyright (c) 2001-2004 Twisted Matrix Laboratories for OrderedDict
 # Copyright (C) 2003-2008 Lars Immisch
 
-"""Utility classes: L{OrderedDict}, L{Lockable} and L{EventQueue}."""
+"""Utility classes: L{OrderedDict} and L{EventQueue}."""
 
 import os
 import lowlevel
@@ -66,6 +66,9 @@ class curry:
             kw = kwargs or self.kwargs
 
         return self.fun(*(self.pending + args), **kw)
+
+    def __repr__(self):
+        return self.__name__
 
 class OrderedDict(dict):
     """A UserDict that preserves insert order whenever possible."""
@@ -139,19 +142,6 @@ class OrderedDict(dict):
     def update(self, d):
         for k, v in d.items():
             self[k] = v
-
-class Lockable(object):
-    
-    def __init__(self, mutex = None):
-        self.mutex = mutex
-    
-    def lock(self):
-        if self.mutex:
-            self.mutex.acquire()
-
-    def unlock(self):
-        if self.mutex:
-            self.mutex.release()
 
 class EventQueue(object):
 

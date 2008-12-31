@@ -2,6 +2,8 @@
 
 """A thread-based timer"""
 
+from __future__ import with_statement
+
 import threading
 import time
 
@@ -99,11 +101,8 @@ class TimerThread(threading.Thread, TimerBase):
     def add(self, interval, function, args = [], kwargs={}):
         '''Add a timer after interval in seconds.'''
 
-        self.mutex.acquire()
-        try:
+        with self.mutex:
             t, adjust = TimerBase.add(self, interval, function, args, kwargs)
-        finally:
-            self.mutex.release()
 
         # if the new timer is the next, wake up the timer thread to readjust
         # the wait period
@@ -115,11 +114,8 @@ class TimerThread(threading.Thread, TimerBase):
     def cancel(self, timer):
         '''Cancel a timer.
         Cancelling an expired timer raises a ValueError'''
-        self.mutex.acquire()
-        try:
+        with self.mutex:
             adjust = TimerBase.cancel(self, timer)
-        finally:
-            self.mutex.release()
         
         if adjust:
             self.event.set()
@@ -128,12 +124,9 @@ class TimerThread(threading.Thread, TimerBase):
         '''Run the Timer in the current thread.
         If you want to run the Timer in its own thread, call start()'''
         while True:
-            self.mutex.acquire()
-            try:
+            with self.mutex:
                 todo = self.get_pending()
                 next = self.time_to_wait()
-            finally:
-                self.mutex.release()
 
             for t in todo:
                 t()

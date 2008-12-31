@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# Copyright (C) 2002-2007 Lars Immisch
+# Copyright (C) 2002-2009 Lars Immisch
 
 import sys
 import logging

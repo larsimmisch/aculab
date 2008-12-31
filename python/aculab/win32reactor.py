@@ -2,10 +2,11 @@
 
 """Reactor implementation for Windows systems."""
 
+from __future__ import with_statement 
+
 import threading
 import os
 import logging
-import pywintypes
 import win32api
 import win32event
 # local imports
@@ -42,7 +43,7 @@ class Win32ReactorThread(threading.Thread):
         self.wakeup = win32event.CreateEvent(None, 0, 0, None)
         self.master = master
         self.shutdown = False
-        # handles is a map from handles to method
+        # handles is a map from integer handles to method
         if handle:
             self.handles = { self.wakeup: None, handle: method }
         else:
@@ -54,21 +55,21 @@ class Win32ReactorThread(threading.Thread):
         """Used internally.
 
         Update the internal list of objects to wait for."""
-        self.master.mutex.acquire()
-        try:
+
+        with self.master.mutex:
             while self.queue:
                 add, handle, method = self.queue.pop(0)
                 if add:
-                    # print 'added 0x%04x' % handle
+                    # log.debug('added %s: %s', handle, method)
                     self.handles[handle] = method
                 else:
-                    # print 'removed 0x%04x' % handle
+                    # log.debug('removed %s', handle)
                     del self.handles[handle]
+                    # We must detach from the handle. If we don't, it will be
+                    # closed twice, with undefined results.
+                    handle.Detach()
 
-        finally:
-            self.master.mutex.release()
-
-        return self.handles.keys()
+            return self.handles.keys()
 
     def stop(self):
         """Stop the thread."""
@@ -79,32 +80,42 @@ class Win32ReactorThread(threading.Thread):
         """The Win32ReactorThread run loop. Should not be called
         directly."""
 
-        handles = self.handles.keys()
-
-        while handles:
-            try:
-                rc = win32event.WaitForMultipleObjects(handles, 0, -1)
-            except win32event.error, e:
-                # 'invalid handle' may occur if an event is deleted
-                # before the update arrives
-                if e[0] == 6:
-                    handles = self.update()
-                    continue
-                else:
-                    raise
-
-            if rc == win32event.WAIT_OBJECT_0:
-                if self.shutdown:
-                    return
-                
-                handles = self.update()
-            else:
-                self.master.mutex.acquire()
+        handles = self.update()
+        errors = 0
+        
+        try:
+            while handles:
                 try:
-                    m = self.handles[handles[rc - win32event.WAIT_OBJECT_0]]
-                    self.master.enqueue(m)
-                finally:
-                    self.master.mutex.release()
+                    # log.debug('handles: %s', handles)
+                    rc = win32event.WaitForMultipleObjects(handles, 0, -1)
+                except win32event.error, e:
+                    # 'invalid handle' occurs when an event is deleted
+                    if e[0] == 6:
+                        # log.debug('update after invalid handle')
+                        handles = self.update()
+                        errors = errors +1
+                        if errors > 3:
+                            log.error('handles: %s', handles)
+                            raise
+                        continue
+                    else:
+                        raise
+
+                errors = 0
+
+                if rc == win32event.WAIT_OBJECT_0:
+                    if self.shutdown:
+                        return
+
+                    handles = self.update()
+                else:
+                    with self.master.mutex:
+                        h = handles[rc - win32event.WAIT_OBJECT_0]
+                        m = self.handles[h]
+                        self.master.enqueue(m)
+        except:
+            log.error('Error in Win32ReactorThread run loop', exc_info=1)
+            return
 
 
 class Win32Reactor(threading.Thread):
@@ -132,11 +143,8 @@ class Win32Reactor(threading.Thread):
     def add_timer(self, interval, function, args = [], kwargs={}):
         '''Add a timer after interval in seconds.'''
 
-        self.mutex.acquire()
-        try:
+        with self.mutex:
             t, adjust = self.timer.add(interval, function, args, kwargs)
-        finally:
-            self.mutex.release()
 
         # if the new timer is the next, wake up the timer thread to readjust
         # the wait period
@@ -148,11 +156,8 @@ class Win32Reactor(threading.Thread):
     def cancel_timer(self, timer):
         '''Cancel a timer.
         Cancelling an expired timer raises a ValueError'''
-        self.mutex.acquire()
-        try:
+        with self.mutex:
             adjust = self.timer.cancel(timer)
-        finally:
-            self.mutex.release()
         
         if adjust and threading.currentThread() != self and self.isAlive():
             win32event.SetEvent(self.wakeup)
@@ -172,39 +177,37 @@ class Win32Reactor(threading.Thread):
 
         @param event: The event to watch.
         @param method: This will be called when the event is fired."""
-        handle = pywintypes.HANDLE(event)
-        self.mutex.acquire()
-        try:
+
+
+        # log.debug('adding: %s', event)
+        with self.mutex:
             for d in self.reactors:
                 if len(d.handles) < win32event.MAXIMUM_WAIT_OBJECTS:
-                    d.queue.append((1, handle, method))
+                    d.queue.append((1, event, method))
                     win32event.SetEvent(d.wakeup)
 
                     return
 
             # if no reactor has a spare slot, create a new one
-            d = Win32ReactorThread(self, handle, method)
+            # log.debug('added/created %d', event)
+            d = Win32ReactorThread(self, event, method)
             if self.isAlive():
                 d.setDaemon(1)
                 d.start()
             self.reactors.append(d)
-        finally:
-            self.mutex.release()
 
     def remove(self, event):
         """Remove an event from the reactor.
 
         @param handle: The handle of the Event to watch."""
 
-        handle = pywintypes.HANDLE(event)
-        self.mutex.acquire()
-        try:
+        with self.mutex:
             for d in self.reactors:
-                if d.handles.has_key(handle):
-                    d.queue.append((0, handle, None))
+                if d.handles.has_key(event):
+                    d.queue.append((0, event, None))
                     win32event.SetEvent(d.wakeup)
-        finally:
-            self.mutex.release()
+
+                    return
 
     def start_workers(self):
         """Start the thread workers."""
@@ -220,12 +223,9 @@ class Win32Reactor(threading.Thread):
     def stop_workers(self):
         """Stop all worker threads."""
 
-        self.mutex.acquire()
-        try:
+        with self.mutex:
             for d in self.reactors:
                 d.stop()
-        finally:
-            self.mutex.release()
 
         for d in self.reactors:
             d.join()
@@ -239,12 +239,9 @@ class Win32Reactor(threading.Thread):
     def run(self):
         """Run the reactor in the current thread."""
         
-        self.mutex.acquire()
-        try:
+        with self.mutex:
             self.start_workers()
             wait = self.timer.time_to_wait()
-        finally:
-            self.mutex.release()
 
         while True:
 
@@ -259,21 +256,17 @@ class Win32Reactor(threading.Thread):
                 self.stop_workers()
                 raise
 
-            self.mutex.acquire()
-            try:
+            with self.mutex:
                 todo = self.queue
                 self.queue = []
                 timers = self.timer.get_pending()
                 wait = self.timer.time_to_wait()
-            finally:
-                self.mutex.release()
 
             try:
                 for m in todo:
                     m()
                 for t in timers:
                     t()
-
             except StopIteration:
                 self.stop_workers()
                 return
