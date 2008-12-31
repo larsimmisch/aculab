@@ -1,4 +1,4 @@
-# Copyright (C) 2002-2008 Lars Immisch
+# Copyright (C) 2002-2009 Lars Immisch
 
 """Utilities for portable event handling.
 
@@ -37,6 +37,7 @@ import threading
 import select
 import os
 import logging
+import atexit
 # local imports
 import lowlevel
 from util import curry, create_pipe
@@ -91,6 +92,7 @@ class CallEventThread(threading.Thread):
         self.events = {}
         self.mutex = threading.Lock()
         threading.Thread.__init__(self)
+        self.exit = False
 
     def create_pipe(self, reactor):
         if os.name == 'nt':
@@ -104,6 +106,10 @@ class CallEventThread(threading.Thread):
             self.pipes[reactor] = pipe
             reactor.add(pipe[0].fileno(), select.POLLIN,
                         curry(self.on_event, pipe[0]))
+
+    def shutdown(self):
+        with self.mutex:
+            self.exit = True
 
     def add(self, reactor, call):
         with self.mutex:
@@ -185,7 +191,7 @@ class CallEventThread(threading.Thread):
     def run(self):
         """Thread main - Process call events."""
 
-        while True:
+        while not self.exit:
             event = lowlevel.STATE_XPARMS()
             event.timeout = 200
 
@@ -198,6 +204,11 @@ class CallEventThread(threading.Thread):
                 self.enqueue(event)
 
 _call_event_thread = None
+
+def shutdown_call_event_thread():
+    if _call_event_thread:
+        _call_event_thread.shutdown()
+        _call_event_thread.join()
 
 # Unused
 def dispatch(controller, method, *args, **kwargs):
@@ -250,7 +261,6 @@ def call_dispatch(call, event):
         else:
             h()
 
-
 def call_on_event(call):
     event = lowlevel.STATE_XPARMS()
     
@@ -274,6 +284,8 @@ def add_call_event(reactor, call):
             _call_event_thread = CallEventThread()
             _call_event_thread.setDaemon(1)
             _call_event_thread.start()
+
+            atexit.register(shutdown_call_event_thread)
 
         _call_event_thread.add(reactor, call)
     else:

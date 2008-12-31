@@ -915,9 +915,11 @@ PyObject *set_inaddr(PyObject *args, struct sockaddr_in *addr)
 
 %init %{
 #ifdef WIN32
+#ifdef TiNG_USE_V6
 	WSADATA wsaData;
 
 	WSAStartup(MAKEWORD(2, 2), &wsaData);
+#endif
 #endif
 
 	PyEval_InitThreads();
