@@ -7,6 +7,7 @@ import xml.sax
 import xml.sax.handler
 from distutils.core import setup,Extension
 from distutils.command.build_ext import build_ext
+from distutils.dep_util import newer
 from distutils import log
 import shutil
 
@@ -81,32 +82,39 @@ class build_ext_swig_in_package(build_ext):
         acu_type = os.path.join(dtk, 'include', 'acu_type.h')
                      
         if os.path.exists(cl_lib):
-            self.spawn(['patch', '-o', 'cl_lib.h2', cl_lib, 'cl_lib.patch'])
+            
+            # To generate a patch, (for example cl_lib.patch), copy the original
+            # cl_lib.h to cl_lib.h2, edit it, and then do:
+            # diff -u $(DTK)/include/cl_lib.h cl_lib.h2 > cl_lib.patch
 
-            self.spawn(['patch', '-o', 'acu_type.h2', acu_type,
-                        'acu_type.patch'])
+            if newer('cl_lib.patch', 'cl_lib.h2'):
+                self.spawn(['patch', '-o', 'cl_lib.h2', cl_lib, 'cl_lib.patch'])
+                
+                self.spawn(['patch', '-o', 'acu_type.h2', acu_type,
+                            'acu_type.patch'])
 
-            swig = self.swig or self.find_swig()
-            swig_cmd = [swig, '-xml', '-xmllite']
-            swig_cmd.extend(self.swig_opts)
+                swig = self.swig or self.find_swig()
+                swig_cmd = [swig, '-xml', '-xmllite']
+                swig_cmd.extend(self.swig_opts)
 
-            # Do not override commandline arguments
-            if not self.swig_opts:
-                for o in ext.swig_opts:
-                    # More ugly hacks.
-                    # Remove Python specific swig args
-                    if not o in ['-modern', '-new_repr']:
-                        swig_cmd.append(o)
+            if newer('lowlevel.i', 'sized_struct.i'):
+                # Do not override commandline arguments
+                if not self.swig_opts:
+                    for o in ext.swig_opts:
+                        # More ugly hacks.
+                        # Remove Python specific swig args
+                        if not o in ['-modern', '-new_repr']:
+                            swig_cmd.append(o)
 
-            self.spawn(swig_cmd + ['-o', 'lowlevel.xml', 'lowlevel.i'])
+                self.spawn(swig_cmd + ['-o', 'lowlevel.xml', 'lowlevel.i'])
 
-            of = open('sized_struct.i', 'w')
-            parser = xml.sax.make_parser()
-            handler = FindStruct(of, u'ACU_SNAPSHOT_PARMS')
+                of = open('sized_struct.i', 'w')
+                parser = xml.sax.make_parser()
+                handler = FindStruct(of, u'ACU_SNAPSHOT_PARMS')
 
-            parser.setContentHandler(handler)
-            parser.parse('lowlevel.xml')
-            of.close()
+                parser.setContentHandler(handler)
+                parser.parse('lowlevel.xml')
+                of.close()
 
     def swig_sources(self, sources, extension):
         """swig these days generates a shadow module, but distutils doesn't
