@@ -10,6 +10,7 @@ clean:
 	rm -rf build dist
 
 wininst_publish:
+	python setup.py bdist_wininst
 	scp dist/*.exe borel:/Library/WWW/aculab
 
 distclean: clean
