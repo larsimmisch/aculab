@@ -263,16 +263,17 @@ def call_dispatch(call, event):
 
 def call_on_event(call):
     event = lowlevel.STATE_XPARMS()
-    
-    event.handle = call.handle
-    rc = lowlevel.call_event(event)
-    if rc:
-        raise AculabError(rc, 'call_event')
 
-    # On Windows, we sometimes get empty events
-    # Discard them
-    if event.handle == call.handle:
-        call_dispatch(call, event)
+    while True:
+        event.handle = call.handle
+        rc = lowlevel.call_event(event)
+        if rc:
+            raise AculabError(rc, 'call_event')
+
+        if event.handle == call.handle:
+            call_dispatch(call, event)
+        else:
+            return
     
 def add_call_event(reactor, call):
     """Add a call event to the reactor."""
