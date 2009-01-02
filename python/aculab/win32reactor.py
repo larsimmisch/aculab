@@ -9,6 +9,7 @@ import os
 import logging
 import win32api
 import win32event
+import time
 # local imports
 from timer import TimerBase
 
@@ -39,6 +40,7 @@ class Win32ReactorThread(threading.Thread):
 
     def __init__(self, master, handle = None, method = None):
         """Create a Win32DispatcherThread."""
+        threading.Thread.__init__(self)
         self.queue = []
         self.wakeup = win32event.CreateEvent(None, 0, 0, None)
         self.master = master
@@ -48,8 +50,6 @@ class Win32ReactorThread(threading.Thread):
             self.handles = { self.wakeup: None, handle: method }
         else:
             self.handles = { self.wakeup: None }
-
-        threading.Thread.__init__(self)
 
     def update(self):
         """Used internally.
@@ -83,39 +83,43 @@ class Win32ReactorThread(threading.Thread):
         handles = self.update()
         errors = 0
         
-        try:
-            while handles:
-                try:
-                    # log.debug('handles: %s', handles)
-                    rc = win32event.WaitForMultipleObjects(handles, 0, -1)
-                except win32event.error, e:
-                    # 'invalid handle' occurs when an event is deleted
-                    if e[0] == 6:
-                        # log.debug('update after invalid handle')
-                        handles = self.update()
-                        errors = errors +1
-                        if errors > 3:
-                            log.error('handles: %s', handles)
-                            raise
-                        continue
-                    else:
-                        raise
-
+        while handles:
+            try:
+                # log.debug('handles: %s', handles)
+                rc = win32event.WaitForMultipleObjects(handles, 0, -1)
                 errors = 0
-
-                if rc == win32event.WAIT_OBJECT_0:
+                
+                h = handles[rc - win32event.WAIT_OBJECT_0]
+                if h == self.wakeup:
                     if self.shutdown:
                         return
 
+                    # log.debug('update')
                     handles = self.update()
                 else:
                     with self.master.mutex:
-                        h = handles[rc - win32event.WAIT_OBJECT_0]
                         m = self.handles[h]
                         self.master.enqueue(m)
-        except:
-            log.error('Error in Win32ReactorThread run loop', exc_info=1)
-            return
+                        
+            except win32event.error, e:
+                # 'invalid handle' occurs when an event is deleted
+                if e[0] == 6:
+                    # log.debug('update after invalid handle')
+                    handles = self.update()
+                    errors = errors +1
+                    if errors > 2:
+                        log.error('handles: %s', handles)
+                        log.error('Error in Win32ReactorThread run loop',
+                                  exc_info=1)
+                        return
+                    continue
+                else:
+                    log.error('Error in Win32ReactorThread run loop',
+                              exc_info=1)
+                    return
+            except:
+                log.error('Error in Win32ReactorThread run loop', exc_info=1)
+                return
 
 
 class Win32Reactor(threading.Thread):
@@ -132,13 +136,12 @@ class Win32Reactor(threading.Thread):
     """
 
     def __init__(self):
+        threading.Thread.__init__(self)
         self.mutex = threading.Lock()
         self.reactors = []
         self.queue = []
-        self.wakeup = win32event.CreateEvent(None, 0, 0, None)        
+        self.wakeup = win32event.CreateEvent(None, 0, 0, None)
         self.timer = TimerBase()
-
-        threading.Thread.__init__(self)
 
     def add_timer(self, interval, function, args = [], kwargs={}):
         '''Add a timer after interval in seconds.'''
@@ -178,12 +181,12 @@ class Win32Reactor(threading.Thread):
         @param event: The event to watch.
         @param method: This will be called when the event is fired."""
 
-
         # log.debug('adding: %s', event)
         with self.mutex:
             for d in self.reactors:
                 if len(d.handles) < win32event.MAXIMUM_WAIT_OBJECTS:
                     d.queue.append((1, event, method))
+                    # log.debug('wakeup')
                     win32event.SetEvent(d.wakeup)
 
                     return
@@ -191,11 +194,10 @@ class Win32Reactor(threading.Thread):
             # if no reactor has a spare slot, create a new one
             # log.debug('added/created %d', event)
             d = Win32ReactorThread(self, event, method)
-            if self.isAlive():
-                d.setDaemon(1)
-                d.start()
             self.reactors.append(d)
-
+            if self.isAlive():
+                d.start()
+                
     def remove(self, event):
         """Remove an event from the reactor.
 
@@ -205,6 +207,7 @@ class Win32Reactor(threading.Thread):
             for d in self.reactors:
                 if d.handles.has_key(event):
                     d.queue.append((0, event, None))
+                    # log.debug('wakeup (remove)')
                     win32event.SetEvent(d.wakeup)
 
                     return
@@ -233,8 +236,8 @@ class Win32Reactor(threading.Thread):
     def start(self):
         """Start the reactor in a new thread."""
 
-        self.start_workers()
         threading.Thread.start(self)
+        self.start_workers()
 
     def run(self):
         """Run the reactor in the current thread."""
