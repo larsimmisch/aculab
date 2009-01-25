@@ -79,18 +79,21 @@ class build_ext_swig_in_package(build_ext):
         # crude detection of V5 vs v6
 
         cl_lib = os.path.join(dtk, 'include', 'cl_lib.h')
-        acu_type = os.path.join(dtk, 'include', 'acu_type.h')
-                     
         if os.path.exists(cl_lib):
+            # This is V6
+
+            # Create patched versions for cl_lib.h and acu_type.h
             
-            # To generate a patch, (for example cl_lib.patch), copy the original
-            # cl_lib.h to cl_lib.h2, edit it, and then do:
+            # To generate a patch, (for example cl_lib.patch), copy the
+            # original cl_lib.h to cl_lib.h2, edit it, and then do:
             # diff -u $(DTK)/include/cl_lib.h cl_lib.h2 > cl_lib.patch
 
             if newer('cl_lib.patch', 'cl_lib.h2'):
-                self.spawn(['patch', '-o', 'cl_lib.h2', cl_lib, 'cl_lib.patch'])
+                self.spawn(['patch', '-o', 'cl_lib.h2', cl_lib,
+                            'cl_lib.patch'])
                 
-                self.spawn(['patch', '-o', 'acu_type.h2', acu_type,
+                self.spawn(['patch', '-o', 'acu_type.h2',
+                            os.path.join(dtk, 'include', 'acu_type.h'),
                             'acu_type.patch'])
 
                 swig = self.swig or self.find_swig()
@@ -115,6 +118,14 @@ class build_ext_swig_in_package(build_ext):
                 parser.setContentHandler(handler)
                 parser.parse('lowlevel.xml')
                 of.close()
+        else:
+            # Create patched version for smosintf.h
+            if newer('smosintf.patch', 'smosintf.h2'):
+                self.spawn(['patch', '-o', 'smosintf.h2',
+                            os.path.join(dtk, 'speech', 'include',
+                                         'smosintf.h'),
+                            'smosintf.patch'])
+
 
     def swig_sources(self, sources, extension):
         """swig these days generates a shadow module, but distutils doesn't
@@ -256,7 +267,8 @@ elif os.name == 'posix':
                 libs.append('smt38gwlib')
 
     else:
-        define_macros = [('ACU_LINUX', None),
+        define_macros = [('UNIX_SYSTEM', None),
+                         ('ACU_LINUX', None),
                          ('SM_POLL_UNIX', None)]
 
         include_dirs = [dtk + '/call/include',

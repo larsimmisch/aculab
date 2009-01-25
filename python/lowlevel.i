@@ -35,8 +35,8 @@
 #else
 #include "mvswdrvr.h"
 #include "mvcldrvr.h"
-#include "smport.h"
 #include "smdrvr.h"
+#include "smport.h"
 #include "smosintf.h"
 #include "smbesp.h"
 #endif
@@ -186,6 +186,8 @@ BLOCKING(sm_t38gw_worker_fn)
 
   In other words, ignore the cruft.
 */
+%ignore smd_ev_abort;
+%ignore smd_close_ctl_dev;
 %ignore chknet_port;
 %ignore chknet;
 %ignore call_assoc_net;

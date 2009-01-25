@@ -1,8 +1,12 @@
+ifeq ($(PYTHON),)
+PYTHON=python2.5
+endif
+
 all: 
-	python setup.py build_ext -i
+	$(PYTHON) setup.py build_ext -i
 
 install:
-	python setup.py install
+	$(PYTHON) setup.py install
 
 clean:
 	rm -f aculab/*.pyd aculab/*.pyc \
@@ -10,8 +14,8 @@ clean:
 	rm -rf build dist
 
 wininst_publish:
-	python setup.py bdist_wininst
+	$(PYTHON) setup.py bdist_wininst
 	scp dist/*.exe borel:/Library/WWW/aculab
 
 distclean: clean
-	rm -f *.h2 sized_struct.i
+	rm -f *.h2 sized_struct.i aculab/lowlevel.py aculab/_lowlevel.*
