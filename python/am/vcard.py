@@ -73,7 +73,7 @@ def vcard_str(vc):
     return s
 
 def vcard_find(tel):
-    f = codecs.open(addresses, 'r', encoding='UTF-16-BE')
+    f = codecs.open(addresses, 'r', encoding='UTF-8')
     try:
         vcards = readComponents(f)
 
