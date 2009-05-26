@@ -96,9 +96,9 @@ class build_ext_swig_in_package(build_ext):
                             os.path.join(dtk, 'include', 'acu_type.h'),
                             'acu_type.patch'])
 
-                swig = self.swig or self.find_swig()
-                swig_cmd = [swig, '-xml', '-xmllite']
-                swig_cmd.extend(self.swig_opts)
+            swig = self.swig or self.find_swig()
+            swig_cmd = [swig, '-xml', '-xmllite']
+            swig_cmd.extend(self.swig_opts)
 
             if newer('lowlevel.i', 'sized_struct.i'):
                 # Do not override commandline arguments
