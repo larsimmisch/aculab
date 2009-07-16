@@ -1,4 +1,4 @@
-# Copyright (C) 2002-2008 Lars Immisch
+# Copyright (C) 2002-2009 Lars Immisch
 
 """Reactor implementation for Windows systems."""
 

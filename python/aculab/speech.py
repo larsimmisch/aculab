@@ -24,6 +24,7 @@ import logging
 import lowlevel
 import names
 import select
+import pywintypes
 from util import translate_card
 from fax import FaxRxJob, FaxTxJob
 from reactor import Reactor, add_event, remove_event
@@ -1036,6 +1037,9 @@ class SpeechChannel(object):
             lowlevel.smd_ev_free(event.handle)
             raise AculabSpeechError(rc, 'sm_channel_set_event', self.name)
 
+        if os.name == 'nt':
+            return pywintypes.HANDLE(handle)
+
         return handle
 
     def tdm_connect(self):
@@ -1161,7 +1165,7 @@ class SpeechChannel(object):
 
             return SpeechEndpoint(self, 'datafeed')
 
-        if self.info.card == -1:
+        if TiNG_version[0] < 2 and self.info.card == -1:
             input = lowlevel.SM_SWITCH_CHANNEL_PARMS()
 
             input.channel = self.channel
@@ -1178,8 +1182,7 @@ class SpeechChannel(object):
 
             return SpeechEndpoint(self, 'rx')
         
-        if self.info.ist == -1:
-            self.tdm_connect()
+        self.tdm_connect()
 
         output = lowlevel.OUTPUT_PARMS()
 
