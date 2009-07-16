@@ -1,20 +1,15 @@
-ifeq ($(PYTHON),)
+#ifeq ($(PYTHON),)
 
-py_versions:=2.6 2.5
+#py_versions:=2.6 2.5
 
-$(foreach ver, $(py_versions), )
+#$(foreach ver, $(py_versions), \
+#	PYTHON := $(strip $(wildcard /usr/bin/python$(ver)) \
+#                      $(wildcard /usr/local/bin/python$(ver))))
+#endif
 
-python2.5 := $(strip $(wildcard /usr/bin/python2.5)
-                     $(wildcard /usr/local/bin/python2.5))
-python2.6 := $(strip $(wildcard /usr/bin/python2.6)
-                     $(wildcard /usr/local/bin/python2.6))
-ifneq ($(python2.6),)
-PYTHON=python2.6
-endif
-ifneq ($(python2.6),)
-PYTHON=python2.6
-endif
-endif
+#$(echo $(PYTHON))
+
+PYTHON=python
 
 all: 
 	$(PYTHON) setup.py build_ext -i

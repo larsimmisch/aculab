@@ -544,6 +544,40 @@ class CallHandle(CallHandleBase):
 
         log.debug('%s incoming_ringing()', self.name)
 
+    def setup_ack(self):
+        """Signal setup_ack to the far end.
+        
+        See U{call_setup_ack
+        <http://www.aculab.com/Support/v6_api/CallControl/\
+        call_setup_ack.htm>}.
+        """
+
+        ack = lowlevel.SETUP_ACK_XPARMS()
+        ack.handle = self.handle
+        
+        rc = lowlevel.call_setup_ack(ack)
+        if rc:
+            raise AculabError(rc, 'call_setup_ack', self.name)
+
+        log.debug('%s setup_ack()', self.name)
+
+    def proceeding(self):
+        """Signal progress to the far end.
+        
+        See U{call_proceeding
+        <http://www.aculab.com/Support/v6_api/CallControl/\
+        call_proceeding.htm>}.
+        """
+
+        proceeding = lowlevel.PROCEEDING_XPARMS()
+        proceeding.handle = self.handle
+        
+        rc = lowlevel.call_proceeding(proceeding)
+        if rc:
+            raise AculabError(rc, 'call_proceeding', self.name)
+
+        log.debug('%s proceeding()', self.name)
+
     def disconnect(self, cause = None):
         """Disconnect a call.
 
