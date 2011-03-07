@@ -24,7 +24,6 @@ import logging
 import lowlevel
 import names
 import select
-import pywintypes
 from util import translate_card
 from fax import FaxRxJob, FaxTxJob
 from reactor import Reactor, add_event, remove_event
@@ -32,6 +31,8 @@ from switching import (Connection, CTBusEndpoint, SpeechEndpoint, TDMrx, TDMtx,
                        DefaultBus, connect, get_datafeed)
 from util import TiNG_version
 from error import *
+if os.name == 'nt':
+    import pywintypes
 
 __all__ = ['PlayJob', 'RecordJob', 'DigitsJob', 'ToneJob', 'SilenceJob',
            'SpeechChannel', 'Conference', 'Glue']
